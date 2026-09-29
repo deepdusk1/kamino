@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+.output/
+.local-data/
+.local-secret
+.tanstack/
+.expo/
+dist/
+.export-check/
+*.log
+.DS_Store
+backups/
+.contract/

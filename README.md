@@ -1,0 +1,79 @@
+# Kamino
+
+Kamino is a calm, ad-free community app and a replacement for Amino. It ships as a **website plus
+native iPhone and Android apps**, all from this one folder.
+
+House rules built into the product: **no ads, no coins or in-app currency, no paywalled stickers,
+no notification spam** (push only for real activity, and you choose which), ages 13+.
+
+## What is inside
+
+| Path | What it is |
+| --- | --- |
+| `Start-Kamino.cmd` / `start.sh` | **One click to try everything on your own computer** (Windows / Mac / Linux). |
+| `web/` | The Kamino server **and** website (TanStack Start; PGlite locally, PostgreSQL in production). |
+| `mobile/` | The native **iOS + Android** app (Expo / React Native). Talks to `web/`. |
+| `render.yaml` | One-click hosting recipe for [Render](https://render.com) (server + database). |
+| `DEPLOY.md` | **Step-by-step guide: put it on the internet and publish the apps.** Start here when you are ready. |
+| `store/` | App Store and Google Play kit: listing text, privacy answers, reviewer notes, screenshots, banner. |
+
+## 1. Try it now (10 minutes, nothing to configure)
+
+1. Install [Node.js 24](https://nodejs.org) (the "LTS" or newest installer is fine).
+2. Install the free **Expo Go** app on your phone and connect the phone to the **same Wi-Fi** as your computer.
+3. Start Kamino:
+   - **Windows:** double-click `Start-Kamino.cmd`
+   - **Mac / Linux:** open a terminal in this folder and run `./start.sh`
+4. The first start installs everything by itself (a few minutes). Then it prints a **QR code**:
+   scan it with the iPhone Camera (or with Expo Go on Android). The website is at http://localhost:8080.
+
+Press `Ctrl+C` in that window to stop everything. To run only the website: `node start.mjs --server`.
+
+## 2. What the app can do
+
+**Look and feel:** a softly moving colour "aurora" behind every screen, iOS-style frosted glass
+(Apple's real Liquid Glass on iOS 26+), a floating glass tab bar, springy buttons with haptics, a heart
+burst when you like something, cards that float in, animated polls and streaks, light and dark mode.
+Animations switch off when the phone's Reduce Motion setting is on.
+
+**Features:**
+Sign-up and password reset, home feed, discover and global search (communities, posts, #hashtags,
+people), communities (public and private, join questions, rules), eight post types (blog, image,
+question, link, poll, quiz, wiki, story), comments, likes, saving, drafts, shared wiki library,
+chat rooms and direct messages (photos, voice notes, video, replies, reactions), events and
+challenges with judging, leaderboards (activity, check-in streaks, quizzes), daily check-in in each community, free sticker packs, free avatar frames and chat bubble styles, image albums, quizzes with a picture per question and an optional time limit, stories with several scenes, a per-community look editor (colour, style, cover, icon), live calls in the phone app, draft autosave, shared-file folders, members, shared files, news feeds, profiles with **profile photos**,
+wall and achievements, follow / block / report, notifications and push, a first-run welcome that
+helps new people find communities, full moderation tools (reports, join requests, strikes, timed
+mutes, bans, appeals, broadcast, invite codes), data export and import, a 13+ birthday check, and in-app account deletion.
+
+## 3. Going public
+
+Follow **`DEPLOY.md`**. In short: put this folder on GitHub, click "New Blueprint" on Render, run
+`npm run set-server https://your-address` in `mobile/`, then build the apps with Expo (EAS) and
+submit them using the texts in `store/STORE-LISTING.md`.
+
+Set `KAMINO_SAMPLE_CONTENT=off` (already done in `render.yaml`) so a real server starts empty
+instead of with the built-in sample communities and made-up members.
+
+## 4. Health checks
+
+```sh
+cd web    && npm run typecheck && npm test && npm run check:contract
+          # with the dev server running: npm run test:mobile && npm run test:integration && npm run test:creator && npm run test:chat-media
+          # npm run test:limits needs a dev server started WITHOUT KAMINO_RATE_LIMIT=off
+cd mobile && npm run typecheck && npm run lint && npm test && npm run export:check
+```
+
+## 5. Honest limits
+
+- The app has not yet been opened on a physical iPhone or Android phone by whoever built it; every
+  screen was exercised in a phone-sized browser against the real server, and the iOS and Android
+  bundles compile. Expect to polish a few small layout details after your first real-device test.
+- Push notifications are wired end to end but need one test on a real phone after your first EAS build.
+- Live calls (audio, optional video) now exist in the phone app and share the website's call service, but **nobody has yet heard a call between two real devices**. They need a development or store build (the calling library is native code, so **not Expo Go**; everything else still works in Expo Go). On ordinary networks they should connect directly; behind strict office or mobile networks they need a TURN relay (`KAMINO_TURN_URLS`, see `web/.env.example`), which you provision.
+- Photos, videos and voice notes are stored in the database unless you set the `KAMINO_S3_*` variables (see `web/.env.example`) to use an S3-compatible bucket such as Cloudflare R2. That was tested against a pretend bucket that checks request signatures and against AWS's published signing examples, **not against a real provider**. With a bucket, keep it private and turn on the bucket's own versioning/backup: `npm run backup` saves the database only, not the bucket's files.
+- Backups are a command you run (`npm run backup` in `web`), not something Kamino schedules for you: use your host's paid-database backups too.
+- Moderation is by people. Kamino gives leaders every tool, but nobody is watching your community unless you appoint them.
+- The website still has an older Coins wallet (tipping). It is not in the phone app and it goes against the "no coins" rule above; ask for it to be removed if you agree.
+- The Privacy Policy and Terms are sensible drafts, **not legal advice**. Have them reviewed.
+- Free hosting plans sleep or expire (details in `DEPLOY.md`). Use paid plans for real users.
