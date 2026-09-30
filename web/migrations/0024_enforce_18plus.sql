@@ -10,5 +10,6 @@ alter table communities alter column age_gate set default 18;
 update profiles set min_age_confirmed_at = null where min_age_confirmed_at is not null;
 
 -- Gate 13: remove the disposable storyteller test communities from the Sep 29
--- production test run (their scenes were already deleted). Only these exact slugs.
-delete from communities where slug in ('story-test-lab', 'story-test-lab-1', 'story-test-lab-2');
+-- production test run (their scenes were already deleted). Only these exact ids.
+-- (communities uses id as its text primary key; there is no slug column.)
+delete from communities where id in ('story-test-lab', 'story-test-lab-1', 'story-test-lab-2');
