@@ -1,4 +1,4 @@
-# Amino × Kamino — feature review (corrected, release 6)
+# Amino × Kamino — feature review (corrected, release 7)
 
 Reviewed September 29, 2026 against the code in this package, not against an older build.
 
@@ -43,6 +43,7 @@ The earlier review was written from a web-only build. These claims are now wrong
 | | Multi-picture posts (albums) | Built |
 | | Quizzes (many questions, scored, once-only rewards) | Built, with a picture per question and an optional time limit measured by the server |
 | | Stories that expire after 24 hours | Built, up to six scenes with captions |
+| | Role-play as story or film characters, change the ending | Built: AI storyteller (free tier) sets up stories, narrates, voices unclaimed characters, writes alternate endings; works without AI too |
 | | Drafts, autosave, save a copy | Built |
 | | Content warnings, comments off, announcements | Built |
 | Wiki | Approved library, categories, review queue, edit history, restore | Built |
@@ -56,7 +57,9 @@ The earlier review was written from a web-only build. These claims are now wrong
 | | Live calls in the phone app | Built (audio, optional video, mute, ringing, shared with the website's calls); **needs a development/store build, not Expo Go, and has not been tried between two real devices** |
 | Profiles | Photo, bio, mood, status, cover, wall | Built |
 | | Avatar frames and chat bubble styles | Built, all free |
-| | Characters / personas, achievements, titles | Built |
+| | Characters / personas, titles | Built |
+| | Achievements with banners | Built: 75 in four tiers with progress bars; three shown as banners on the profile |
+| | Upload your own profile wall cover | Built (web and phone) |
 | | Follow, block, report | Built |
 | Engagement | Daily check-in and streaks (global and per community) | Built |
 | | Leaderboards | Built |
@@ -67,6 +70,7 @@ The earlier review was written from a web-only build. These claims are now wrong
 | | Paid fan clubs / VIP tiers | **Excluded** |
 | | Amino+ style subscription, paid cosmetics or stickers | **Excluded** |
 | Moderation | Reports, hide/remove, strikes, timed mutes, bans | Built |
+| | Automatic safety checks (illegal trades, exploitation, threats) on posts, comments, chat, DMs, walls, stories and pictures, with a review queue | Built: free built-in rules always; free AI check when the key is set; held items wait for a person, no automatic bans. **Not tested against the real AI service** |
 | | Appeals (bans and mutes), audit log | Built |
 | | Join screening, broadcasts | Built |
 | | Someone actually watching your community | **Yours to provide** |
@@ -90,13 +94,12 @@ The earlier review was written from a web-only build. These claims are now wrong
 
 ## Not done in this release
 
-A phone-number or social sign-in (needs provider accounts), a speaker/earpiece switch for phone calls (needs one more native library), and the removal of the old website Coins wallet (waiting for your decision). Everything else from the earlier "not done" list is now built.
+A phone-number or social sign-in (needs provider accounts), a speaker/earpiece switch for phone calls, picture hash-matching for child-abuse imagery (PhotoDNA-style, for when you grow), and the removal of the old website Coins wallet (waiting for your decision).
 
 ## What was verified
 
-- 128 website and 45 phone unit tests; TypeScript and lint with no errors on web and phone; production web build; iOS and Android JavaScript bundles; Android native-project generation with the calling plugin.
-- Integration suites against a running server: 27 core groups, 15 writing groups, 10 chat-media groups, 2 wallet groups, 24 phone-API groups (also against real PostgreSQL, where all 22 migrations applied), 9 object-storage groups against a pretend bucket that checks every request signature, 3 rate-limit groups on a server with limits on.
-- A check that the phone app's expectations match what the server sends (54 calls).
-- The phone call engine: 11 tests with pretend connections; the server side of calls in the phone-API suite.
+- 151 website and 50 phone unit tests; TypeScript and lint with no errors on web and phone; production web build; iOS and Android JavaScript bundles.
+- Integration suites against a running server: 27 core, 15 writing, 10 chat-media, 2 wallet, 25 phone-API groups (also on real PostgreSQL, all 23 migrations), 10 AI groups against a pretend AI service (also on PostgreSQL), 9 object-storage groups, 3 rate-limit groups.
+- A check that the phone app's expectations match what the server sends (75 calls), and a browser run through the new website pages.
 
-Not verified here: audio or video between physical devices (including phone to browser), a real S3/R2/B2 bucket, real email and push delivery, how the screens feel on a real iPhone or Android phone, store submission, payments, and staffed moderation.
+Not verified here: the real OpenAI and Groq services, how well the AI judges real content, calls between physical devices, a real S3/R2 bucket, real email and push delivery, how the screens feel on a real phone, store submission, and staffed moderation.

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, FileText, Save, Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
+import { HELD_MESSAGE, HELD_TITLE } from "@/lib/kamino/held";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { createPost, listDrafts, saveDraft, deleteDraft } from "@/lib/kamino/server";
@@ -181,6 +182,7 @@ export function Composer({
         toast.info("Published. A newer or changed draft was kept in your library.");
       }
     }
+    if (res.held) toast.info(HELD_TITLE, { description: HELD_MESSAGE });
     onCreated(res.id);
   }
   return (

@@ -107,6 +107,8 @@ function Navigation() {
           <Stack.Screen name="community/[slug]/chats" options={{ title: "Chat rooms" }} />
           <Stack.Screen name="community/[slug]/mod" options={{ title: "Moderation" }} />
           <Stack.Screen name="community/[slug]/standing" options={{ title: "My standing" }} />
+          <Stack.Screen name="community/[slug]/roleplay/index" options={{ title: "Stories" }} />
+          <Stack.Screen name="community/[slug]/roleplay/[sceneId]" options={{ title: "Story" }} />
           <Stack.Screen name="chat/[roomId]" options={{ title: "" }} />
           <Stack.Screen name="call/[roomId]" options={{ title: "Call", presentation: "fullScreenModal" }} />
           <Stack.Screen name="profile/[handle]" options={{ title: "" }} />

@@ -29,6 +29,7 @@
     "test:mobile": "node scripts/smoke-mobile.mjs",
     "test:limits": "node scripts/smoke-limits.mjs",
     "test:storage": "node scripts/smoke-storage.mjs",
+    "test:ai": "node scripts/smoke-ai.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs"
   },

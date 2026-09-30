@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { HELD_MESSAGE } from "@/lib/kamino/held";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Bookmark,
@@ -9,12 +10,14 @@ import {
   MessageCircle,
   Phone,
   Plus,
+  Camera,
   Share2,
   Trophy,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
+import { AchievementBanner, AchievementTile } from "@/components/achievement-banner";
 import { AvatarFrame } from "@/components/avatar-frame";
 import { Face } from "@/components/face";
 import { PostCard } from "@/components/post-card";
@@ -40,8 +43,11 @@ import {
   toggleFavorite,
   toggleWallLike,
   tipMember,
+  setShowcase,
   updateSettings,
 } from "@/lib/kamino/server";
+import { removeAvatar, removeProfileCover, setAvatar, setProfileCover } from "@/lib/kamino/extras";
+import { resizeImage } from "@/lib/image-resize";
 import { PROFILE_COVERS } from "@/lib/kamino/titles";
 import { REPORT_REASONS } from "@/lib/kamino/types";
 import type { Achievement, MemberTitle } from "@/lib/kamino/types";
@@ -72,6 +78,7 @@ function Profile() {
   const [people, setPeople] = useState<"followers" | "following" | null>(null);
   const [wallBody, setWallBody] = useState("");
   const [coverOn, setCoverOn] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [menuOn, setMenuOn] = useState(false);
   const [reportOn, setReportOn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -102,7 +109,44 @@ function Profile() {
   const chipTitles = titles.filter((t: MemberTitle) => !t.pinned);
   const unlocked =
     (data.achievements as Achievement[] | undefined)?.filter((a) => a.unlocked) ?? [];
-  const cover = p.cover || data.joined[0]?.cover || "/covers/hero.jpg";
+  const cover = p.cover;
+  const achievements = (data.achievements ?? []) as Achievement[];
+  const showcase = (data.showcase ?? []) as Achievement[];
+  const showcaseIds = showcase.map((a) => a.id);
+
+  async function upload(kind: "cover" | "photo", file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const dataUrl = await resizeImage(
+        file,
+        kind === "cover"
+          ? { maxSide: 1600, maxChars: 1_900_000 }
+          : { maxSide: 320, maxChars: 290_000, square: true },
+      );
+      if (kind === "cover") await setProfileCover({ data: { dataUrl } });
+      else await setAvatar({ data: { dataUrl } });
+      toast.success(kind === "cover" ? "Cover updated" : "Photo updated");
+      setCoverOn(false);
+      void q.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function toggleShowcase(id: string) {
+    const next = showcaseIds.includes(id)
+      ? showcaseIds.filter((x) => x !== id)
+      : [...showcaseIds, id].slice(-3);
+    try {
+      await setShowcase({ data: { ids: next } });
+      void q.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update your banners");
+    }
+  }
   const days = memberDays(p.createdAt);
   const online = isOnline(p.lastSeenAt, p.showOnline);
 
@@ -118,8 +162,26 @@ function Profile() {
   return (
     <AppShell title={p.displayName}>
       <div className="relative">
-        <img src={cover} alt="" className="h-52 w-full object-cover md:h-64" />
+        {cover ? (
+          <img src={cover} alt="" className="h-52 w-full object-cover md:h-64" />
+        ) : (
+          <div
+            className="h-52 w-full md:h-64"
+            style={{
+              background: `linear-gradient(135deg, hsl(${p.avatarHue} 70% 55%), hsl(${(p.avatarHue + 60) % 360} 70% 45%))`,
+            }}
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/35 to-transparent" />
+        {data.isSelf && (
+          <button
+            type="button"
+            className="absolute top-3 left-3 inline-flex h-10 items-center gap-1.5 rounded-full bg-bg/60 px-3 text-sm font-bold text-fg backdrop-blur-sm"
+            onClick={() => setCoverOn(true)}
+          >
+            <Camera className="size-4" /> Change cover
+          </button>
+        )}
         <button
           type="button"
           className="absolute top-3 right-3 grid size-11 place-items-center rounded-full bg-bg/55 text-fg backdrop-blur-sm"
@@ -180,7 +242,14 @@ function Profile() {
         )}
         <div className="absolute inset-x-0 bottom-0 flex flex-col items-center pb-2">
           <AvatarFrame frame={p.frame} online={online}>
-            <Face name={p.displayName} hue={p.avatarHue} size="hero" className="relative" />
+            <Face
+              name={p.displayName}
+              hue={p.avatarHue}
+              size="hero"
+              className="relative"
+              userId={p.userId}
+              version={p.avatarVersion}
+            />
           </AvatarFrame>
         </div>
       </div>
@@ -220,6 +289,16 @@ function Profile() {
               : "Last seen hidden"}
         </p>
 
+        {showcase.length > 0 && (
+          <div
+            className="mx-auto mt-3 grid max-w-xl gap-2 sm:grid-cols-3"
+            aria-label="Achievement banners"
+          >
+            {showcase.map((a) => (
+              <AchievementBanner key={a.id} achievement={a} />
+            ))}
+          </div>
+        )}
         {chipTitles.length > 0 && (
           <div className="mt-3 flex flex-wrap justify-center gap-1.5">
             {chipTitles.map((t: MemberTitle) => (
@@ -385,20 +464,35 @@ function Profile() {
         </span>
       </button>
       {achOn && (
-        <ul className="mx-4 mt-2 grid grid-cols-2 gap-2">
-          {(data.achievements as Achievement[]).map((a) => (
-            <li
-              key={a.id}
-              className={cn(
-                "rounded-xl bg-surface px-3 py-2.5 shadow-border",
-                !a.unlocked && "opacity-40",
-              )}
-            >
-              <p className="text-sm font-extrabold">{a.name}</p>
-              <p className="text-[11px] text-muted">{a.desc}</p>
-            </li>
+        <div className="mx-4 mt-2 space-y-4">
+          {data.isSelf && (
+            <p className="text-xs text-muted">
+              Tap the star on up to three unlocked achievements to show them as banners on your
+              profile.
+            </p>
+          )}
+          {[...new Set(achievements.map((a) => a.category))].map((category) => (
+            <section key={category}>
+              <h3 className="mb-2 text-xs font-extrabold tracking-wide text-subtle uppercase">
+                {category} ·{" "}
+                {achievements.filter((a) => a.category === category && a.unlocked).length}/
+                {achievements.filter((a) => a.category === category).length}
+              </h3>
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {achievements
+                  .filter((a) => a.category === category)
+                  .map((a) => (
+                    <AchievementTile
+                      key={a.id}
+                      achievement={a}
+                      showcased={showcaseIds.includes(a.id)}
+                      onToggleShowcase={data.isSelf ? () => void toggleShowcase(a.id) : undefined}
+                    />
+                  ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       <div className="mt-4 grid grid-cols-3 border-y border-border py-3 text-center">
@@ -514,7 +608,8 @@ function Profile() {
                 setBusy(true);
                 setErr(null);
                 void addWallPost({ data: { handle, body: wallBody } })
-                  .then(() => {
+                  .then((res) => {
+                    if (res.held) setErr(HELD_MESSAGE);
                     setWallBody("");
                     void q.refetch();
                   })
@@ -624,11 +719,79 @@ function Profile() {
         <div className="fixed inset-0 z-40 grid place-items-end bg-bg/70 p-0 md:place-items-center md:p-6">
           <div className="w-full max-w-lg rounded-t-2xl bg-surface p-5 md:rounded-2xl">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-display text-lg font-extrabold">Cover</h2>
+              <h2 className="font-display text-lg font-extrabold">Cover and photo</h2>
               <Button variant="ghost" size="sm" onClick={() => setCoverOn(false)}>
                 Close
               </Button>
             </div>
+            <div className="mb-4 grid gap-2 sm:grid-cols-2">
+              <label
+                className={cn(
+                  "inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-accent-fg",
+                  uploading && "opacity-50",
+                )}
+              >
+                <Camera className="size-4" /> {uploading ? "Uploading…" : "Upload a cover picture"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    void upload("cover", file);
+                  }}
+                />
+              </label>
+              <label
+                className={cn(
+                  "inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-elevated px-4 text-sm font-bold",
+                  uploading && "opacity-50",
+                )}
+              >
+                <Camera className="size-4" /> Upload a profile photo
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    void upload("photo", file);
+                  }}
+                />
+              </label>
+              {p.cover ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() =>
+                    void removeProfileCover().then(() => {
+                      setCoverOn(false);
+                      void q.refetch();
+                    })
+                  }
+                >
+                  Remove cover
+                </Button>
+              ) : null}
+              {p.avatarVersion > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => void removeAvatar().then(() => void q.refetch())}
+                >
+                  Remove photo
+                </Button>
+              ) : null}
+            </div>
+            <p className="mb-2 text-xs font-bold text-subtle uppercase">
+              Or pick a built-in banner
+            </p>
             <div className="grid grid-cols-3 gap-2">
               {PROFILE_COVERS.map((c) => (
                 <button

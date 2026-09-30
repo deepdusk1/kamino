@@ -7,7 +7,16 @@ import { ensureSeeded } from "./seed";
 import { guard } from "./guard";
 import { scanText, scanTitle, canLead, canModerate } from "./safety";
 import { parseSticker } from "./stickers";
-import { ACHIEVEMENT_DEFS, isAllowedCover, isAllowedTitleColor } from "./titles";
+import { isAllowedCover, isAllowedTitleColor } from "./titles";
+import {
+  MAX_SHOWCASE,
+  achievementStates,
+  cleanShowcase,
+  earnedIds,
+  emptyMetrics,
+  unlockMessage,
+  type AchievementMetrics,
+} from "./achievements";
 import { parseWatchInput } from "./shelf";
 import { extractHashtags } from "./hashtags";
 import { saveDraftSchema, type CreatorDraft } from "./writing";
@@ -15,6 +24,7 @@ import { QUIZ_IMAGE_BASE, checkAlbum, checkQuestionImages, checkTimeLimit, isQui
 import { deleteMedia, isMediaRef, loadMedia, storeMedia } from "./media-store.server";
 import { BUBBLE_STYLES, COMMUNITY_MODULES, PROFILE_FRAME_IDS, THEME_STYLES, type CommunityModule } from "./types";
 import { clampHue } from "./theme";
+import { reviewContent } from "./safety.server";
 import {
   mapCommunity,
   mapMembership,
@@ -399,41 +409,123 @@ async function loadMemberTitles(sql: Sql, userId: string): Promise<MemberTitle[]
   }
 }
 
-async function computeAchievements(
-  sql: Sql,
-  userId: string,
-  rep: number,
-  streak: number,
-): Promise<Achievement[]> {
-  const unlocked = new Set<string>();
+/** Everything the achievements count, for one person, in one round trip. */
+async function achievementMetrics(sql: Sql, userId: string): Promise<AchievementMetrics> {
+  const metrics = emptyMetrics();
   try {
-    const posts = await sql<{ type: string; n: number }>`
-      select type, count(*)::int as n from posts where author_user_id = ${userId} group by type
-    `;
-    const totalPosts = posts.reduce((a, r) => a + Number(r.n), 0);
-    if (totalPosts > 0) unlocked.add("first-post");
-    if (posts.some((r) => r.type === "story" && Number(r.n) > 0)) unlocked.add("story");
-    if (posts.some((r) => r.type === "wiki" && Number(r.n) > 0)) unlocked.add("wiki");
-    if (posts.some((r) => r.type === "quiz" && Number(r.n) > 0)) unlocked.add("quiz");
-    if (posts.some((r) => r.type === "poll" && Number(r.n) > 0)) unlocked.add("poll");
-    if (streak >= 7) unlocked.add("week-streak");
-    if (rep >= 100) unlocked.add("hundred");
-    const lead =
-      await sql`select 1 from memberships where user_id = ${userId} and role in ('agent','leader') and status = 'active' limit 1`;
-    if (lead.length) unlocked.add("host");
-    const followers = await sql<{
-      n: number;
-    }>`select count(*)::int as n from profile_follows where followee_id = ${userId}`;
-    if (Number(followers[0]?.n ?? 0) >= 3) unlocked.add("known");
-    const wall = await sql<{
-      n: number;
-    }>`select count(*)::int as n from wall_posts where profile_user_id = ${userId}`;
-    if (Number(wall[0]?.n ?? 0) > 0) unlocked.add("welcome");
-  } catch {
-    if (rep >= 100) unlocked.add("hundred");
-    if (streak >= 7) unlocked.add("week-streak");
+    const row = (
+      await sql.query(
+        `select
+          (select count(*)::int from posts where author_user_id = $1) as posts,
+          (select count(*)::int from posts where author_user_id = $1 and type = 'image') as images,
+          (select count(*)::int from posts where author_user_id = $1 and type = 'story') as stories,
+          (select count(*)::int from posts where author_user_id = $1 and type = 'wiki' and wiki_status = 'approved') as wiki_approved,
+          (select count(*)::int from posts where author_user_id = $1 and type = 'quiz') as quizzes_made,
+          (select count(*)::int from posts where author_user_id = $1 and type = 'poll') as polls_made,
+          (select count(*)::int from comments where author_user_id = $1 and held = false) as comments,
+          (select count(*)::int from likes l join posts p on p.id = l.post_id where p.author_user_id = $1 and l.user_id <> $1) as likes_received,
+          (select count(*)::int from profile_follows where followee_id = $1) as followers,
+          greatest(
+            coalesce((select streak from profiles where user_id = $1), 0),
+            coalesce((select max(greatest(streak, best_streak)) from memberships where user_id = $1), 0)
+          ) as streak,
+          coalesce((select rep from profiles where user_id = $1), 0) as rep,
+          (select count(*)::int from messages where author_user_id = $1 and deleted = false and held = false) as messages,
+          (select count(*)::int from messages where author_user_id = $1 and deleted = false and body like '::sticker:%') as stickers,
+          (select count(*)::int from message_reactions where user_id = $1) as reactions,
+          (select count(*)::int from memberships where user_id = $1 and status = 'active') as communities,
+          (select count(*)::int from memberships where user_id = $1 and status = 'active' and role in ('agent', 'leader')) as leading,
+          (select count(*)::int from memberships where user_id = $1 and status = 'active' and role = 'curator') as curating,
+          (select count(*)::int from quiz_attempts where user_id = $1) as quizzes_taken,
+          (select count(*)::int from quiz_attempts where user_id = $1 and total > 0 and score = total) as perfect_quizzes,
+          (select count(*)::int from poll_votes where user_id = $1) as poll_votes,
+          (select count(*)::int from roleplay_turns where author_user_id = $1 and kind = 'turn' and held = false) as roleplay_turns,
+          (select count(*)::int from roleplay_scenes where creator_id = $1 and held = false) as scenes_created,
+          (select count(*)::int from event_rsvps where user_id = $1) as events,
+          (select count(*)::int from challenge_entries where user_id = $1 and placement is not null) as challenge_wins,
+          (select count(*)::int from wall_posts where author_user_id = $1 and held = false) as wall_notes,
+          (select count(*)::int from favorites where user_id = $1) as saved,
+          (select case when avatar_version > 0 and cover <> '' and length(trim(bio)) > 0 then 1 else 0 end from profiles where user_id = $1) as profile_complete,
+          (select floor(extract(epoch from (now() - created_at)) / 86400)::int from profiles where user_id = $1) as account_days`,
+        [userId],
+      )
+    )[0];
+    if (row) {
+      const n = (k: string) => Number(row[k] ?? 0) || 0;
+      Object.assign(metrics, {
+        posts: n("posts"), images: n("images"), stories: n("stories"), wikiApproved: n("wiki_approved"),
+        quizzesMade: n("quizzes_made"), pollsMade: n("polls_made"), comments: n("comments"), likesReceived: n("likes_received"),
+        followers: n("followers"), streak: n("streak"), rep: n("rep"), messages: n("messages"), stickers: n("stickers"),
+        reactions: n("reactions"), communities: n("communities"), leading: n("leading"), curating: n("curating"),
+        quizzesTaken: n("quizzes_taken"), perfectQuizzes: n("perfect_quizzes"), pollVotes: n("poll_votes"),
+        roleplayTurns: n("roleplay_turns"), scenesCreated: n("scenes_created"), events: n("events"),
+        challengeWins: n("challenge_wins"), wallNotes: n("wall_notes"), saved: n("saved"),
+        profileComplete: n("profile_complete"), accountDays: n("account_days"),
+      } satisfies AchievementMetrics);
+    }
+  } catch (error) {
+    console.warn("[achievements] could not count:", error instanceof Error ? error.message : error);
   }
-  return ACHIEVEMENT_DEFS.map((d) => ({ ...d, unlocked: unlocked.has(d.id) }));
+  return metrics;
+}
+
+/** A marker row: this person's achievements were recorded at least once (later unlocks are announced). */
+const ACHIEVEMENTS_STARTED = "__started__";
+
+/** When each person's achievements were last brought up to date (so busy screens do not recount every time). */
+const lastAchievementSync = new Map<string, number>();
+
+/**
+ * Records newly earned achievements and tells the person once. The very first time (someone who used Kamino before
+ * achievements existed) they are recorded quietly, so nobody gets a pile of notifications at once.
+ */
+async function syncAchievements(sql: Sql, userId: string, options: { force?: boolean } = {}) {
+  const now = Date.now();
+  if (!options.force && now - (lastAchievementSync.get(userId) ?? 0) < 60_000) return;
+  lastAchievementSync.set(userId, now);
+  try {
+    const earned = earnedIds(await achievementMetrics(sql, userId));
+    const known = new Set(
+      (await sql<{ achievement_id: string }>`select achievement_id from user_achievements where user_id = ${userId}`).map((r) => r.achievement_id),
+    );
+    const fresh = earned.filter((id) => !known.has(id));
+    // The first sync only records the "started" marker and what was already earned, without a notification.
+    const firstTime = !known.has(ACHIEVEMENTS_STARTED);
+    for (const id of firstTime ? [ACHIEVEMENTS_STARTED, ...fresh] : fresh)
+      await sql`insert into user_achievements (user_id, achievement_id) values (${userId}, ${id}) on conflict do nothing`;
+    const message = firstTime ? null : unlockMessage(fresh);
+    if (message) {
+      const handle = (await sql<{ handle: string }>`select handle from profiles where user_id = ${userId}`)[0]?.handle;
+      await notify(sql, userId, "achievement", message.title, message.body, handle ? `/u/${handle}` : "/");
+    }
+  } catch (error) {
+    console.warn("[achievements] could not sync:", error instanceof Error ? error.message : error);
+  }
+}
+
+/** A person's achievements with progress, plus the ones they chose to show as banners. */
+async function achievementsFor(sql: Sql, userId: string): Promise<{ achievements: Achievement[]; showcase: Achievement[] }> {
+  const remembered = new Map(
+    (await sql<{ achievement_id: string; unlocked_at: string }>`select achievement_id, unlocked_at from user_achievements where user_id = ${userId}`)
+      .map((r) => [r.achievement_id, iso(r.unlocked_at)] as const),
+  );
+  const achievements = achievementStates(await achievementMetrics(sql, userId), remembered);
+  const unlocked = new Set(achievements.filter((a) => a.unlocked).map((a) => a.id));
+  const chosen = cleanShowcase(
+    parseJson<string[]>((await sql<{ showcase: string }>`select showcase from profiles where user_id = ${userId}`)[0]?.showcase, []),
+    unlocked,
+  );
+  // Nothing chosen yet: show the three highest-tier achievements earned, so every profile has banners to show.
+  const tierRank = { legend: 3, gold: 2, silver: 1, bronze: 0 } as const;
+  const showcaseIds = chosen.length
+    ? chosen
+    : achievements
+        .filter((a) => a.unlocked)
+        .sort((x, y) => tierRank[y.tier] - tierRank[x.tier])
+        .slice(0, MAX_SHOWCASE)
+        .map((a) => a.id);
+  const byId = new Map(achievements.map((a) => [a.id, a]));
+  return { achievements, showcase: showcaseIds.map((id) => byId.get(id)!).filter(Boolean) };
 }
 
 export const bootstrap = createServerFn({ method: "GET" })
@@ -443,6 +535,7 @@ export const bootstrap = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     if (v.userId) {
       await ensureProfile(sql, { userId: v.userId, email: v.email, name: v.name });
+      await syncAchievements(sql, v.userId);
       try {
         await sql`update profiles set last_seen_at = now() where user_id = ${v.userId}`;
       } catch {
@@ -580,8 +673,8 @@ export const getCommunityPage = createServerFn({ method: "GET" })
     const rooms = (
       await sql.query(
         `select r.*,
-            (select body from messages m where m.room_id = r.id order by m.id desc limit 1) as last_message,
-            (select created_at from messages m where m.room_id = r.id order by m.id desc limit 1) as last_at,
+            (select body from messages m where m.room_id = r.id and m.held = false order by m.id desc limit 1) as last_message,
+            (select created_at from messages m where m.room_id = r.id and m.held = false order by m.id desc limit 1) as last_at,
             (select count(*)::int from chat_members cm where cm.room_id = r.id and cm.in_voice = true) as voice_count
          from chat_rooms r
          where r.community_id = $1
@@ -878,7 +971,7 @@ export const getPostPage = createServerFn({ method: "GET" })
        from comments c
        left join memberships m on m.user_id = c.author_user_id and m.community_id = $2
        left join profiles pr on pr.user_id = c.author_user_id
-       where c.post_id = $1
+       where c.post_id = $1 and c.held = false
        order by c.id`,
       [data.postId, data.slug],
     );
@@ -1273,9 +1366,26 @@ export const createPost = createServerFn({ method: "POST" })
       const stored = await storeMedia("post", picture);
       await sql`insert into post_images (post_id, position, data_url) values (${rows[0]!.id}, ${QUIZ_IMAGE_BASE + i}, ${stored})`;
     }
-    await sql`update memberships set rep = rep + 4 where user_id = ${userId} and community_id = ${data.slug}`;
-    await sql`update profiles set rep = rep + 4 where user_id = ${userId}`;
-    return { id: Number(rows[0]!.id) };
+    const postId = Number(rows[0]!.id);
+    // Safety check (built-in rules, plus the AI when it is set up). A held post stays hidden until a moderator decides.
+    const { held } = await reviewContent(
+      sql,
+      {
+        targetType: "post",
+        targetId: postId,
+        authorId: userId,
+        communityId: data.slug,
+        text: `${data.title}\n${data.body}\n${(data.payload?.questions ?? []).map((q) => `${q.q} ${q.choices.join(" ")}`).join("\n")}\n${(data.payload?.options ?? []).join("\n")}\n${(data.payload?.captions ?? []).join("\n")}`,
+        images: [cover, ...album, ...quizPictures].filter(Boolean),
+        href: `/c/${data.slug}/p/${postId}`,
+      },
+      notify,
+    );
+    if (!held) {
+      await sql`update memberships set rep = rep + 4 where user_id = ${userId} and community_id = ${data.slug}`;
+      await sql`update profiles set rep = rep + 4 where user_id = ${userId}`;
+    }
+    return { id: postId, held };
   });
 
 export const toggleLike = createServerFn({ method: "POST" })
@@ -1333,7 +1443,21 @@ export const addComment = createServerFn({ method: "POST" })
     const m = await membershipOf(sql, userId, post[0].community_id);
     if (m?.status !== "active") throw new Error("Join to comment.");
     await assertNotMuted(sql, userId, post[0].community_id);
-    await sql`insert into comments (post_id, author_user_id, body) values (${data.postId}, ${userId}, ${data.body.trim().slice(0, 2000)})`;
+    const inserted = await sql<{ id: number }>`insert into comments (post_id, author_user_id, body)
+      values (${data.postId}, ${userId}, ${data.body.trim().slice(0, 2000)}) returning id`;
+    const { held } = await reviewContent(
+      sql,
+      {
+        targetType: "comment",
+        targetId: Number(inserted[0]!.id),
+        authorId: userId,
+        communityId: post[0].community_id,
+        text: data.body,
+        href: `/c/${post[0].community_id}/p/${data.postId}`,
+      },
+      notify,
+    );
+    if (held) return { ok: true, held };
     await sql`update posts set comment_count = comment_count + 1 where id = ${data.postId}`;
     if (post[0].author_user_id !== userId) {
       await notify(
@@ -1345,7 +1469,7 @@ export const addComment = createServerFn({ method: "POST" })
         `/c/${post[0].community_id}/p/${data.postId}`,
       );
     }
-    return { ok: true };
+    return { ok: true, held };
   });
 
 export const votePoll = createServerFn({ method: "POST" })
@@ -1672,11 +1796,11 @@ export const listRooms = createServerFn({ method: "GET" })
       `select r.*,
           (select coalesce(nullif(m.body,''), case when mm.kind = 'image' then 'Photo' when mm.kind = 'audio' then 'Voice note' when mm.kind = 'video' then 'Video' end)
              from messages m left join message_media mm on mm.message_id = m.id
-             where m.room_id = r.id order by m.id desc limit 1) as last_message,
-          (select created_at from messages m where m.room_id = r.id order by m.id desc limit 1) as last_at,
+             where m.room_id = r.id and m.held = false order by m.id desc limit 1) as last_message,
+          (select created_at from messages m where m.room_id = r.id and m.held = false order by m.id desc limit 1) as last_at,
           (select count(*)::int from chat_members cmv where cmv.room_id = r.id and cmv.in_voice = true) as voice_count,
           cm.pinned, cm.muted,
-          (select count(*)::int from messages m where m.room_id = r.id and m.author_user_id <> $1
+          (select count(*)::int from messages m where m.room_id = r.id and m.author_user_id <> $1 and m.held = false
             and m.created_at > coalesce(cm.last_read_at, to_timestamp(0))) as unread,
           case when r.kind = 'dm' then (
             select p.display_name from chat_members om
@@ -1734,7 +1858,7 @@ export const getRoom = createServerFn({ method: "GET" })
        left join message_media mm on mm.message_id = m.id
        left join memberships mb on mb.user_id = m.author_user_id and mb.community_id = r.community_id
        left join profiles pr on pr.user_id = m.author_user_id
-       where m.room_id = $1 and m.id > $2
+       where m.room_id = $1 and m.id > $2 and m.held = false
        order by m.id desc
        limit 200`,
       [data.roomId, data.afterId ?? 0],
@@ -1924,7 +2048,7 @@ export const searchRoomMessages = createServerFn({ method: "GET" })
        left join message_media mm on mm.message_id = m.id
        left join memberships mb on mb.user_id = m.author_user_id and mb.community_id = r.community_id
        left join profiles pr on pr.user_id = m.author_user_id
-       where m.room_id = $1 and m.deleted = false and m.body ilike $2
+       where m.room_id = $1 and m.deleted = false and m.held = false and m.body ilike $2
        order by m.id desc limit 40`,
       [data.roomId, `%${query}%`],
     );
@@ -1948,7 +2072,7 @@ export const getOlderMessages = createServerFn({ method: "GET" })
        left join message_media mm on mm.message_id = m.id
        left join memberships mb on mb.user_id = m.author_user_id and mb.community_id = r.community_id
        left join profiles pr on pr.user_id = m.author_user_id
-       where m.room_id = $1 and m.id < $2 order by m.id desc limit 50`,
+       where m.room_id = $1 and m.id < $2 and m.held = false order by m.id desc limit 50`,
       [data.roomId, data.beforeId],
     );
     const messages = await withMessageReactions(
@@ -1971,13 +2095,13 @@ export const getMessageMedia = createServerFn({ method: "GET" })
     const { userId } = context as Authed;
     await requireRoomAccess(sql, userId, data.roomId);
     const row = (
-      await sql<{ data_url: string; kind: string; author_user_id: string; deleted: unknown }>`
-      select mm.data_url, mm.kind, m.author_user_id, m.deleted
+      await sql<{ data_url: string; kind: string; author_user_id: string; deleted: unknown; held: unknown }>`
+      select mm.data_url, mm.kind, m.author_user_id, m.deleted, m.held
       from message_media mm join messages m on m.id = mm.message_id
       where mm.message_id = ${data.messageId} and mm.room_id = ${data.roomId}
     `
     )[0];
-    if (!row || asBool(row.deleted) || (await blockedSet(sql, userId)).has(row.author_user_id))
+    if (!row || asBool(row.deleted) || asBool(row.held) || (await blockedSet(sql, userId)).has(row.author_user_id))
       throw new Error("Attachment unavailable.");
     return { kind: row.kind, dataUrl: await loadMedia(row.data_url) };
   });
@@ -2072,6 +2196,20 @@ export const sendMessage = createServerFn({ method: "POST" })
         throw error;
       }
     }
+    const { held } = await reviewContent(
+      sql,
+      {
+        targetType: "message",
+        targetId: Number(rows[0]!.id),
+        authorId: userId,
+        communityId: room.community_id ? String(room.community_id) : null,
+        text: parseSticker(body) ? "" : body,
+        images: media?.kind === "image" ? [media.dataUrl] : [],
+        href: `/chats/${data.roomId}`,
+      },
+      notify,
+    );
+    if (held) return { id: Number(rows[0]!.id), held };
     try {
       const room = (
         await sql<{
@@ -2105,7 +2243,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     } catch {
       /* */
     }
-    return { id: Number(rows[0]!.id) };
+    return { id: Number(rows[0]!.id), held };
   });
 
 export const toggleVoice = createServerFn({ method: "POST" })
@@ -2201,6 +2339,7 @@ export const getMe = createServerFn({ method: "GET" })
     const sql = await db();
     const { userId } = context as Authed;
     await ensureProfile(sql, { userId, email: null, name: null });
+    await syncAchievements(sql, userId);
     const profile = mapProfile((await sql`select * from profiles where user_id = ${userId}`)[0]!);
     const joined = (
       await sql`
@@ -2263,6 +2402,11 @@ export const updateSettings = createServerFn({ method: "POST" })
     const showOnline = data.showOnline ?? cur.showOnline;
     const ageConfirmed = data.ageConfirmed ?? cur.ageConfirmed;
     const cover = data.cover != null && isAllowedCover(data.cover) ? data.cover : cur.cover;
+    // Switching to a built-in banner (or none) replaces an uploaded wall cover, so its file is removed.
+    if (data.cover != null && isAllowedCover(data.cover)) {
+      const gone = await sql<{ data_url: string }>`delete from profile_covers where user_id = ${userId} returning data_url`;
+      await deleteMedia(gone.map((r) => r.data_url));
+    }
     const mood = (data.mood ?? cur.mood).trim().slice(0, 32);
     const status = (data.status ?? cur.status).trim().slice(0, 80);
     const frame =
@@ -2488,7 +2632,7 @@ export const getPublicProfile = createServerFn({ method: "GET" })
                 (select count(*)::int from wall_likes wl where wl.wall_post_id = w.id) as like_count
          from wall_posts w
          left join profiles pr on pr.user_id = w.author_user_id
-         where w.profile_user_id = $1
+         where w.profile_user_id = $1 and w.held = false
          order by w.id desc
          limit 40`,
         [profile.userId],
@@ -2525,12 +2669,8 @@ export const getPublicProfile = createServerFn({ method: "GET" })
     } catch {
       wall = [];
     }
-    const achievements = await computeAchievements(
-      sql,
-      profile.userId,
-      profile.rep,
-      profile.streak,
-    );
+    if (v.userId === profile.userId) await syncAchievements(sql, profile.userId, { force: true });
+    const { achievements, showcase } = await achievementsFor(sql, profile.userId);
     return {
       profile,
       joined,
@@ -2542,10 +2682,27 @@ export const getPublicProfile = createServerFn({ method: "GET" })
       titles,
       featuredTitle,
       achievements,
+      showcase,
       stats: { reputation: profile.rep, following, followers },
       viewerFollows,
       wall,
     };
+  });
+
+/** Chooses up to three unlocked achievements to show as banners at the top of your profile (empty list = automatic). */
+export const setShowcase = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { ids: string[] }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await db();
+    const { userId } = context as Authed;
+    const { achievements } = await achievementsFor(sql, userId);
+    const unlocked = new Set(achievements.filter((a) => a.unlocked).map((a) => a.id));
+    const ids = cleanShowcase(data.ids, unlocked);
+    if (Array.isArray(data.ids) && data.ids.length && ids.length !== Math.min(new Set(data.ids).size, MAX_SHOWCASE))
+      throw new Error("You can only show achievements you have unlocked (up to three).");
+    await sql`update profiles set showcase = ${JSON.stringify(ids)} where user_id = ${userId}`;
+    return { ids };
   });
 
 export const createCommunity = createServerFn({ method: "POST" })
@@ -3525,10 +3682,17 @@ export const addWallPost = createServerFn({ method: "POST" })
     if (blocked.length) throw new Error("You can’t write on this wall.");
     const err = scanText(data.body);
     if (err) throw new Error(err);
-    await sql`
+    const note = await sql<{ id: number }>`
       insert into wall_posts (profile_user_id, author_user_id, body)
       values (${profile.user_id}, ${userId}, ${data.body.trim().slice(0, 500)})
+      returning id
     `;
+    const { held } = await reviewContent(
+      sql,
+      { targetType: "wall", targetId: Number(note[0]!.id), authorId: userId, communityId: null, text: data.body, href: `/u/${profile.handle}` },
+      notify,
+    );
+    if (held) return { ok: true, held };
     await notify(
       sql,
       profile.user_id,
@@ -3537,7 +3701,7 @@ export const addWallPost = createServerFn({ method: "POST" })
       data.body.slice(0, 80),
       `/u/${profile.handle}`,
     );
-    return { ok: true };
+    return { ok: true, held };
   });
 
 export const deleteWallPost = createServerFn({ method: "POST" })
@@ -3644,7 +3808,12 @@ export const editPost = createServerFn({ method: "POST" })
           wiki_status = case when type = 'wiki' and wiki_status = 'approved' then 'pending' else wiki_status end
       where id = ${data.postId}
     `;
-    return { ok: true };
+    const { held } = await reviewContent(
+      sql,
+      { targetType: "post", targetId: data.postId, authorId: userId, communityId: data.slug, text: `${data.title}\n${data.body}`, href: `/c/${data.slug}/p/${data.postId}` },
+      notify,
+    );
+    return { ok: true, held };
   });
 
 export const setPostFlags = createServerFn({ method: "POST" })
@@ -3778,7 +3947,20 @@ export const editMessage = createServerFn({ method: "POST" })
     if ((await sql`select 1 from message_media where message_id = ${data.messageId}`).length)
       throw new Error("Media messages cannot be edited. Delete and resend instead.");
     await sql`update messages set body = ${body}, edited_at = now() where id = ${data.messageId}`;
-    return { ok: true };
+    const room = (await sql<{ community_id: string | null }>`select community_id from chat_rooms where id = ${data.roomId}`)[0];
+    const { held } = await reviewContent(
+      sql,
+      {
+        targetType: "message",
+        targetId: data.messageId,
+        authorId: userId,
+        communityId: room?.community_id ? String(room.community_id) : null,
+        text: parseSticker(body) ? "" : body,
+        href: `/chats/${data.roomId}`,
+      },
+      notify,
+    );
+    return { ok: true, held };
   });
 
 export const deleteMessage = createServerFn({ method: "POST" })
@@ -4159,6 +4341,7 @@ export const setWatchMedia = createServerFn({ method: "POST" })
 export const internals = {
   db,
   notify,
+  canRead,
   membershipOf,
   requireCommunity,
   requireMinAge,

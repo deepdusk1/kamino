@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { toast } from "sonner";
+import { HELD_MESSAGE, HELD_TITLE } from "@/lib/kamino/held";
 import { AppShell } from "@/components/app-shell";
 import { Face } from "@/components/face";
 import { LiveStage } from "@/components/live-stage";
@@ -241,7 +242,8 @@ function Room() {
         return;
       }
       const reply = replyTo?.id;
-      await sendMessage({ data: { roomId: id, body, replyTo: reply, media } });
+      const sent = await sendMessage({ data: { roomId: id, body, replyTo: reply, media } });
+      if (sent.held) toast.info(HELD_TITLE, { description: HELD_MESSAGE });
       setText("");
       setReplyTo(null);
       setStickersOn(false);

@@ -36,6 +36,13 @@ services:
       #   sync: false
       # - key: MAIL_FROM
       #   value: Kamino <hello@your-domain.example>
+      # Optional, free AI (see DEPLOY.md, step 4b). Paste the keys in Render's dashboard, not in this file.
+      - key: KAMINO_MODERATION_API_KEY
+        sync: false
+      - key: KAMINO_AI_API_KEY
+        sync: false
+      - key: KAMINO_ADMIN_EMAILS
+        sync: false
       # Optional, for voice/video behind strict networks (a TURN relay you provision):
       # - key: KAMINO_TURN_URLS
       #   value: turn:turn.example.com:3478

@@ -36,16 +36,3 @@ export const PROFILE_COVERS = [
 export function isAllowedCover(src: string) {
   return src === "" || PROFILE_COVERS.some((c) => c.src === src);
 }
-
-export const ACHIEVEMENT_DEFS = [
-  { id: "first-post", name: "First frame", desc: "Published a post in a hall" },
-  { id: "story", name: "A still", desc: "Posted a 24-hour story" },
-  { id: "wiki", name: "Archivist", desc: "Wrote a wiki page" },
-  { id: "quiz", name: "Quizmaster", desc: "Ran a quiz" },
-  { id: "poll", name: "Floor vote", desc: "Opened a poll" },
-  { id: "week-streak", name: "Seven nights", desc: "Held a 7-day check-in" },
-  { id: "hundred", name: "Rep 100", desc: "Earned 100 reputation" },
-  { id: "host", name: "Hall keeper", desc: "Lead a community" },
-  { id: "known", name: "Known", desc: "Reached 3 followers" },
-  { id: "welcome", name: "Open door", desc: "Received a wall note" },
-] as const;

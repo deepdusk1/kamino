@@ -39,7 +39,7 @@ function CommunityLayout() {
   const pending = member?.status === "pending";
   const visibleModules = c?.modules ?? [...COMMUNITY_MODULES];
   const tabModule = (label: string) =>
-    (label === "Folder" ? "files" : label.toLowerCase()) as CommunityModule;
+    (label === "Folder" ? "files" : label === "Stories" ? "roleplay" : label.toLowerCase()) as CommunityModule;
 
   async function checkIn() {
     setBusy(true);
@@ -237,6 +237,11 @@ function CommunityLayout() {
                     to: "/c/$slug/events" as const,
                     label: "Events",
                     match: (p: string) => p.startsWith(`/c/${slug}/events`),
+                  },
+                  {
+                    to: "/c/$slug/roleplay" as const,
+                    label: "Stories",
+                    match: (p: string) => p.startsWith(`/c/${slug}/roleplay`),
                   },
                   {
                     to: "/c/$slug/rank" as const,

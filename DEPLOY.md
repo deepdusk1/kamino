@@ -68,6 +68,18 @@ Without this, "Forgot password" cannot send emails.
    - `MAIL_FROM` = `Kamino <hello@your-domain.example>` (must be an address on the domain you verified)
 3. Click **Save**. Render restarts the server by itself.
 
+## Step 4b: Switch on the free AI (safety check and storyteller)
+
+Kamino's built-in safety rules always run. Two free keys add more. Both are optional and you can add them later.
+
+1. **Safety check (text and pictures).** Sign up at [platform.openai.com](https://platform.openai.com), open **API keys**, and create a key. OpenAI does not charge for its moderation service. In Render → `kamino` → **Environment**, set `KAMINO_MODERATION_API_KEY` to that key.
+2. **AI storyteller for role-play.** Sign up at [console.groq.com](https://console.groq.com) (no credit card), open **API Keys**, and create one. Set `KAMINO_AI_API_KEY` to it. The free tier allows about 1,000 replies a day; Kamino stops at 900 by itself (change with `KAMINO_AI_DAILY_LIMIT`).
+3. **You as site owner.** Set `KAMINO_ADMIN_EMAILS` to the email you sign in with. You then see serious safety cases from every community, direct messages and profile walls at `https://your-address/admin/safety`, and you get a notification when one comes in.
+
+Check: open any community's **Stories** tab. If it says the storyteller narrates, the key works. Free tiers and their limits are set by OpenAI and Groq and can change; if one stops working, Kamino keeps running on the built-in rules.
+
+**If something involving a child ever appears.** Do not download, copy or share it. Remove it in the safety queue, then report it: in Canada to [Cybertip.ca](https://www.cybertip.ca), in the US to the [NCMEC CyberTipline](https://report.cybertip.org). Running a service can come with legal duties to report and to keep records; ask a lawyer which apply to you. The AI checks text for this, but it cannot recognise such pictures reliably; hash-matching services (for example Microsoft PhotoDNA, free for eligible organisations) are the tool for that once you grow.
+
 ## Step 5: The free plan: what to expect (checked against Render's documentation)
 
 - The free **web service goes to sleep after 15 minutes** with no visitors. The next visitor waits about a minute while it wakes up. Fine for testing, not for a real launch.

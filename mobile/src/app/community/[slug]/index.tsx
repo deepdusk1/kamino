@@ -26,6 +26,7 @@ const SECTIONS: { module: CommunityModule; label: string; path: string; icon: ke
   { module: "events", label: "Events", path: "events", icon: "calendar-outline" },
   { module: "rank", label: "Rank", path: "rank", icon: "trophy-outline" },
   { module: "members", label: "Members", path: "members", icon: "people-outline" },
+  { module: "roleplay", label: "Stories", path: "roleplay", icon: "color-wand-outline" },
 ];
 
 function CommunityHome() {

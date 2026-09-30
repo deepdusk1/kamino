@@ -5,6 +5,8 @@
 export function appHrefFromServerHref(href: string): string {
   const post = /^\/c\/([^/]+)\/p\/(\d+)$/.exec(href);
   if (post) return `/community/${post[1]}/post/${post[2]}`;
+  const story = /^\/c\/([^/]+)\/roleplay\/(\d+)$/.exec(href);
+  if (story) return `/community/${story[1]}/roleplay/${story[2]}`;
   const mod = /^\/c\/([^/]+)\/mod$/.exec(href);
   if (mod) return `/community/${mod[1]}/mod`;
   const community = /^\/c\/([^/?#]+)/.exec(href);

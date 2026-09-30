@@ -50,7 +50,8 @@ export function PostCard({
         </Link>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold">{post.author.nickname}</p>
-          <p className="text-[11px] font-semibold text-subtle">
+          {/* "5s ago" can tick over between the server render and the browser: that difference is expected. */}
+          <p className="text-[11px] font-semibold text-subtle" suppressHydrationWarning>
             {communityName ? `${communityName} · ` : ""}
             {timeAgo(post.createdAt)} · {TYPE_LABEL[post.type] ?? post.type}
             {post.editedAt ? " · edited" : ""}

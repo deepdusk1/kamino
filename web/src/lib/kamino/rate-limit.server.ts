@@ -34,6 +34,8 @@ export const POLICIES = {
   follow: { limit: 60, windowMs: 60_000 },
   invite: { limit: 30, windowMs: 60_000 },
   upload: { limit: 20, windowMs: 60_000 },
+  /** Asking the AI storyteller for something (it has a small free daily allowance shared by everyone). */
+  ai: { limit: 30, windowMs: 3_600_000 },
 } as const;
 
 export type PolicyName = keyof typeof POLICIES;

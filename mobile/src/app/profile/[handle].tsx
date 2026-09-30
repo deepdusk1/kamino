@@ -4,16 +4,21 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Alert, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Alert, Pressable, View } from "react-native";
 import { assetUrl } from "@/api/client";
 import { api } from "@/api/endpoints";
+import { AchievementBanner, AchievementTile } from "@/components/AchievementBanner";
 import { LikeButton } from "@/components/LikeButton";
 import { PostCard } from "@/components/PostCard";
 import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
-import { Appear, Avatar, Button, Card, Chip, ErrorState, Field, IconBubble, Loading, Screen, Sheet, Txt } from "@/components/ui";
+import { Appear, Avatar, Button, Card, Chip, ErrorState, Field, Loading, Screen, Sheet, Txt } from "@/components/ui";
 import { showError, useAction } from "@/lib/errors";
 import { compactCount, timeAgo } from "@/lib/format";
-import { font, glowShadow, hueColor, hueGradient, radius, space, useTheme } from "@/theme";
+import { glowShadow, hueColor, hueGradient, radius, space, useTheme } from "@/theme";
+import { tellIfHeld } from "@/lib/held";
+import { byCategory, toggleShowcase } from "@/lib/achievements";
+import { pickPhoto } from "@/lib/media";
 
 /** Someone's public page: bio, stats, titles, achievements, wall and recent posts. */
 export default function Profile() {
@@ -24,6 +29,7 @@ export default function Profile() {
   const [wall, setWall] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [report, setReport] = useState<ReportTarget | null>(null);
+  const [allAchievements, setAllAchievements] = useState(false);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["profile", handle] });
 
@@ -37,8 +43,27 @@ export default function Profile() {
   });
   const [postWall, posting] = useAction(async () => {
     if (!wall.trim()) return;
-    await api.addWallPost(query.data!.profile.handle, wall.trim());
+    tellIfHeld(await api.addWallPost(query.data!.profile.handle, wall.trim()));
     setWall("");
+    await refresh();
+  });
+
+  const [changeCover, changingCover] = useAction(async () => {
+    const image = await pickPhoto("library", 1_400_000);
+    if (!image) return;
+    await api.setProfileCover(image);
+    await refresh();
+  }, { errorTitle: "Couldn't change the cover" });
+  const coverMenu = () =>
+    Alert.alert("Wall cover", "Show your own picture at the top of your profile.", [
+      { text: "Choose a picture", onPress: () => void changeCover() },
+      ...(query.data?.profile.cover
+        ? [{ text: "Remove cover", style: "destructive" as const, onPress: () => void api.removeProfileCover().then(refresh, showError) }]
+        : []),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  const [setShowcaseIds] = useAction(async (ids: string[]) => {
+    await api.setShowcase(ids);
     await refresh();
   });
 
@@ -71,6 +96,18 @@ export default function Profile() {
           <LinearGradient colors={hueGradient(p.avatarHue, theme.dark)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ position: "absolute", inset: 0 }} />
           {p.cover ? <Image source={{ uri: assetUrl(p.cover) }} style={{ position: "absolute", inset: 0 }} contentFit="cover" transition={220} /> : null}
           <LinearGradient colors={["rgba(255,255,255,0.3)", "rgba(255,255,255,0)"]} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 0.6 }} style={{ position: "absolute", inset: 0 }} />
+          {d.isSelf ? (
+            <Pressable
+              onPress={coverMenu}
+              disabled={changingCover}
+              accessibilityRole="button"
+              accessibilityLabel="Change your wall cover"
+              style={{ position: "absolute", top: space.sm, right: space.sm, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 }}
+            >
+              <Ionicons name="camera-outline" size={16} color="#fff" />
+              <Txt variant="caption" style={{ color: "#fff" }}>{changingCover ? "Uploading…" : "Change cover"}</Txt>
+            </Pressable>
+          ) : null}
         </View>
       </Appear>
       <Card index={1} style={{ marginTop: -70, marginHorizontal: space.sm, alignItems: "center", paddingTop: 0 }}>
@@ -88,6 +125,11 @@ export default function Profile() {
           ) : null}
         </View>
         {d.featuredTitle ? <Chip label={d.featuredTitle.label} selected /> : null}
+        {d.showcase.length ? (
+          <View style={{ alignSelf: "stretch", gap: space.xs }}>
+            {d.showcase.map((a) => <AchievementBanner key={a.id} achievement={a} />)}
+          </View>
+        ) : null}
         {p.status || p.mood ? <Txt variant="small" tone="accent" style={{ textAlign: "center" }}>{[p.mood, p.status].filter(Boolean).join(" · ")}</Txt> : null}
         {p.bio ? <Txt style={{ textAlign: "center" }}>{p.bio}</Txt> : null}
         <View style={{ flexDirection: "row", gap: space.sm, paddingTop: space.xs, alignSelf: "stretch" }}>
@@ -114,23 +156,24 @@ export default function Profile() {
         </Section>
       ) : null}
 
-      {d.achievements.some((a) => a.unlocked) ? (
-        <Section title="Achievements">
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-            {d.achievements.filter((a) => a.unlocked).map((a, i) => (
-              <Appear key={a.id} index={i} style={{ width: "48%" }}>
-                <Card style={{ padding: space.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                  <IconBubble icon="medal" colors={i % 2 ? theme.gradWarm : theme.gradPrimary} size={32} />
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="small" style={{ fontFamily: font.bold }} numberOfLines={1}>{a.name}</Txt>
-                    <Txt variant="caption" tone="muted" numberOfLines={2}>{a.desc}</Txt>
-                  </View>
-                </Card>
-              </Appear>
+      <Section title={`Achievements · ${d.achievements.filter((a) => a.unlocked).length}/${d.achievements.length}`}>
+        {d.isSelf ? <Txt variant="caption" tone="muted">Tap the star on up to three achievements to show them as banners on your profile.</Txt> : null}
+        {byCategory(allAchievements ? d.achievements : d.achievements.filter((a) => a.unlocked)).map((group) => (
+          <View key={group.category} style={{ gap: space.sm }}>
+            <Txt variant="label" tone="subtle">{group.category}</Txt>
+            {group.items.map((a) => (
+              <AchievementTile
+                key={a.id}
+                achievement={a}
+                showcased={d.showcase.some((x) => x.id === a.id)}
+                onToggleShowcase={d.isSelf ? () => void setShowcaseIds(toggleShowcase(d.showcase.map((x) => x.id), a.id)) : undefined}
+              />
             ))}
           </View>
-        </Section>
-      ) : null}
+        ))}
+        {!d.achievements.some((a) => a.unlocked) && !allAchievements ? <Txt tone="muted">No achievements yet. Post, chat and play to unlock them.</Txt> : null}
+        <Button label={allAchievements ? "Show unlocked only" : "Show all, with progress"} small variant="ghost" onPress={() => setAllAchievements((v) => !v)} />
+      </Section>
 
       {d.characters.length ? (
         <Section title="Characters">

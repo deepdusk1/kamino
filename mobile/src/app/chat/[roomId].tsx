@@ -19,6 +19,7 @@ import { pickPhoto, pickVideo } from "@/lib/media";
 import { stickerToken } from "@/lib/stickers";
 import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 import { font, glowShadow, radius, space, useTheme } from "@/theme";
+import { tellIfHeld } from "@/lib/held";
 
 const REACTIONS = ["❤️", "😂", "✨", "🔥", "👏", "😮"];
 type Media = { kind: "image" | "audio" | "video"; dataUrl: string };
@@ -58,8 +59,7 @@ export default function ChatRoom() {
     if (sending || (!body && !media)) return;
     setSending(true);
     try {
-      if (editing) await api.editMessage(roomId, editing.id, body);
-      else await api.send({ roomId, body, replyTo: replyTo?.id ?? null, media });
+      tellIfHeld(editing ? await api.editMessage(roomId, editing.id, body) : await api.send({ roomId, body, replyTo: replyTo?.id ?? null, media }));
       setText("");
       setReplyTo(null);
       setEditing(null);

@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CommunityLookEditor } from "@/components/community-look-editor";
+import { SafetyQueue } from "@/components/safety-queue";
 import { TitleChip } from "@/components/title-chip";
 import {
   createTitle,
@@ -62,9 +63,10 @@ function Mod() {
   return (
     <div className="space-y-8 px-4 py-5">
       <p className="text-sm text-muted">
-        Human review only. Titles are granted by leaders, colored by this hall, and pinned by the
+        People decide: the safety check only pauses things for you to review. Titles are granted by leaders, colored by this hall, and pinned by the
         member. No paid titles.
       </p>
+      <SafetyQueue slug={slug} />
       {["agent", "leader"].includes(data.role) && <CommunityLookEditor slug={slug} />}
       {["agent", "leader"].includes(data.role) && (
         <section className="glass-card rounded-2xl p-4">
@@ -92,7 +94,7 @@ function Mod() {
                         )
                       }
                     />
-                    {module === "files" ? "Folder" : module}
+                    {module === "files" ? "Folder" : module === "roleplay" ? "Stories (role-play)" : module}
                   </label>
                   <button
                     type="button"

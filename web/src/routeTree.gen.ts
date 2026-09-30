@@ -20,10 +20,12 @@ import { Route as NewRouteImport } from './routes/new'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SafetyRouteImport } from './routes/safety'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WalletRouteImport } from './routes/wallet'
+import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as ApiRtcRouteImport } from './routes/api/rtc'
 import { Route as CSlugRouteImport } from './routes/c/$slug'
 import { Route as ChatsIndexRouteImport } from './routes/chats/index'
@@ -40,7 +42,10 @@ import { Route as CSlugRankRouteImport } from './routes/c/$slug/rank'
 import { Route as CSlugWikiRouteImport } from './routes/c/$slug/wiki'
 import { Route as ApiV1RpcNameRouteImport } from './routes/api/v1/rpc/$name'
 import { Route as CSlugPPostIdRouteImport } from './routes/c/$slug/p/$postId'
+import { Route as CSlugRoleplayIndexRouteImport } from './routes/c/$slug/roleplay/index'
+import { Route as CSlugRoleplaySceneIdRouteImport } from './routes/c/$slug/roleplay/$sceneId'
 import { Route as ApiV1MediaAvatarUserIdRouteImport } from './routes/api/v1/media/avatar/$userId'
+import { Route as ApiV1MediaCoverUserIdRouteImport } from './routes/api/v1/media/cover/$userId'
 import { Route as ApiV1MediaCommunitySlugKindRouteImport } from './routes/api/v1/media/community/$slug/$kind'
 import { Route as ApiV1MediaMessageRoomIdMessageIdRouteImport } from './routes/api/v1/media/message/$roomId/$messageId'
 import { Route as ApiV1MediaPostPostIdPositionRouteImport } from './routes/api/v1/media/post/$postId/$position'
@@ -100,6 +105,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SafetyRoute = SafetyRouteImport.update({
+  id: '/safety',
+  path: '/safety',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SavedRoute = SavedRouteImport.update({
   id: '/saved',
   path: '/saved',
@@ -118,6 +128,11 @@ const TermsRoute = TermsRouteImport.update({
 const WalletRoute = WalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSafetyRoute = AdminSafetyRouteImport.update({
+  id: '/admin/safety',
+  path: '/admin/safety',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRtcRoute = ApiRtcRouteImport.update({
@@ -200,9 +215,24 @@ const CSlugPPostIdRoute = CSlugPPostIdRouteImport.update({
   path: '/p/$postId',
   getParentRoute: () => CSlugRoute,
 } as any)
+const CSlugRoleplayIndexRoute = CSlugRoleplayIndexRouteImport.update({
+  id: '/roleplay/',
+  path: '/roleplay/',
+  getParentRoute: () => CSlugRoute,
+} as any)
+const CSlugRoleplaySceneIdRoute = CSlugRoleplaySceneIdRouteImport.update({
+  id: '/roleplay/$sceneId',
+  path: '/roleplay/$sceneId',
+  getParentRoute: () => CSlugRoute,
+} as any)
 const ApiV1MediaAvatarUserIdRoute = ApiV1MediaAvatarUserIdRouteImport.update({
   id: '/api/v1/media/avatar/$userId',
   path: '/api/v1/media/avatar/$userId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1MediaCoverUserIdRoute = ApiV1MediaCoverUserIdRouteImport.update({
+  id: '/api/v1/media/cover/$userId',
+  path: '/api/v1/media/cover/$userId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1MediaCommunitySlugKindRoute =
@@ -236,10 +266,12 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/wallet': typeof WalletRoute
+  '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
@@ -256,7 +288,10 @@ export interface FileRoutesByFullPath {
   '/c/$slug/': typeof CSlugIndexRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
+  '/c/$slug/roleplay/$sceneId': typeof CSlugRoleplaySceneIdRoute
+  '/c/$slug/roleplay/': typeof CSlugRoleplayIndexRoute
   '/api/v1/media/avatar/$userId': typeof ApiV1MediaAvatarUserIdRoute
+  '/api/v1/media/cover/$userId': typeof ApiV1MediaCoverUserIdRoute
   '/api/v1/media/community/$slug/$kind': typeof ApiV1MediaCommunitySlugKindRoute
   '/api/v1/media/message/$roomId/$messageId': typeof ApiV1MediaMessageRoomIdMessageIdRoute
   '/api/v1/media/post/$postId/$position': typeof ApiV1MediaPostPostIdPositionRoute
@@ -272,10 +307,12 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/wallet': typeof WalletRoute
+  '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/chats/$roomId': typeof ChatsRoomIdRoute
   '/u/$handle': typeof UHandleRoute
@@ -291,7 +328,10 @@ export interface FileRoutesByTo {
   '/c/$slug': typeof CSlugIndexRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
+  '/c/$slug/roleplay/$sceneId': typeof CSlugRoleplaySceneIdRoute
+  '/c/$slug/roleplay': typeof CSlugRoleplayIndexRoute
   '/api/v1/media/avatar/$userId': typeof ApiV1MediaAvatarUserIdRoute
+  '/api/v1/media/cover/$userId': typeof ApiV1MediaCoverUserIdRoute
   '/api/v1/media/community/$slug/$kind': typeof ApiV1MediaCommunitySlugKindRoute
   '/api/v1/media/message/$roomId/$messageId': typeof ApiV1MediaMessageRoomIdMessageIdRoute
   '/api/v1/media/post/$postId/$position': typeof ApiV1MediaPostPostIdPositionRoute
@@ -309,10 +349,12 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/terms': typeof TermsRoute
   '/wallet': typeof WalletRoute
+  '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
@@ -329,7 +371,10 @@ export interface FileRoutesById {
   '/c/$slug/': typeof CSlugIndexRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
+  '/c/$slug/roleplay/$sceneId': typeof CSlugRoleplaySceneIdRoute
+  '/c/$slug/roleplay/': typeof CSlugRoleplayIndexRoute
   '/api/v1/media/avatar/$userId': typeof ApiV1MediaAvatarUserIdRoute
+  '/api/v1/media/cover/$userId': typeof ApiV1MediaCoverUserIdRoute
   '/api/v1/media/community/$slug/$kind': typeof ApiV1MediaCommunitySlugKindRoute
   '/api/v1/media/message/$roomId/$messageId': typeof ApiV1MediaMessageRoomIdMessageIdRoute
   '/api/v1/media/post/$postId/$position': typeof ApiV1MediaPostPostIdPositionRoute
@@ -348,10 +393,12 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/privacy'
     | '/reset-password'
+    | '/safety'
     | '/saved'
     | '/settings'
     | '/terms'
     | '/wallet'
+    | '/admin/safety'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
@@ -368,7 +415,10 @@ export interface FileRouteTypes {
     | '/c/$slug/'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
+    | '/c/$slug/roleplay/$sceneId'
+    | '/c/$slug/roleplay/'
     | '/api/v1/media/avatar/$userId'
+    | '/api/v1/media/cover/$userId'
     | '/api/v1/media/community/$slug/$kind'
     | '/api/v1/media/message/$roomId/$messageId'
     | '/api/v1/media/post/$postId/$position'
@@ -384,10 +434,12 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/privacy'
     | '/reset-password'
+    | '/safety'
     | '/saved'
     | '/settings'
     | '/terms'
     | '/wallet'
+    | '/admin/safety'
     | '/api/rtc'
     | '/chats/$roomId'
     | '/u/$handle'
@@ -403,7 +455,10 @@ export interface FileRouteTypes {
     | '/c/$slug'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
+    | '/c/$slug/roleplay/$sceneId'
+    | '/c/$slug/roleplay'
     | '/api/v1/media/avatar/$userId'
+    | '/api/v1/media/cover/$userId'
     | '/api/v1/media/community/$slug/$kind'
     | '/api/v1/media/message/$roomId/$messageId'
     | '/api/v1/media/post/$postId/$position'
@@ -420,10 +475,12 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/privacy'
     | '/reset-password'
+    | '/safety'
     | '/saved'
     | '/settings'
     | '/terms'
     | '/wallet'
+    | '/admin/safety'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
@@ -440,7 +497,10 @@ export interface FileRouteTypes {
     | '/c/$slug/'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
+    | '/c/$slug/roleplay/$sceneId'
+    | '/c/$slug/roleplay/'
     | '/api/v1/media/avatar/$userId'
+    | '/api/v1/media/cover/$userId'
     | '/api/v1/media/community/$slug/$kind'
     | '/api/v1/media/message/$roomId/$messageId'
     | '/api/v1/media/post/$postId/$position'
@@ -458,16 +518,19 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SafetyRoute: typeof SafetyRoute
   SavedRoute: typeof SavedRoute
   SettingsRoute: typeof SettingsRoute
   TermsRoute: typeof TermsRoute
   WalletRoute: typeof WalletRoute
+  AdminSafetyRoute: typeof AdminSafetyRoute
   ApiRtcRoute: typeof ApiRtcRoute
   CSlugRoute: typeof CSlugRouteWithChildren
   UHandleRoute: typeof UHandleRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiV1RpcNameRoute: typeof ApiV1RpcNameRoute
   ApiV1MediaAvatarUserIdRoute: typeof ApiV1MediaAvatarUserIdRoute
+  ApiV1MediaCoverUserIdRoute: typeof ApiV1MediaCoverUserIdRoute
   ApiV1MediaCommunitySlugKindRoute: typeof ApiV1MediaCommunitySlugKindRoute
   ApiV1MediaMessageRoomIdMessageIdRoute: typeof ApiV1MediaMessageRoomIdMessageIdRoute
   ApiV1MediaPostPostIdPositionRoute: typeof ApiV1MediaPostPostIdPositionRoute
@@ -552,6 +615,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/safety': {
+      id: '/safety'
+      path: '/safety'
+      fullPath: '/safety'
+      preLoaderRoute: typeof SafetyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/saved': {
       id: '/saved'
       path: '/saved'
@@ -578,6 +648,13 @@ declare module '@tanstack/react-router' {
       path: '/wallet'
       fullPath: '/wallet'
       preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/safety': {
+      id: '/admin/safety'
+      path: '/admin/safety'
+      fullPath: '/admin/safety'
+      preLoaderRoute: typeof AdminSafetyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/rtc': {
@@ -692,11 +769,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CSlugPPostIdRouteImport
       parentRoute: typeof CSlugRoute
     }
+    '/c/$slug/roleplay/': {
+      id: '/c/$slug/roleplay/'
+      path: '/roleplay'
+      fullPath: '/c/$slug/roleplay/'
+      preLoaderRoute: typeof CSlugRoleplayIndexRouteImport
+      parentRoute: typeof CSlugRoute
+    }
+    '/c/$slug/roleplay/$sceneId': {
+      id: '/c/$slug/roleplay/$sceneId'
+      path: '/roleplay/$sceneId'
+      fullPath: '/c/$slug/roleplay/$sceneId'
+      preLoaderRoute: typeof CSlugRoleplaySceneIdRouteImport
+      parentRoute: typeof CSlugRoute
+    }
     '/api/v1/media/avatar/$userId': {
       id: '/api/v1/media/avatar/$userId'
       path: '/api/v1/media/avatar/$userId'
       fullPath: '/api/v1/media/avatar/$userId'
       preLoaderRoute: typeof ApiV1MediaAvatarUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/media/cover/$userId': {
+      id: '/api/v1/media/cover/$userId'
+      path: '/api/v1/media/cover/$userId'
+      fullPath: '/api/v1/media/cover/$userId'
+      preLoaderRoute: typeof ApiV1MediaCoverUserIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/media/community/$slug/$kind': {
@@ -745,6 +843,8 @@ interface CSlugRouteChildren {
   CSlugWikiRoute: typeof CSlugWikiRoute
   CSlugIndexRoute: typeof CSlugIndexRoute
   CSlugPPostIdRoute: typeof CSlugPPostIdRoute
+  CSlugRoleplaySceneIdRoute: typeof CSlugRoleplaySceneIdRoute
+  CSlugRoleplayIndexRoute: typeof CSlugRoleplayIndexRoute
 }
 
 const CSlugRouteChildren: CSlugRouteChildren = {
@@ -757,6 +857,8 @@ const CSlugRouteChildren: CSlugRouteChildren = {
   CSlugWikiRoute: CSlugWikiRoute,
   CSlugIndexRoute: CSlugIndexRoute,
   CSlugPPostIdRoute: CSlugPPostIdRoute,
+  CSlugRoleplaySceneIdRoute: CSlugRoleplaySceneIdRoute,
+  CSlugRoleplayIndexRoute: CSlugRoleplayIndexRoute,
 }
 
 const CSlugRouteWithChildren = CSlugRoute._addFileChildren(CSlugRouteChildren)
@@ -773,16 +875,19 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SafetyRoute: SafetyRoute,
   SavedRoute: SavedRoute,
   SettingsRoute: SettingsRoute,
   TermsRoute: TermsRoute,
   WalletRoute: WalletRoute,
+  AdminSafetyRoute: AdminSafetyRoute,
   ApiRtcRoute: ApiRtcRoute,
   CSlugRoute: CSlugRouteWithChildren,
   UHandleRoute: UHandleRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiV1RpcNameRoute: ApiV1RpcNameRoute,
   ApiV1MediaAvatarUserIdRoute: ApiV1MediaAvatarUserIdRoute,
+  ApiV1MediaCoverUserIdRoute: ApiV1MediaCoverUserIdRoute,
   ApiV1MediaCommunitySlugKindRoute: ApiV1MediaCommunitySlugKindRoute,
   ApiV1MediaMessageRoomIdMessageIdRoute: ApiV1MediaMessageRoomIdMessageIdRoute,
   ApiV1MediaPostPostIdPositionRoute: ApiV1MediaPostPostIdPositionRoute,

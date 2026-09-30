@@ -24,6 +24,13 @@ export const getPostImage = createServerFn({ method: "GET" })
     const { userId } = context as unknown as Viewer;
     // The same rules as reading the post itself (private communities, hidden posts, blocks).
     const post = await requirePostAccess(sql, userId, data.postId);
+    // A post the safety check linked to minors never hands out its pictures, not even to moderators.
+    if (
+      (
+        await sql`select 1 from safety_flags where target_type = 'post' and target_id = ${String(data.postId)} and minors = true and status = 'open'`
+      ).length
+    )
+      throw new Error("Picture not found.");
     // Quiz pictures (positions from QUIZ_IMAGE_BASE) stay hidden until you start the quiz, so a timed
     // quiz cannot be studied beforehand. The author and people who already finished it can always see them.
     if (data.position >= QUIZ_IMAGE_BASE && String(post.author_user_id) !== userId) {

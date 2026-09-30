@@ -14,6 +14,7 @@ import { MAX_TIME_LIMIT, MIN_TIME_LIMIT, albumFor, blankQuestion, buildPayload, 
 import { uuid } from "@/lib/uuid";
 import { radius, space, useTheme } from "@/theme";
 import { withCommunityTheme } from "@/components/CommunityTheme";
+import { tellIfHeld } from "@/lib/held";
 
 /** Extra pictures beyond the cover (the server allows the same). */
 const MAX_ALBUM_EXTRAS = 5;
@@ -153,6 +154,7 @@ function Compose() {
     // The draft has done its job. If deleting it fails the post is still published, so ignore that error.
     if (draftRef.current) await api.deleteDraft(draftRef.current.id, draftRef.current.revision).catch(() => undefined);
     await queryClient.invalidateQueries();
+    tellIfHeld(created);
     router.replace(`/community/${slug}/post/${created.id}`);
   });
 

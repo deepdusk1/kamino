@@ -12,7 +12,7 @@ import { space, useTheme } from "@/theme";
 
 type Props = { slug: string; data: Moderation; onChanged: () => void };
 
-const MODULE_LABEL: Record<CommunityModule, string> = { chats: "Chats", wiki: "Wiki", files: "Files", events: "Events", rank: "Rank", members: "Members" };
+const MODULE_LABEL: Record<CommunityModule, string> = { chats: "Chats", wiki: "Wiki", files: "Files", events: "Events", rank: "Rank", members: "Members", roleplay: "Stories" };
 
 /** Community-wide tools: broadcast, invite links, join questions, news feeds and which tabs are shown. */
 export function ToolsTab({ slug, data, onChanged }: Props) {

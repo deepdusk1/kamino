@@ -1,6 +1,6 @@
 import { rpc } from "./client";
 import type * as M from "./models";
-import type { PostPayload, PostType, RankBoard, RankPeriod, RoomKind } from "./types";
+import type { AiStatus, PostPayload, PostType, RankBoard, RankPeriod, RoleplayScene, RoleplaySceneSummary, RoomKind, SafetyFlag } from "./types";
 
 /**
  * One typed function per server call. Screens use `api.something()` and never build
@@ -49,7 +49,7 @@ export const api = {
   createPost: (input: {
     slug: string; type: PostType; title: string; body: string; cover?: string; album?: string[]; questionImages?: string[]; payload?: PostPayload;
     contentWarning?: string; commentsDisabled?: boolean; announcement?: boolean;
-  }) => rpc<{ id: number }>("createPost", input),
+  }) => rpc<{ id: number; held: boolean }>("createPost", input),
   updateLook: (input: {
     slug: string; name?: string; tagline?: string; description?: string; rules?: string; hue?: number; themeStyle?: string;
     cover?: string; coverUpload?: string; iconUpload?: string | null;
@@ -58,12 +58,12 @@ export const api = {
   saveDraft: (input: { id: string; slug: string; revision: number; content: M.DraftContent }) =>
     rpc<{ id: string; revision: number }>("saveDraft", input),
   deleteDraft: (id: string, revision: number) => rpc<unknown>("deleteDraft", { id, revision }),
-  editPost: (input: { slug: string; postId: number; title: string; body: string }) => rpc<unknown>("editPost", input),
+  editPost: (input: { slug: string; postId: number; title: string; body: string }) => rpc<{ ok: boolean; held: boolean }>("editPost", input),
   deletePost: (slug: string, postId: number) => rpc<unknown>("deletePost", { slug, postId }),
   like: (postId: number) => rpc<unknown>("toggleLike", postId),
   save: (postId: number) => rpc<unknown>("toggleFavorite", postId),
   saved: () => rpc<M.PostWithCommunity[]>("listFavorites"),
-  comment: (postId: number, body: string) => rpc<unknown>("addComment", { postId, body }),
+  comment: (postId: number, body: string) => rpc<{ ok: boolean; held: boolean }>("addComment", { postId, body }),
   likeComment: (commentId: number) => rpc<unknown>("toggleCommentLike", commentId),
   vote: (postId: number, optionIndex: number) => rpc<unknown>("votePoll", { postId, optionIndex }),
   /** Starts the server's clock for a quiz (safe to repeat: the first start is kept). */
@@ -107,8 +107,8 @@ export const api = {
   olderMessages: (roomId: number, beforeId: number) => rpc<import("./types").ChatMessage[]>("getOlderMessages", { roomId, beforeId }),
   searchMessages: (roomId: number, query: string) => rpc<import("./types").ChatMessage[]>("searchRoomMessages", { roomId, query }),
   send: (input: { roomId: number; body: string; replyTo?: number | null; media?: { kind: "image" | "audio" | "video"; dataUrl: string } }) =>
-    rpc<{ id: number }>("sendMessage", input),
-  editMessage: (roomId: number, messageId: number, body: string) => rpc<unknown>("editMessage", { roomId, messageId, body }),
+    rpc<{ id: number; held: boolean }>("sendMessage", input),
+  editMessage: (roomId: number, messageId: number, body: string) => rpc<{ ok: boolean; held: boolean }>("editMessage", { roomId, messageId, body }),
   deleteMessage: (roomId: number, messageId: number) => rpc<unknown>("deleteMessage", { roomId, messageId }),
   react: (roomId: number, messageId: number, emoji: string) => rpc<unknown>("toggleMessageReaction", { roomId, messageId, emoji }),
   roomPreference: (roomId: number, prefs: { pinned?: boolean; muted?: boolean }) => rpc<unknown>("setRoomPreference", { roomId, ...prefs }),
@@ -129,7 +129,12 @@ export const api = {
   removeAvatar: () => rpc<unknown>("removeAvatar", {}),
   followProfile: (targetId: string) => rpc<unknown>("toggleFollowProfile", targetId),
   block: (targetId: string) => rpc<unknown>("blockUser", targetId),
-  addWallPost: (handle: string, body: string) => rpc<unknown>("addWallPost", { handle, body }),
+  addWallPost: (handle: string, body: string) => rpc<{ ok: boolean; held: boolean }>("addWallPost", { handle, body }),
+  /** Your own picture as your profile's wall cover. */
+  setProfileCover: (dataUrl: string) => rpc<{ cover: string }>("setProfileCover", { dataUrl }),
+  removeProfileCover: () => rpc<{ ok: boolean }>("removeProfileCover", {}),
+  /** Up to three unlocked achievements shown as banners on your profile (empty = chosen automatically). */
+  setShowcase: (ids: string[]) => rpc<{ ids: string[] }>("setShowcase", { ids }),
   deleteWallPost: (id: number) => rpc<unknown>("deleteWallPost", id),
   likeWallPost: (id: number) => rpc<unknown>("toggleWallLike", id),
   exportData: () => rpc<{ json: string }>("exportMyData"),
@@ -138,6 +143,27 @@ export const api = {
 
   // ── Notifications & push ─────────────────────────────────────────────────
   notifications: () => rpc<M.NotificationRow[]>("listNotifications"),
+
+  // ── AI: safety queue and role-play stories ──────────────────────────────
+  aiStatus: () => rpc<AiStatus>("getAiStatus"),
+  safetyFlags: (slug: string) => rpc<SafetyFlag[]>("listSafetyFlags", { slug }),
+  reviewSafetyFlag: (id: number, decision: "restore" | "remove" | "dismiss") =>
+    rpc<{ ok: boolean; status: string }>("reviewSafetyFlag", { id, decision }),
+  scenes: (slug: string) => rpc<RoleplaySceneSummary[]>("listScenes", { slug }),
+  scene: (sceneId: number) => rpc<RoleplayScene>("getScene", { sceneId }),
+  draftScene: (slug: string, idea: string, source?: string) =>
+    rpc<{ source: string; title: string; premise: string; characters: { name: string; description: string }[]; opening: string }>("draftScene", { slug, idea, source }),
+  createScene: (input: {
+    slug: string; title: string; source?: string; premise: string; characters: { name: string; description: string }[]; opening?: string; playAs?: string;
+  }) => rpc<{ id: number; held: boolean; aiError: string | null }>("createScene", input),
+  joinScene: (sceneId: number, character: string) => rpc<{ character: string }>("joinScene", { sceneId, character }),
+  leaveScene: (sceneId: number) => rpc<{ ok: boolean }>("leaveScene", { sceneId }),
+  addTurn: (sceneId: number, body: string, narrate = true) =>
+    rpc<{ id: number; held: boolean; aiError: string | null }>("addTurn", { sceneId, body, narrate }),
+  continueScene: (sceneId: number, nudge?: string) => rpc<{ ok: boolean }>("continueScene", { sceneId, nudge }),
+  writeEnding: (sceneId: number, direction: string) => rpc<{ ok: boolean }>("writeEnding", { sceneId, direction }),
+  endScene: (sceneId: number) => rpc<{ ok: boolean }>("endScene", { sceneId }),
+  deleteScene: (sceneId: number) => rpc<{ ok: boolean }>("deleteScene", { sceneId }),
 
   // ── Calls ────────────────────────────────────────────────────────────────
   iceServers: () => rpc<M.IceServer[]>("getIceServers"),

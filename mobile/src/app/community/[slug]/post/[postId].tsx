@@ -20,6 +20,7 @@ import { timeAgo } from "@/lib/format";
 import { usePostActions } from "@/lib/usePostActions";
 import { radius, space, useTheme } from "@/theme";
 import { withCommunityTheme } from "@/components/CommunityTheme";
+import { tellIfHeld } from "@/lib/held";
 
 function PostScreen() {
   const theme = useTheme();
@@ -37,12 +38,12 @@ function PostScreen() {
   const [editBody, setEditBody] = useState("");
 
   const [send, sending] = useAction(async () => {
-    await api.comment(id, comment.trim());
+    tellIfHeld(await api.comment(id, comment.trim()));
     setComment("");
     await queryClient.invalidateQueries({ queryKey: ["post", id] });
   });
   const [saveEdit, savingEdit] = useAction(async () => {
-    await api.editPost({ slug: slug!, postId: id, title: editTitle, body: editBody });
+    tellIfHeld(await api.editPost({ slug: slug!, postId: id, title: editTitle, body: editBody }));
     setEditing(false);
     await queryClient.invalidateQueries({ queryKey: ["post", id] });
   });

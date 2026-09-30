@@ -148,6 +148,14 @@ same permission checks. So the app can never do anything the website would refus
 
 If you change a data type on the server, run `npm run sync-types` here to copy it across.
 
+## 4b. New in release 7
+
+- **Stories (role-play):** open a community, tap *Stories*. Claim a character, write your turns, and (when the server has the free AI storyteller switched on) the story continues by itself; ask for a twist or a whole new ending.
+- **Safety tab** for moderators (Mod → Safety): items the safety check paused, with Restore / Remove / It's fine.
+- **Wall cover:** on your profile tap *Change cover*, or use Edit profile.
+- **Achievements:** 75 of them with progress bars; tap the star to show up to three as banners on your profile.
+- If the safety check pauses something you shared, the app tells you it is waiting for a moderator.
+
 ## 5. Known limits (honest list)
 
 - **Live calls** (audio, optional video, mute, ringing) are built with `react-native-webrtc` and use the
@@ -156,6 +164,7 @@ If you change a data type on the server, run `npm run sync-types` here to copy i
   engine is covered by unit tests with pretend connections and the server side by integration tests.
   There is no speaker/earpiece switch (that needs one more native library). Behind strict office or
   mobile networks a TURN relay is needed (`KAMINO_TURN_*` on the server).
+- **AI features** depend on the server's free AI keys. Without them, stories are played and narrated by members and only the built-in safety rules run. The AI will sometimes flag harmless posts or miss bad ones, which is why people make the final decision.
 - **Push notifications** are wired end-to-end, but were not tested on a physical phone in this
   build environment — do one test on a real device after your first EAS build.
 - **Photos, videos and voice notes** are stored in the server's database unless the server has the

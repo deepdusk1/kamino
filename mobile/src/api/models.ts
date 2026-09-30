@@ -77,6 +77,8 @@ export type PublicProfile = {
   titles: MemberTitle[];
   featuredTitle: MemberTitle | null;
   achievements: Achievement[];
+  /** Up to three achievements shown as banners under the name. */
+  showcase: Achievement[];
   stats: { reputation: number; following: number; followers: number };
   viewerFollows: boolean;
   wall: (WallPost & { author: AuthorChip })[];

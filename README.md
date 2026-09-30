@@ -41,7 +41,7 @@ Sign-up and password reset, home feed, discover and global search (communities, 
 people), communities (public and private, join questions, rules), eight post types (blog, image,
 question, link, poll, quiz, wiki, story), comments, likes, saving, drafts, shared wiki library,
 chat rooms and direct messages (photos, voice notes, video, replies, reactions), events and
-challenges with judging, leaderboards (activity, check-in streaks, quizzes), daily check-in in each community, free sticker packs, free avatar frames and chat bubble styles, image albums, quizzes with a picture per question and an optional time limit, stories with several scenes, a per-community look editor (colour, style, cover, icon), live calls in the phone app, draft autosave, shared-file folders, members, shared files, news feeds, profiles with **profile photos**,
+challenges with judging, leaderboards (activity, check-in streaks, quizzes), daily check-in in each community, free sticker packs, free avatar frames and chat bubble styles, image albums, quizzes with a picture per question and an optional time limit, stories with several scenes, a per-community look editor (colour, style, cover, icon), live calls in the phone app, **AI safety checks that hold illegal or dangerous posts, chats and pictures for a human moderator**, **role-play stories where members play characters from books and films and an AI storyteller narrates and writes new endings**, your own profile wall cover, **75 achievements with banners and progress bars**, draft autosave, shared-file folders, members, shared files, news feeds, profiles with **profile photos**,
 wall and achievements, follow / block / report, notifications and push, a first-run welcome that
 helps new people find communities, full moderation tools (reports, join requests, strikes, timed
 mutes, bans, appeals, broadcast, invite codes), data export and import, a 13+ birthday check, and in-app account deletion.
@@ -75,5 +75,7 @@ cd mobile && npm run typecheck && npm run lint && npm test && npm run export:che
 - Backups are a command you run (`npm run backup` in `web`), not something Kamino schedules for you: use your host's paid-database backups too.
 - Moderation is by people. Kamino gives leaders every tool, but nobody is watching your community unless you appoint them.
 - The website still has an older Coins wallet (tipping). It is not in the phone app and it goes against the "no coins" rule above; ask for it to be removed if you agree.
-- The Privacy Policy and Terms are sensible drafts, **not legal advice**. Have them reviewed.
+- The AI is free but basic. It will sometimes pause a harmless post or miss a bad one, which is why a person always makes the final decision. It needs two free keys (see `DEPLOY.md`, step 4b); it was tested against a pretend AI service here, not against OpenAI or Groq themselves, and their free limits can change.
+- Role-play with characters from films and books is fan fiction. The storyteller is told to write original words and never copy lines or lyrics, but fan fiction of commercial characters still carries some legal risk if Kamino grows; ask a lawyer before promoting it.
+- The Privacy Policy and Terms are sensible drafts, **not legal advice**. Have them reviewed. The privacy page now explains the AI services (content is sent to OpenAI and Groq for checking and storytelling); make sure your lawyer sees that part too.
 - Free hosting plans sleep or expire (details in `DEPLOY.md`). Use paid plans for real users.

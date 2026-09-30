@@ -7,6 +7,8 @@ export function Face({
   className,
   level,
   ring,
+  userId,
+  version,
 }: {
   name: string;
   hue: number;
@@ -14,6 +16,9 @@ export function Face({
   className?: string;
   level?: number;
   ring?: boolean;
+  /** With `version` above 0, shows the person's profile photo instead of their initials. */
+  userId?: string;
+  version?: number;
 }) {
   const dim = {
     sm: "size-8 text-[11px]",
@@ -27,7 +32,7 @@ export function Face({
     <span className={cn("relative inline-grid shrink-0", className)}>
       <span
         className={cn(
-          "grid place-items-center rounded-full font-display font-bold tracking-tight text-fg",
+          "grid place-items-center overflow-hidden rounded-full font-display font-bold tracking-tight text-fg",
           dim,
           ring && "outline-2 outline-offset-2 outline-accent",
         )}
@@ -37,7 +42,16 @@ export function Face({
         }}
         aria-hidden
       >
-        {initials(name)}
+        {userId && version ? (
+          <img
+            src={`/api/v1/media/avatar/${encodeURIComponent(userId)}?v=${version}`}
+            alt=""
+            className="size-full rounded-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          initials(name)
+        )}
       </span>
       {level != null && (
         <span className="absolute -right-0.5 -bottom-0.5 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold text-accent-fg">

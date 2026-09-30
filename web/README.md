@@ -71,7 +71,7 @@ website uses, so all permission checks are shared. Other mobile-related pieces:
 ## Running the automatic checks
 
 ```sh
-npm run typecheck && npm run lint && npm test        # 128 unit tests
+npm run typecheck && npm run lint && npm test        # 151 unit tests
 npm run dev                                          # in one terminal (bulk tests need KAMINO_RATE_LIMIT=off)
 npm run test:mobile && npm run test:integration && npm run test:creator && npm run test:chat-media && npm run test:wallet
 npm run check:contract                               # phone app and server agree on data shapes
@@ -85,4 +85,6 @@ npm run check:contract                               # phone app and server agre
 - **Abuse limits:** built in and on by default (answers HTTP 429 with a friendly message). `KAMINO_RATE_LIMIT=off` switches them off for tests only.
 - **Calls on strict networks:** set `KAMINO_TURN_URLS` with `KAMINO_TURN_SECRET` (coturn) or `KAMINO_TURN_USERNAME` and `KAMINO_TURN_CREDENTIAL` (a TURN service). See `.env.example`.
 - **Files on object storage:** with `KAMINO_S3_*` set, new photos, videos, voice notes, covers and quiz pictures go to the bucket and the database keeps only a reference. Keep the bucket **private** and turn on the bucket's own versioning or backup: `npm run backup` saves the database, **not** the files in the bucket. Deleting a post, message or account deletes its files too.
+- **Safety checks and the AI:** every post, comment, chat message, wall note and role-play turn goes through built-in rules (always on, free). With `KAMINO_MODERATION_API_KEY` the free OpenAI moderation check also reads text and pictures. Likely illegal or dangerous content is **held** (hidden) until a moderator restores or removes it in the community's Mod page; weaker signals are only flagged. Serious cases, direct messages and profile walls also reach the site owners in `KAMINO_ADMIN_EMAILS` at `/admin/safety`. Nothing is banned automatically. `npm run test:ai` checks all of this against a pretend AI service (start the dev server with the settings listed at the top of `scripts/smoke-ai.mjs`).
+- **Role-play stories:** the "Stories" tab. With `KAMINO_AI_API_KEY` (Groq's free tier by default) the storyteller sets up stories, narrates after each turn, voices unclaimed characters and writes alternate endings. `KAMINO_AI_DAILY_LIMIT` keeps it inside the free allowance. Without a key, members play and narrate themselves.
 - **Age gate:** sign-up asks for a birthday once, keeps only "confirmed 13 or older", and erases accounts of anyone younger.

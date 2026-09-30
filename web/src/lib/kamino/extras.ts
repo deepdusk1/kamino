@@ -472,7 +472,7 @@ const OWNED_COLUMNS = [
   "reporter_id", "editor_user_id", "profile_user_id", "proposer_user_id", "to_user_id",
 ];
 /** Tables that keep (pseudonymous) records for community accountability. */
-const KEEP_TABLES = new Set(["audit_log", "communities", "title_defs", "appeals", "strikes", "member_mutes"]);
+const KEEP_TABLES = new Set(["audit_log", "communities", "title_defs", "appeals", "strikes", "member_mutes", "safety_flags"]);
 
 /** Removes a person and everything they own (used by "Delete my account" and the under-13 check). */
 async function eraseAccount(sql: Awaited<ReturnType<typeof db>>, userId: string) {
@@ -485,6 +485,7 @@ async function eraseAccount(sql: Awaited<ReturnType<typeof db>>, userId: string)
     ...(await sql<{ v: string }>`select cover as v from posts where author_user_id = ${userId}`).map((r) => r.v),
     ...(await sql<{ v: string }>`select mm.data_url as v from message_media mm join messages m on m.id = mm.message_id where m.author_user_id = ${userId}`).map((r) => r.v),
     ...(await sql<{ v: string }>`select data_url as v from profile_avatars where user_id = ${userId}`).map((r) => r.v),
+    ...(await sql<{ v: string }>`select data_url as v from profile_covers where user_id = ${userId}`).map((r) => r.v),
   ]);
   await sql`delete from post_images where post_id in (select id from posts where author_user_id = ${userId})`;
   const columns = await sql<{ table_name: string; column_name: string }>`
@@ -571,6 +572,7 @@ export const setAvatar = createServerFn({ method: "POST" })
     const sql = await db();
     const { userId } = context as Authed;
     await guard(userId, "upload");
+    await refuseUnsafePicture(data.dataUrl);
     const stored = await storeMedia("avatar", data.dataUrl);
     const previous = (await sql<{ data_url: string }>`select data_url from profile_avatars where user_id = ${userId}`)[0];
     await sql`
@@ -593,6 +595,71 @@ export const removeAvatar = createServerFn({ method: "POST" })
     await deleteMedia(gone.map((r) => r.data_url));
     await sql`update profiles set avatar_version = 0 where user_id = ${userId}`;
     return { ok: true };
+  });
+
+/**
+ * Profile pictures are seen by everyone, so a picture the safety check would hold is simply refused (there is nothing
+ * to hold it in). Without an AI key only the size and type checks apply.
+ */
+async function refuseUnsafePicture(dataUrl: string) {
+  const { checkContent } = await import("./safety.server");
+  const verdict = await checkContent({ text: "", images: [dataUrl] });
+  if (verdict.action === "hold") throw new Error("That picture can't be used on Kamino. Please choose another one.");
+}
+
+// ────────────────────────────── Profile wall covers ──────────────────────────────
+
+const COVER_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const COVER_MAX_CHARS = 2_000_000; // about 1.5 MB of image: enough for a sharp 1600-pixel-wide banner
+
+/** Your own picture as your profile's wall cover (instead of one of the built-in banners). */
+export const setProfileCover = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { dataUrl: string }) => d)
+  .handler(async ({ context, data }) => {
+    if (typeof data?.dataUrl !== "string" || !COVER_DATA_URL.test(data.dataUrl)) throw new Error("Choose a JPEG, PNG or WebP picture.");
+    if (data.dataUrl.length > COVER_MAX_CHARS) throw new Error("That picture is too large. Try one under 1.5 MB.");
+    const sql = await db();
+    const { userId } = context as Authed;
+    await guard(userId, "upload");
+    await refuseUnsafePicture(data.dataUrl);
+    const stored = await storeMedia("avatar", data.dataUrl);
+    const previous = (await sql<{ data_url: string }>`select data_url from profile_covers where user_id = ${userId}`)[0];
+    await sql`
+      insert into profile_covers (user_id, data_url) values (${userId}, ${stored})
+      on conflict (user_id) do update set data_url = excluded.data_url, updated_at = now()
+    `;
+    await deleteMedia([previous?.data_url]);
+    // A new address on every upload, so phones and browsers show the new picture at once.
+    const cover = `/api/v1/media/cover/${encodeURIComponent(userId)}?v=${Date.now()}`;
+    await sql`update profiles set cover = ${cover} where user_id = ${userId}`;
+    return { cover };
+  });
+
+/** Back to no cover (the profile shows a gradient in the person's colour). */
+export const removeProfileCover = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await db();
+    const { userId } = context as Authed;
+    await dropProfileCover(sql, userId);
+    await sql`update profiles set cover = '' where user_id = ${userId}`;
+    return { ok: true };
+  });
+
+/** Deletes an uploaded cover (also used when someone switches to a built-in banner). */
+async function dropProfileCover(sql: Awaited<ReturnType<typeof db>>, userId: string) {
+  const gone = await sql<{ data_url: string }>`delete from profile_covers where user_id = ${userId} returning data_url`;
+  await deleteMedia(gone.map((r) => r.data_url));
+}
+
+/** Wall covers are as public as profile pages, so this needs no sign-in. */
+export const getProfileCoverData = createServerFn({ method: "GET" })
+  .validator((userId: string) => userId)
+  .handler(async ({ data: userId }) => {
+    const sql = await db();
+    const row = (await sql<{ data_url: string }>`select data_url from profile_covers where user_id = ${userId}`)[0];
+    return { dataUrl: row ? await loadMedia(row.data_url) : null };
   });
 
 /** Profile photos are as public as profile pages, so this needs no sign-in. */

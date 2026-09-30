@@ -7,12 +7,13 @@ import { AppealsTab } from "@/components/mod/AppealsTab";
 import { PeopleTab } from "@/components/mod/PeopleTab";
 import { ReportsTab } from "@/components/mod/ReportsTab";
 import { RequestsTab } from "@/components/mod/RequestsTab";
+import { SafetyTab } from "@/components/mod/SafetyTab";
 import { ToolsTab } from "@/components/mod/ToolsTab";
 import { Chip, ErrorState, Loading, Screen } from "@/components/ui";
 import { space } from "@/theme";
 import { withCommunityTheme } from "@/components/CommunityTheme";
 
-type Tab = "reports" | "requests" | "people" | "appeals" | "tools";
+type Tab = "safety" | "reports" | "requests" | "people" | "appeals" | "tools";
 
 /** Leader and curator tools, split into tabs so each screen stays small and easy to read. */
 function Moderation() {
@@ -22,12 +23,14 @@ function Moderation() {
   const page = useQuery({ queryKey: ["community", slug], queryFn: () => api.community(slug!), enabled: !!slug });
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   const appeals = useQuery({ queryKey: ["appeals", slug], queryFn: () => api.appeals(slug!), enabled: !!slug });
-  const [tab, setTab] = useState<Tab>("reports");
+  const safety = useQuery({ queryKey: ["safety", slug], queryFn: () => api.safetyFlags(slug!), enabled: !!slug });
+  const [tab, setTab] = useState<Tab>("safety");
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["mod", slug] });
     void queryClient.invalidateQueries({ queryKey: ["appeals", slug] });
     void queryClient.invalidateQueries({ queryKey: ["community", slug] });
+    void queryClient.invalidateQueries({ queryKey: ["safety", slug] });
   };
 
   if (mod.isPending || page.isPending) return <Loading />;
@@ -39,7 +42,9 @@ function Moderation() {
   for (const s of data.strikes) strikeCounts.set(s.userId, (strikeCounts.get(s.userId) ?? 0) + 1);
   const openAppeals = (appeals.data ?? []).filter((a) => a.status === "open").length;
 
+  const openSafety = (safety.data ?? []).filter((f) => f.status === "open").length;
   const tabs: { id: Tab; label: string }[] = [
+    { id: "safety", label: `Safety${openSafety ? ` (${openSafety})` : ""}` },
     { id: "reports", label: `Reports${openReports ? ` (${openReports})` : ""}` },
     { id: "requests", label: `Requests${data.pending.length ? ` (${data.pending.length})` : ""}` },
     { id: "people", label: "People" },
@@ -53,6 +58,7 @@ function Moderation() {
         {tabs.map((t) => <Chip key={t.id} label={t.label} selected={tab === t.id} onPress={() => setTab(t.id)} />)}
       </ScrollView>
       <View>
+        {tab === "safety" ? <SafetyTab slug={slug!} /> : null}
         {tab === "reports" ? <ReportsTab slug={slug!} reports={data.reports} onChanged={refresh} /> : null}
         {tab === "requests" ? <RequestsTab slug={slug!} pending={data.pending} answers={data.joinAnswers} questions={data.joinQuestions.map((q) => q.prompt)} onChanged={refresh} /> : null}
         {tab === "people" ? <PeopleTab slug={slug!} members={page.data?.members ?? []} strikeCounts={strikeCounts} myRole={data.role} myId={me.data?.profile.userId} onChanged={refresh} /> : null}

@@ -583,6 +583,23 @@ await ok(owner.token, "toggleVoice", { roomId: styleRoom.id, on: false });
 await ok(stylist.token, "toggleVoice", { roomId: styleRoom.id, on: false });
 pass("live calls: sign-in token works on the call service, only room members join under their own name, offers are delivered once, ringing and hang-up");
 
+// ── Without AI keys: the built-in rules still protect, and stories work without the storyteller ──
+const noAi = await ok(null, "getAiStatus", undefined);
+assert.deepEqual([noAi.moderation, noAi.storyteller, noAi.repliesLeft], [false, false, 0], "this test server has no AI keys");
+const rulesHeld = await ok(stylist.token, "createPost", { slug: hall.id, type: "blog", title: "Garage sale", body: "selling glock switches cheap" });
+assert.equal(rulesHeld.held, true, "the built-in rules hold weapon sales with no AI at all");
+assert.ok((await ok(owner.token, "listSafetyFlags", { slug: hall.id })).some((f) => f.targetId === String(rulesHeld.id) && f.action === "hold"));
+const plainScene = await ok(stylist.token, "createScene", {
+  slug: hall.id, title: "Tea party", source: "", premise: "A calm tea party where the hatter is late.", characters: [{ name: "Alice" }, { name: "Hatter" }], playAs: "Alice",
+});
+assert.deepEqual([plainScene.held, plainScene.aiError], [false, null], "no storyteller: no opening, and no error either");
+const plainTurn = await ok(stylist.token, "addTurn", { sceneId: plainScene.id, body: "Alice pours the tea." });
+assert.equal(plainTurn.aiError, null, "turns work without the storyteller");
+assert.deepEqual((await ok(owner.token, "getScene", { sceneId: plainScene.id })).turns.map((t) => t.kind), ["turn"]);
+assert.match(await refused(stylist.token, "writeEnding", { sceneId: plainScene.id, direction: "everyone naps happily" }), /not set up/);
+assert.match(await refused(stylist.token, "draftScene", { slug: hall.id, idea: "a tea party" }), /not set up/);
+pass("without AI keys: built-in rules still hold illegal sales; stories are played by members; AI buttons explain themselves");
+
 // ── Account deletion ───────────────────────────────────────────────────────
 assert.match(await refused(other.token, "deleteMyAccount", { confirm: "yes" }), /DELETE/);
 await ok(other.token, "createPost", { slug: hall.id, type: "blog", title: "About to vanish", body: "bye" });

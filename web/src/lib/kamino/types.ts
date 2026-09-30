@@ -10,7 +10,7 @@ export type ProfileFrame = (typeof PROFILE_FRAME_IDS)[number];
 /** Free chat bubble looks, on top of the colour you pick. */
 export const BUBBLE_STYLES = ["soft", "glass", "outline", "bold"] as const;
 export type BubbleStyle = (typeof BUBBLE_STYLES)[number];
-export const COMMUNITY_MODULES = ["chats", "wiki", "files", "events", "rank", "members"] as const;
+export const COMMUNITY_MODULES = ["chats", "wiki", "files", "events", "rank", "members", "roleplay"] as const;
 export type CommunityModule = (typeof COMMUNITY_MODULES)[number];
 
 /** Colour styles a community can pick (free, like every other cosmetic). */
@@ -125,6 +125,14 @@ export type Achievement = {
   name: string;
   desc: string;
   unlocked: boolean;
+  /** An icon name each app maps to its own icons (see `achievements.ts`). */
+  icon: string;
+  category: string;
+  tier: "bronze" | "silver" | "gold" | "legend";
+  /** Count so far (capped at `target`) for the progress bar. */
+  progress: number;
+  target: number;
+  unlockedAt: string | null;
 };
 
 export type Character = {
@@ -391,3 +399,71 @@ export const MOOD_PRESETS = [
   "on a comeback",
   "lore diving",
 ] as const;
+
+/** An item the automatic safety check held or flagged, waiting for a person to decide. */
+export type SafetyFlag = {
+  id: number;
+  communityId: string | null;
+  targetType: "post" | "comment" | "message" | "wall" | "roleplay" | "scene";
+  targetId: string;
+  authorId: string;
+  authorName: string;
+  /** "hold": hidden until someone decides. "flag": still visible. */
+  action: "hold" | "flag";
+  reasons: string[];
+  /** Serious enough to reach the site owner too. */
+  severe: boolean;
+  /** Linked to minors: its pictures are locked and the site owner must follow the reporting steps in the guide. */
+  minors: boolean;
+  excerpt: string;
+  href: string;
+  status: "open" | "restored" | "removed" | "dismissed";
+  createdAt: string;
+};
+
+/** What the server's AI can do right now (the apps hide or explain features accordingly). */
+export type AiStatus = {
+  /** The AI safety check (OpenAI's free moderation service) is set up. The built-in rules always run. */
+  moderation: boolean;
+  /** The AI storyteller for role-play is set up. */
+  storyteller: boolean;
+  /** Storyteller replies left today for the whole server. */
+  repliesLeft: number;
+};
+
+export type RoleplayCharacter = { name: string; description: string; playedBy: { userId: string; name: string } | null };
+
+export type RoleplaySceneSummary = {
+  id: number;
+  communityId: string;
+  title: string;
+  source: string;
+  premise: string;
+  status: "open" | "ended";
+  castCount: number;
+  turnCount: number;
+  endingCount: number;
+  creatorName: string;
+  updatedAt: string;
+};
+
+export type RoleplayTurn = {
+  id: number;
+  /** "narration" and "ending" are written by the AI storyteller; "turn" by a member. */
+  kind: "turn" | "narration" | "ending";
+  character: string;
+  author: { userId: string; name: string; hue: number; avatarV: number } | null;
+  body: string;
+  createdAt: string;
+};
+
+export type RoleplayScene = RoleplaySceneSummary & {
+  creatorId: string;
+  characters: RoleplayCharacter[];
+  turns: RoleplayTurn[];
+  /** The character the viewer plays, or null. */
+  myCharacter: string | null;
+  /** The viewer may end or delete the scene (its creator or a moderator). */
+  canManage: boolean;
+  canPlay: boolean;
+};

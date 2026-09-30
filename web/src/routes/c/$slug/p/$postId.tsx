@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Face } from "@/components/face";
 import { FormattedBody } from "@/components/formatted-body";
 import { toast } from "sonner";
+import { HELD_MESSAGE, HELD_TITLE } from "@/lib/kamino/held";
 import { Button } from "@/components/ui/button";
 import { StoryViewer } from "@/components/story-viewer";
 import { QuizPlayer } from "@/components/quiz-player";
@@ -573,10 +574,13 @@ function PostPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!comment.trim()) return;
-              void addComment({ data: { postId: id, body: comment } }).then(() => {
-                setComment("");
-                void q.refetch();
-              });
+              void addComment({ data: { postId: id, body: comment } })
+                .then((res) => {
+                  if (res.held) toast.info(HELD_TITLE, { description: HELD_MESSAGE });
+                  setComment("");
+                  void q.refetch();
+                })
+                .catch((e) => toast.error(e instanceof Error ? e.message : "Could not post your comment"));
             }}
           >
             <input

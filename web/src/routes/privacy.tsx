@@ -21,7 +21,11 @@ function Privacy() {
       <h2>What we do not do</h2>
       <ul>
         <li>We do not show ads and we do not sell your data.</li>
-        <li>We do not read private messages. Moderators only see content that someone reports.</li>
+        <li>
+          People do not read your private messages. Automatic safety checks do scan everything shared,
+          direct messages included, for illegal or dangerous content. If one is paused, a moderator (or,
+          for direct messages, the site owner) sees a short excerpt so a person can decide.
+        </li>
         <li>Kamino does not track you across other apps or websites.</li>
       </ul>
       <h2>Who can see what</h2>
@@ -34,6 +38,15 @@ function Privacy() {
         Kamino is for people aged 13 and older. Community leaders can remove content, mute or remove
         members, and members can appeal. Some phrases are filtered automatically to stop scams and
         harmful content.
+      </p>
+      <h2>AI services</h2>
+      <p>
+        If this server has them switched on, Kamino uses two outside AI services. Text and pictures you
+        share are sent to OpenAI's moderation service to check them for illegal or dangerous content.
+        Role-play story turns are sent to an AI storyteller service (Groq by default) so it can continue
+        the story. They receive only the content needed for that job, not your email address, and handle
+        it under their own terms. Kamino does not use them for ads or profiling. No decision about your
+        account is made by the AI alone: a person always decides.
       </p>
       <h2>Your choices</h2>
       <ul>

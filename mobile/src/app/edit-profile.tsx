@@ -7,7 +7,7 @@ import { BUBBLE_STYLES, MOOD_PRESETS, PROFILE_FRAME_IDS, type BubbleStyle, type 
 import { Avatar, Button, Chip, ErrorState, Field, Loading, Screen, Txt } from "@/components/ui";
 import { useAction } from "@/lib/errors";
 import { BUBBLE_STYLE_LABELS } from "@/lib/cosmetics";
-import { pickAvatar } from "@/lib/media";
+import { pickAvatar, pickPhoto } from "@/lib/media";
 import { space, useTheme } from "@/theme";
 
 const FRAME_LABELS: Record<ProfileFrame, string> = {
@@ -46,6 +46,17 @@ function Form({ profile, onSaved }: { profile: Profile; onSaved: () => Promise<u
     await queryClient.invalidateQueries();
   });
 
+  const [changeCover, coverBusy] = useAction(async () => {
+    const dataUrl = await pickPhoto("library", 1_400_000);
+    if (!dataUrl) return;
+    await api.setProfileCover(dataUrl);
+    await queryClient.invalidateQueries();
+  }, { errorTitle: "Couldn't set the cover" });
+  const [removeCover] = useAction(async () => {
+    await api.removeProfileCover();
+    await queryClient.invalidateQueries();
+  });
+
   const [save, saving] = useAction(async () => {
     if (displayName.trim().length < 2) throw new Error("Your name needs at least 2 characters.");
     await api.updateSettings({ displayName: displayName.trim(), bio, status, mood, frame, bubbleHue, bubbleStyle });
@@ -59,6 +70,10 @@ function Form({ profile, onSaved }: { profile: Profile; onSaved: () => Promise<u
         <View style={{ flexDirection: "row", gap: space.sm }}>
           <Button label={profile.avatarVersion ? "Change photo" : "Add a photo"} small variant="secondary" onPress={() => void changePhoto()} busy={photoBusy} />
           {profile.avatarVersion ? <Button label="Remove" small variant="ghost" onPress={() => void removePhoto()} busy={photoBusy} /> : null}
+        </View>
+        <View style={{ flexDirection: "row", gap: space.sm }}>
+          <Button label={profile.cover ? "Change wall cover" : "Add a wall cover"} small variant="secondary" onPress={() => void changeCover()} busy={coverBusy} />
+          {profile.cover ? <Button label="Remove cover" small variant="ghost" onPress={() => void removeCover()} busy={coverBusy} /> : null}
         </View>
       </View>
       <Field label="Display name" value={displayName} onChangeText={setDisplayName} maxLength={40} />
