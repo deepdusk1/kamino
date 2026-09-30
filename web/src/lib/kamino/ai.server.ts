@@ -142,25 +142,39 @@ export async function chatComplete(
     throw new AiUnavailableError(
       "The AI storyteller has used today's free replies. It will be back tomorrow.",
     );
-  let res: Response;
-  try {
-    res = await postJson(
-      `${config.url}/chat/completions`,
-      config.key,
-      { model: config.model, messages, max_tokens: options.maxTokens ?? 500, temperature: 0.9 },
-      30_000,
+  // Reasoning models (the default gpt-oss-20b spends tokens thinking before it writes) need
+  // headroom: a tight limit leaves nothing for the reply itself, which comes back empty.
+  const maxTokens = options.maxTokens ?? 1200;
+  let lastError: AiUnavailableError | null = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    let res: Response;
+    try {
+      res = await postJson(
+        `${config.url}/chat/completions`,
+        config.key,
+        { model: config.model, messages, max_tokens: maxTokens, temperature: 0.9 },
+        30_000,
+      );
+    } catch {
+      lastError = new AiUnavailableError("The AI storyteller did not answer. Try again in a moment.");
+      continue;
+    }
+    if (res.status === 429)
+      throw new AiUnavailableError("The AI storyteller is busy right now. Try again in a minute.");
+    if (!res.ok) {
+      console.warn(`[ai] storyteller answered ${res.status}`);
+      lastError = new AiUnavailableError("The AI storyteller could not answer. Try again in a moment.");
+      continue;
+    }
+    const body = (await res.json()) as {
+      choices?: { finish_reason?: string; message?: { content?: string } }[];
+    };
+    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+    if (text) return text;
+    console.warn(
+      `[ai] storyteller returned empty content (attempt ${attempt}, finish_reason=${body.choices?.[0]?.finish_reason ?? "unknown"}, max_tokens=${maxTokens})`,
     );
-  } catch {
-    throw new AiUnavailableError("The AI storyteller did not answer. Try again in a moment.");
+    lastError = new AiUnavailableError("The AI storyteller had nothing to say. Try again.");
   }
-  if (res.status === 429)
-    throw new AiUnavailableError("The AI storyteller is busy right now. Try again in a minute.");
-  if (!res.ok) {
-    console.warn(`[ai] storyteller answered ${res.status}`);
-    throw new AiUnavailableError("The AI storyteller could not answer. Try again in a moment.");
-  }
-  const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-  if (!text) throw new AiUnavailableError("The AI storyteller had nothing to say. Try again.");
-  return text;
+  throw lastError ?? new AiUnavailableError("The AI storyteller had nothing to say. Try again.");
 }

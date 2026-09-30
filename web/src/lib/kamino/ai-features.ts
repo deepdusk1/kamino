@@ -280,7 +280,7 @@ async function storytellerWrites(
       ? endingPrompt(header, cast, turns, extra)
       : narrationPrompt(header, cast, turns, extra);
   const text = cleanReply(
-    await chatComplete(sql, messages, { maxTokens: kind === "ending" ? 700 : 400 }),
+    await chatComplete(sql, messages, { maxTokens: kind === "ending" ? 1500 : 1000 }),
   );
   const inserted = await sql<{ id: number }>`
     insert into roleplay_turns (scene_id, author_user_id, character_name, kind, body)
