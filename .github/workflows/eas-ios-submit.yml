@@ -1,0 +1,44 @@
+name: EAS iOS Submit to App Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: 'EAS Build ID to submit (default: latest production iOS build)'
+        required: false
+        default: '65a6e295-ce6c-4f72-a4c8-704b6bc75116'
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Restore Apple API Key
+        run: |
+          echo "${{ secrets.EXPO_APPLE_API_KEY }}" | base64 -d > /tmp/AuthKey.p8
+          ls -la /tmp/AuthKey.p8
+
+      - name: Submit to App Store Connect
+        run: |
+          eas submit -p ios --id ${{ inputs.build_id }} --non-interactive \
+            --apple-api-key-id ${{ secrets.EXPO_APPLE_API_KEY_ID }} \
+            --apple-api-issuer-id ${{ secrets.EXPO_APPLE_API_ISSUER_ID }} \
+            --apple-api-key-path /tmp/AuthKey.p8
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
