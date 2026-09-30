@@ -148,6 +148,19 @@ function Terms() {
         enforce a provision is not a waiver of it. These Terms are the entire agreement between you
         and Kelnova Labs about Kamino.
       </p>
+
+      <h2>15. Virtual coins</h2>
+      <ul>
+        <li>
+          Kamino has a virtual currency called <strong>coins</strong>. Coins are earned through
+          activity in the app (for example, daily check-ins) and cannot be purchased with real money.
+        </li>
+        <li>
+          Coins have no monetary value, cannot be redeemed for cash, goods or services, and cannot
+          be transferred outside Kamino. We may adjust coin balances, change how coins are earned,
+          or remove the coins feature at any time.
+        </li>
+      </ul>
     </LegalPage>
   );
 }
