@@ -55,7 +55,7 @@ export default function NewCommunity() {
         <View style={{ flexDirection: "row", gap: space.sm }}>
           {[18].map((age) => <Chip key={age} label={`${age}+`} selected={ageGate === age} onPress={() => setAgeGate(age)} />)}
         </View>
-        <Txt variant="small" tone="muted">Kamino is for ages 13 and up. You can raise the minimum for your community.</Txt>
+        <Txt variant="small" tone="muted">Kamino is for ages 18 and up.</Txt>
       </View>
       <Field label="Rules (optional)" value={rules} onChangeText={setRules} multiline maxLength={2000} placeholder="Be kind. No spoilers without a warning." />
       <Button label="Create community" onPress={() => void create()} busy={creating} />

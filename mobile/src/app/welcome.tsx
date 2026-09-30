@@ -50,7 +50,7 @@ export default function Welcome() {
         <LogoOrb size={64} />
         <Txt variant="display" style={{ textAlign: "center" }}>Welcome to Kamino</Txt>
         <Txt tone="muted" style={{ textAlign: "center" }}>
-          A calm place for your communities. No ads, no coins, no pushy notifications. Just people who share what you love.
+          A calm place for your communities. No ads, no pushy notifications. Just people who share what you love.
         </Txt>
       </Appear>
 

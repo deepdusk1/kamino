@@ -90,7 +90,7 @@ export default function SignIn() {
           <Txt tone="muted">Fandoms, friendships and late-night conversations, all in one little universe.</Txt>
         </Appear>
         <Appear index={3} style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-          {(["No ads", "No coins", "No spam"] as const).map((promise) => (
+          {(["No ads", "No spam"] as const).map((promise) => (
             <View key={promise} style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: theme.tint, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 5, borderWidth: 1, borderColor: theme.hairline }}>
               <Ionicons name="checkmark-circle" size={14} color={theme.ok} />
               <Txt variant="caption" style={{ fontFamily: font.bold }}>{promise}</Txt>
