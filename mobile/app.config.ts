@@ -9,7 +9,7 @@ import type { ExpoConfig } from "expo/config";
  *   - EAS_PROJECT_ID      : printed by `npx eas-cli init`; paste it below (needed for push notifications)
  */
 const IDENTIFIER = "com.kelnovalabs.kamino";
-const EAS_PROJECT_ID = ""; // e.g. "1a2b3c4d-...". Leave empty until you have run `npx eas-cli init`.
+const EAS_PROJECT_ID = "c7e6db5e-9724-406a-b6a0-b95b79842823"; // Linked 2026-09-29 to the kelnovalabs Expo account.
 
 const config: ExpoConfig = {
   name: "Kamino",
@@ -68,7 +68,7 @@ const config: ExpoConfig = {
   ],
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? "",
-    supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? "",
+    supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? "info.kelnova@gmail.com",
     eas: { projectId: EAS_PROJECT_ID },
   },
 };
