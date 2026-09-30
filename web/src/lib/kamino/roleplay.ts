@@ -10,6 +10,13 @@ export type SceneCharacter = { name: string; description: string };
 
 export type RoleplayTurnKind = "turn" | "narration" | "ending";
 
+/** Token budgets for storyteller replies. Endings run longer than mid-story narration.
+ * Regression guard (2026-09-29): a budget under ~1000 tokens leaves the default reasoning
+ * model with nothing for the reply itself, so narration after a player's turn came back
+ * empty. Keep both at or above 1000. */
+export const STORYTELLER_NARRATION_TOKENS = 1000;
+export const STORYTELLER_ENDING_TOKENS = 1500;
+
 export type TurnForPrompt = { kind: RoleplayTurnKind; character: string; body: string };
 
 export const MAX_CHARACTERS = 8;

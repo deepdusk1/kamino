@@ -12,3 +12,6 @@ dist/
 .DS_Store
 backups/
 .contract/
+
+# Apple signing material — never commit
+mobile/ios-certs/

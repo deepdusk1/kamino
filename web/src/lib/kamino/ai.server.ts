@@ -130,6 +130,10 @@ export async function budgetLeft(sql: Sql): Promise<number> {
   return Math.max(0, config.dailyLimit - used);
 }
 
+/** Default token budget for a storyteller reply. Reasoning models (the default gpt-oss-20b
+ * spends tokens thinking before it writes) need headroom: a tight limit leaves nothing for the
+ * reply itself, which comes back empty. Regression guard: keep this >= 1000. */
+export const STORYTELLER_DEFAULT_TOKENS = 1200;
 /** Asks the storyteller for a reply. Throws `AiUnavailableError` with a message people can read. */
 export async function chatComplete(
   sql: Sql,
@@ -144,7 +148,7 @@ export async function chatComplete(
     );
   // Reasoning models (the default gpt-oss-20b spends tokens thinking before it writes) need
   // headroom: a tight limit leaves nothing for the reply itself, which comes back empty.
-  const maxTokens = options.maxTokens ?? 1200;
+  const maxTokens = options.maxTokens ?? STORYTELLER_DEFAULT_TOKENS;
   let lastError: AiUnavailableError | null = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     let res: Response;
