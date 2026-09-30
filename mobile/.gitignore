@@ -12,3 +12,4 @@ android/
 *.p12
 *.mobileprovision
 credentials.json
+AuthKey.p8
