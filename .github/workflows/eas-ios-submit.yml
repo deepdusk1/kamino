@@ -39,6 +39,6 @@ jobs:
 
       - name: Submit to App Store Connect
         run: |
-          eas submit -p ios --id ${{ inputs.build_id }} --non-interactive
+          eas submit -p ios --id ${{ inputs.build_id }} --non-interactive --verbose
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
