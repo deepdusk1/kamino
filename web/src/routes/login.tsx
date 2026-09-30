@@ -18,7 +18,7 @@ function Login() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    // Check the birthday BEFORE creating anything, so nothing is stored for someone under 13.
+    // Check the birthday BEFORE creating anything, so nothing is stored for someone under 18.
     const verdict = mode === "up" ? judgeBirthday(birthday) : null;
     if (verdict?.kind === "young") return setError(YOUNG_MESSAGE);
     if (verdict?.kind === "invalid") return setError(verdict.message);

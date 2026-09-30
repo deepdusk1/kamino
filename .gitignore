@@ -15,3 +15,5 @@ backups/
 
 # Apple signing material — never commit
 mobile/ios-certs/
+*.aab
+*.ipa

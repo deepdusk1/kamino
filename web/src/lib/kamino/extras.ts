@@ -474,7 +474,7 @@ const OWNED_COLUMNS = [
 /** Tables that keep (pseudonymous) records for community accountability. */
 const KEEP_TABLES = new Set(["audit_log", "communities", "title_defs", "appeals", "strikes", "member_mutes", "safety_flags"]);
 
-/** Removes a person and everything they own (used by "Delete my account" and the under-13 check). */
+/** Removes a person and everything they own (used by "Delete my account" and the under-age check). */
 async function eraseAccount(sql: Awaited<ReturnType<typeof db>>, userId: string) {
   await sql`update communities set member_count = greatest(member_count - 1, 0)
     where id in (select community_id from memberships where user_id = ${userId} and status = 'active')`;
@@ -522,7 +522,7 @@ export const deleteMyAccount = createServerFn({ method: "POST" })
 /**
  * The 18+ age check. The apps ask for a birthday when someone creates an account and send it here
  * right after sign-up. We compare it with today's date and keep only the answer ("confirmed at ...").
- * Someone under 13 has their new account erased straight away, so nothing about them is kept.
+ * Someone under 18 has their new account erased straight away, so nothing about them is kept.
  */
 export const confirmMinimumAge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
