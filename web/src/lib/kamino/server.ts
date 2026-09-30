@@ -117,10 +117,10 @@ async function membershipOf(
   return rows[0] ? mapMembership(rows[0]) : null;
 }
 
-/** New accounts must pass the 13+ birthday check (see `confirmMinimumAge`) before they take part. */
+/** New accounts must pass the 18+ birthday check (see `confirmMinimumAge`) before they take part. */
 async function requireMinAge(sql: Sql, userId: string) {
   const row = (await sql`select min_age_confirmed_at from profiles where user_id = ${userId}`)[0];
-  if (!row?.min_age_confirmed_at) throw new Error("Please confirm your age first (Kamino is for people aged 13 and over).");
+  if (!row?.min_age_confirmed_at) throw new Error("Please confirm your age first (Kamino is for adults aged 18 and over).");
 }
 
 /**
@@ -2738,7 +2738,7 @@ export const createCommunity = createServerFn({ method: "POST" })
       values (
         ${id}, ${name}, ${data.tagline.slice(0, 80)}, ${data.description.slice(0, 800)},
         ${data.category}, '/covers/hero.jpg', ${profile.avatarHue}, ${data.visibility},
-        ${data.ageGate === 16 ? 16 : 13}, ${data.rules.slice(0, 2000)}, ${userId}, 1
+        ${18}, ${data.rules.slice(0, 2000)}, ${userId}, 1
       )
     `;
     await sql`

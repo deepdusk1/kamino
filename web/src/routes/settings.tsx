@@ -151,10 +151,6 @@ function Settings() {
               <input type="checkbox" name="showOnline" defaultChecked={p.showOnline} />
               Show online status in voice rooms
             </label>
-            <label className="flex h-11 items-center gap-2 text-sm">
-              <input type="checkbox" name="ageConfirmed" defaultChecked={p.ageConfirmed} />
-              I confirm I am 16+ (required for 16+ halls)
-            </label>
             <fieldset className="space-y-1">
               <legend className="text-sm font-bold">Notifications</legend>
               <label className="flex h-10 items-center gap-2 text-sm">
@@ -291,7 +287,7 @@ function Settings() {
         <section className="rounded-2xl bg-surface p-5 text-sm text-muted shadow-border">
           <h2 className="font-display text-lg font-semibold text-fg">House laws</h2>
           <ul className="mt-3 list-disc space-y-1 pl-4">
-            <li>13+ globally. Some halls are 16+.</li>
+            <li>18+ only. Every member is an adult.</li>
             <li>No harassment, hate, sexual content involving minors, or scams.</li>
             <li>Reports go to human leaders. No mystery auto-bans.</li>
             <li>Each community has its own persona. Don’t dox the person behind it.</li>

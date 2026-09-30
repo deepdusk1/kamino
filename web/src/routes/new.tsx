@@ -58,9 +58,8 @@ function NewCommunity() {
           <option value="unlisted">Unlisted</option>
           <option value="private">Private (join requests)</option>
         </select>
-        <select name="ageGate" className="h-12 w-full rounded-xl bg-surface px-4 text-sm shadow-border" defaultValue="13">
-          <option value="13">13+</option>
-          <option value="16">16+</option>
+        <select name="ageGate" className="h-12 w-full rounded-xl bg-surface px-4 text-sm shadow-border" defaultValue="18">
+          <option value="18">18+</option>
         </select>
         <textarea name="rules" placeholder="House rules" rows={4} className="w-full rounded-xl bg-surface px-4 py-3 text-sm shadow-border" />
         {error ? <p className="text-sm text-danger">{error}</p> : null}

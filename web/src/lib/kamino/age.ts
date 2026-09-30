@@ -1,9 +1,9 @@
 /**
- * Age check used at sign-up. Kamino is for people aged 13 and over.
+ * Age check used at sign-up. Kamino is for adults aged 18 and over.
  * The date of birth is only ever compared with today's date; it is never saved anywhere.
  */
 
-export const MINIMUM_AGE = 13;
+export const MINIMUM_AGE = 18;
 /** At this age the person is also marked as old enough for age-gated (16+/18+) communities. */
 export const ADULT_AGE = 18;
 

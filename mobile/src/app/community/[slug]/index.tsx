@@ -82,7 +82,7 @@ function CommunityHome() {
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
         <View style={{ flex: 1 }}>
-          <Txt variant="small" tone="muted">{compactCount(community.memberCount)} members · {community.category}{community.ageGate > 13 ? ` · ${community.ageGate}+` : ""}</Txt>
+          <Txt variant="small" tone="muted">{compactCount(community.memberCount)} members · {community.category}{community.ageGate >= 18 ? ` · ${community.ageGate}+` : ""}</Txt>
         </View>
         {active ? <Button label="Leave" variant="secondary" small onPress={() => void leave()} busy={leaving} /> : pending ? <Chip label="Request pending" /> : banned ? <Chip label="Removed" tone="danger" /> : <Button label="Join" small onPress={() => setJoinOpen(true)} />}
       </View>

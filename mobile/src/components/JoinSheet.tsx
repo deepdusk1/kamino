@@ -38,7 +38,7 @@ export function JoinSheet({ community, questions, visible, onClose, onJoined }: 
   return (
     <Sheet visible={visible} title={`Join ${community.name}`} onClose={onClose}>
       <Txt tone="muted">
-        {isPrivate ? "This is a private community. Leaders approve new members." : community.ageGate > 13 ? `This community is for ages ${community.ageGate} and over.` : "You'll get your own nickname here, separate from your other communities."}
+        {isPrivate ? "This is a private community. Leaders approve new members." : community.ageGate >= 18 ? `This community is for ages ${community.ageGate} and over.` : "You'll get your own nickname here, separate from your other communities."}
       </Txt>
       <Field label="Nickname in this community" value={nickname} onChangeText={setNickname} maxLength={24} placeholder="Optional" />
       {isPrivate && questions.length ? (

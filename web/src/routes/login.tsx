@@ -189,7 +189,7 @@ function Login() {
             </div>
           )}
           <p className="auth-notice">
-            <ShieldCheck size={16} /> For people aged 13 and older.
+            <ShieldCheck size={16} /> For adults aged 18 and older.
           </p>
           <p className="auth-browse">
             Just looking around? <Link to="/explore">Explore communities</Link>

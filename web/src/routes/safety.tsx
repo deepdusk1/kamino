@@ -19,7 +19,7 @@ function SafetyPage() {
         <section>
           <h2 className="font-display text-lg font-semibold">House rules</h2>
           <p className="mt-2">
-            No ads, no coins, nothing for sale. Kamino is for people aged 13 and up. No sexual
+            No ads, nothing for sale. Kamino is for adults aged 18 and up. No sexual
             content involving minors, no selling drugs, weapons or stolen goods, no threats, no
             hate, no scams.
           </p>

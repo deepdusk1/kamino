@@ -57,10 +57,10 @@ export function checkScene(input: {
   return { title, source, premise, characters };
 }
 
-/** The storyteller's standing instructions. They keep every story safe for a 13+ community. */
+/** The storyteller's standing instructions. They keep every story appropriate for an 18+ community. */
 export function storytellerRules(): string {
   return [
-    "You are the narrator of a collaborative role-play story inside a community app used by people aged 13 and up.",
+    "You are the narrator of a collaborative role-play story inside a community app used by adults aged 18 and up.",
     "Keep everything teen-appropriate: no sexual content or romance beyond a kiss, no graphic gore, no hate or slurs,",
     "and no real-world instructions for weapons, drugs, hacking, self-harm or crime. Conflict, danger and villains are fine.",
     "Characters may come from existing books, films, games or shows; this is fan fiction, so write only ORIGINAL prose.",

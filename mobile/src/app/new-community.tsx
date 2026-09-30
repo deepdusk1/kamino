@@ -22,7 +22,7 @@ export default function NewCommunity() {
   const [rules, setRules] = useState("");
   const [category, setCategory] = useState<string>(CATEGORIES[0]);
   const [visibility, setVisibility] = useState<Visibility>("public");
-  const [ageGate, setAgeGate] = useState(13);
+  const [ageGate, setAgeGate] = useState(18);
 
   const [create, creating] = useAction(async () => {
     if (name.trim().length < 3) throw new Error("Give your community a name (at least 3 characters).");
@@ -53,7 +53,7 @@ export default function NewCommunity() {
       <View style={{ gap: space.sm }}>
         <Txt variant="label" tone="subtle">Minimum age</Txt>
         <View style={{ flexDirection: "row", gap: space.sm }}>
-          {[13, 16, 18].map((age) => <Chip key={age} label={`${age}+`} selected={ageGate === age} onPress={() => setAgeGate(age)} />)}
+          {[18].map((age) => <Chip key={age} label={`${age}+`} selected={ageGate === age} onPress={() => setAgeGate(age)} />)}
         </View>
         <Txt variant="small" tone="muted">Kamino is for ages 13 and up. You can raise the minimum for your community.</Txt>
       </View>

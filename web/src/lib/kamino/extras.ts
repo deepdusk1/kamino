@@ -520,7 +520,7 @@ export const deleteMyAccount = createServerFn({ method: "POST" })
   });
 
 /**
- * The 13+ age check. The apps ask for a birthday when someone creates an account and send it here
+ * The 18+ age check. The apps ask for a birthday when someone creates an account and send it here
  * right after sign-up. We compare it with today's date and keep only the answer ("confirmed at ...").
  * Someone under 13 has their new account erased straight away, so nothing about them is kept.
  */
@@ -541,7 +541,7 @@ export const confirmMinimumAge = createServerFn({ method: "POST" })
       await eraseAccount(sql, userId);
       return { ok: false as const, reason: "under-age" as const };
     }
-    // Adults are also marked as old enough for age-gated communities; 13 to 17 can still tick the box in Settings.
+    // Everyone passing the gate is 18+, so they are automatically marked old enough for age-gated communities.
     await sql`update profiles
       set min_age_confirmed_at = coalesce(min_age_confirmed_at, now()),
           age_confirmed = age_confirmed or ${result.age >= ADULT_AGE}

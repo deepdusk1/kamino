@@ -178,8 +178,8 @@ const FICTION_RELAXED = new Set([
 ]);
 
 /**
- * Turns the AI's scores into an action. `ageGate` is the community's minimum age: sexual content is held in 13+
- * and 16+ communities but only flagged in 18+ ones. A threshold of 2 means "never hold, only flag".
+ * Turns the AI's scores into an action. `ageGate` is the community's minimum age (always 18+ now):
+ * sexual content is only flagged, never held, in adult communities. A threshold of 2 means "never hold, only flag".
  */
 export function decideFromScores(
   scores: Record<string, number>,
@@ -198,7 +198,7 @@ export function decideFromScores(
     if (!Number.isFinite(score) || score < rule.flag) continue;
     if (options.fiction && FICTION_RELAXED.has(category) && score < 0.9) continue;
     const holdAt =
-      (rule.adultOnly && (options.ageGate ?? 13) >= 18) ||
+      (rule.adultOnly && (options.ageGate ?? 18) >= 18) ||
       (options.fiction && FICTION_RELAXED.has(category))
         ? 2
         : rule.hold;

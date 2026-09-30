@@ -22,7 +22,7 @@ function Terms() {
 
       <h2>2. Who may use Kamino</h2>
       <ul>
-        <li>You must be at least 13 years old. Some communities set a higher minimum age.</li>
+        <li>You must be at least 18 years old to use Kamino.</li>
         <li>You may only hold one account, registered with a valid email address you control.</li>
         <li>You are responsible for keeping your password secret and for everything done under your account.</li>
       </ul>

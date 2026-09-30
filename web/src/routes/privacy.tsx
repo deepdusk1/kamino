@@ -110,10 +110,10 @@ function Privacy() {
         </li>
       </ul>
 
-      <h2>8. Children</h2>
+      <h2>8. Age requirement</h2>
       <p>
-        Kamino is for people aged 13 and older. We do not knowingly collect personal information
-        from children under 13; if we learn we have, we delete it promptly.
+        Kamino is for adults aged 18 and older. We do not knowingly collect personal information
+        from anyone under 18; if we learn we have, we delete it promptly.
       </p>
 
       <h2>9. Security</h2>

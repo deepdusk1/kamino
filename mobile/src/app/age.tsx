@@ -8,7 +8,7 @@ import { errorMessage } from "@/lib/errors";
 import { radius, space } from "@/theme";
 
 /**
- * Shown to a signed-in person who has not passed the 13+ birthday check yet
+ * Shown to a signed-in person who has not passed the 18+ birthday check yet
  * (for example an account created before the check existed, or through another sign-in method).
  */
 export default function AgeCheck() {
@@ -39,7 +39,7 @@ export default function AgeCheck() {
       <View style={{ paddingTop: insets.top + space.xxl, paddingHorizontal: space.xl, gap: space.md }}>
         <Appear><LogoOrb size={64} /></Appear>
         <Appear index={1}><Txt variant="display">One quick thing</Txt></Appear>
-        <Appear index={2}><Txt tone="muted">Kamino is for people aged 13 and over. Tell us your birthday to continue.</Txt></Appear>
+        <Appear index={2}><Txt tone="muted">Kamino is for adults aged 18 and over. Tell us your birthday to continue.</Txt></Appear>
       </View>
       <Appear index={3} style={{ padding: space.lg, paddingTop: space.xl }}>
         <Glass intensity={70} style={{ borderRadius: radius.xl, padding: space.xl, gap: space.lg }}>
