@@ -2,11 +2,6 @@ name: EAS iOS Submit to App Store
 
 on:
   workflow_dispatch:
-    inputs:
-      build_id:
-        description: 'EAS Build ID to submit (default: latest production iOS build)'
-        required: false
-        default: '65a6e295-ce6c-4f72-a4c8-704b6bc75116'
 
 jobs:
   submit:
@@ -32,6 +27,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download IPA from release
+        run: |
+          gh release download ios-build-20 --repo deepdusk1/kamino --pattern "*.ipa" --dir ./
+          ls -lh ./*.ipa
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Restore Apple API Key
         run: |
           echo "${{ secrets.EXPO_APPLE_API_KEY }}" | base64 -d > ./AuthKey.p8
@@ -39,6 +41,6 @@ jobs:
 
       - name: Submit to App Store Connect
         run: |
-          eas submit -p ios --id ${{ inputs.build_id }} --non-interactive --verbose
+          eas submit -p ios --path ./kamino-1.0.0-20.ipa --non-interactive --verbose
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
