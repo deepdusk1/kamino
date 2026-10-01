@@ -2,6 +2,14 @@ name: EAS iOS Submit to App Store
 
 on:
   workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Build number to submit (e.g. 21)'
+        required: true
+        default: '21'
+      ipa_url:
+        description: 'Direct IPA download URL (Expo artifact link)'
+        required: true
 
 jobs:
   submit:
@@ -27,12 +35,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download IPA from release
+      - name: Download IPA
         run: |
-          gh release download ios-build-20 --repo deepdusk1/kamino --pattern "*.ipa" --dir ./
+          curl -sL -o ./kamino-1.0.0-${{ inputs.build_number }}.ipa "${{ inputs.ipa_url }}"
           ls -lh ./*.ipa
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Restore Apple API Key
         run: |
@@ -41,6 +47,6 @@ jobs:
 
       - name: Submit to App Store Connect
         run: |
-          eas submit -p ios --path ./kamino-1.0.0-20.ipa --non-interactive --verbose
+          eas submit -p ios --path ./kamino-1.0.0-${{ inputs.build_number }}.ipa --non-interactive --verbose
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
