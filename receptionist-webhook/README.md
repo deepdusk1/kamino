@@ -7,9 +7,11 @@ doesn't reply in time.
 ## How it works
 
 1. `POST /tool/ask-owner` (ElevenLabs webhook tool, timeout 120s)
-   → texts the owner: `KCCC booking [BK-XXXX]: name (phone), vehicle — reason. Reply with the time.`
+   → texts the owner: `KCCC booking [BK-XXXX]: name (phone), vehicle — reason. Caller prefers: <day/time>. Reply with a proposed time.`
    → waits up to 110s for the owner's SMS reply
-   → returns `{ confirmed_time }` (or `{ confirmed_time: null, timed_out: true }`)
+   → returns `{ confirmed_time }` (or `{ confirmed_time: null, timed_out: true }`).
+   Sarah then PROPOSES the time to the caller ("does that work for you?") and
+   only confirms once they agree — never announces it as booked outright.
 2. `POST /sms/inbound` (Twilio inbound SMS webhook)
    → owner's reply resolves the waiting call, or — if the hold already timed
      out — texts the customer directly with the confirmed time.
@@ -31,5 +33,5 @@ doesn't reply in time.
 
 Create a webhook tool `ask_owner_for_time` → `POST {PUBLIC_URL}/tool/ask-owner`,
 `response_timeout_secs: 120`, params: customer_name, customer_phone, vehicle,
-reason. Attach to the KCCC Receptionist agent and add the booking flow to the
-prompt (see memory 2026-09-30).
+reason, preferred_time (the caller's stated day/time preference). Attach to the
+KCCC Receptionist agent and add the booking flow to the prompt (see memory 2026-09-30).

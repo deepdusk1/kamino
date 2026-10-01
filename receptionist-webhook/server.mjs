@@ -91,17 +91,19 @@ async function handleAskOwner(req, res) {
   const customerPhone = (p.customer_phone || p.phone || "").toString();
   const vehicle = (p.vehicle || "").toString().slice(0, 80);
   const reason = (p.reason || "appointment").toString().slice(0, 120);
+  const preferred = (p.preferred_time || p.preferred || "").toString().slice(0, 80);
   const bookingId = makeId();
 
-  log("ask-owner", bookingId, name, customerPhone, vehicle, "-", reason);
+  log("ask-owner", bookingId, name, customerPhone, vehicle, "-", reason, "| prefers:", preferred || "anytime");
 
   let answered = false;
-  const entry = { customerPhone, vehicle, reason, name, createdAt: Date.now(), done: false, resolve: null };
+  const entry = { customerPhone, vehicle, reason, name, preferred, createdAt: Date.now(), done: false, resolve: null };
   pending.set(bookingId, entry);
 
   const ownerText =
-    `KCCC booking [${bookingId}]: ${name} (${customerPhone}), ${vehicle} — ${reason}. ` +
-    `Reply with the time (e.g. "Thu 10am").`;
+    `KCCC booking [${bookingId}]: ${name} (${customerPhone}), ${vehicle} — ${reason}.` +
+    (preferred ? ` Caller prefers: ${preferred}.` : ` No time preference given.`) +
+    ` Reply with a proposed time (e.g. "Fri 10am"). Include the booking ID if juggling more than one.`;
 
   try {
     await sendSms(OWNER_PHONE, ownerText);
@@ -123,8 +125,10 @@ async function handleAskOwner(req, res) {
     return json(res, { confirmed_time: confirmedTime, booking_id: bookingId });
   }
 
-  // Timeout: keep the request open for a late reply; the owner texting back
-  // later triggers a direct SMS to the customer.
+  // Timeout: clear the live resolver so a late owner reply takes the
+  // text-the-customer-directly path in handleSmsInbound instead of
+  // hitting an already-settled resolver.
+  entry.resolve = null;
   log("hold timed out", bookingId, "- waiting for late reply");
   setTimeout(() => pending.delete(bookingId), LATE_WINDOW_MS);
   return json(res, { confirmed_time: null, timed_out: true, booking_id: bookingId });
@@ -147,10 +151,16 @@ async function handleSmsInbound(req, res) {
     log("ignoring SMS from non-owner");
     return;
   }
-  // Owner reply -> match the most recent open request.
-  const open = [...pending.entries()]
-    .filter(([, e]) => !e.done)
-    .sort((a, b) => b[1].createdAt - a[1].createdAt)[0];
+  // Owner reply -> match by booking ID if given ("BK-XXXX"), else the newest open request.
+  const idMatch = body.toUpperCase().match(/BK-[A-Z0-9]{4}/);
+  let open = null;
+  if (idMatch && pending.has(idMatch[0]) && !pending.get(idMatch[0]).done) {
+    open = [idMatch[0], pending.get(idMatch[0])];
+  } else {
+    open = [...pending.entries()]
+      .filter(([, e]) => !e.done)
+      .sort((a, b) => b[1].createdAt - a[1].createdAt)[0];
+  }
   if (!open) {
     log("owner reply but no open booking request");
     return;
@@ -186,7 +196,7 @@ function json(res, obj) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === "GET" && req.url === "/health") return json(res, { ok: true, v: 2 });
+    if (req.method === "GET" && req.url === "/health") return json(res, { ok: true, v: 3 });
     if (req.method === "POST" && req.url === "/tool/ask-owner") return await handleAskOwner(req, res);
     if (req.method === "POST" && req.url === "/sms/inbound") return await handleSmsInbound(req, res);
     res.writeHead(404); res.end("not found");
