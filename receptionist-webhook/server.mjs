@@ -179,12 +179,14 @@ async function handleSmsInbound(req, res) {
 
 function json(res, obj) {
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(obj));
+  // `result` wrapper matches ElevenLabs' documented tool-result convention;
+  // top-level fields keep it readable too.
+  res.end(JSON.stringify({ ...obj, result: obj }));
 }
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === "GET" && req.url === "/health") return json(res, { ok: true });
+    if (req.method === "GET" && req.url === "/health") return json(res, { ok: true, v: 2 });
     if (req.method === "POST" && req.url === "/tool/ask-owner") return await handleAskOwner(req, res);
     if (req.method === "POST" && req.url === "/sms/inbound") return await handleSmsInbound(req, res);
     res.writeHead(404); res.end("not found");
