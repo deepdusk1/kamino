@@ -1,0 +1,1 @@
+{"description":"Owner-approval booking bridge for the KCCC ElevenLabs receptionist (Sarah).","engines":{"node":">=20"},"name":"kccc-receptionist-webhook","private":true,"scripts":{"start":"node server.mjs"},"type":"module","version":"1.0.0"}
