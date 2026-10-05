@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TIER_LOOK, achievementIcon, byCategory, progressShare, toggleShowcase } from "./achievements.ts";
+import { TIER_LOOK, achievementIcon, achievementMedal, byCategory, progressShare, toggleShowcase } from "./achievements.ts";
 
 const base = { id: "posts-10", name: "Storyteller", desc: "", icon: "pen", category: "Creating", tier: "silver" as const, progress: 4, target: 10, unlocked: false, unlockedAt: null };
 
@@ -11,8 +11,11 @@ test("every tier has two colours and readable text", () => {
   }
 });
 
-test("icons map to phone icons, unknown ones fall back to a medal", () => {
-  assert.equal(achievementIcon("pen"), "create-outline");
+test("icons map to coloured medals, unknown ones fall back to a violet medal", () => {
+  assert.deepEqual(achievementMedal("heart"), { icon: "heart", tone: "pink" });
+  assert.deepEqual(achievementMedal("crown"), { icon: "ribbon", tone: "orange" });
+  assert.deepEqual(achievementMedal("nope"), { icon: "medal", tone: "violet" });
+  assert.equal(achievementIcon("pen"), "brush-outline");
   assert.equal(achievementIcon("nope"), "medal-outline");
 });
 

@@ -1,10 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Alert } from "react-native";
+import { Alert, View } from "react-native";
 import { api } from "@/api/endpoints";
 import type { Community, JoinQuestion } from "@/api/types";
 import { useAction } from "@/lib/errors";
-import { Button, Field, Sheet, Txt } from "./ui";
+import { GradientButton, Pill } from "@/components/k";
+import { font, useTheme } from "@/theme";
+import { Field, Sheet, Txt } from "./ui";
 
 type Props = {
   community: Community;
@@ -34,23 +36,28 @@ export function JoinSheet({ community, questions, visible, onClose, onJoined }: 
     else onJoined();
   });
 
+  const theme = useTheme();
   const isPrivate = community.visibility === "private";
   return (
     <Sheet visible={visible} title={`Join ${community.name}`} onClose={onClose}>
-      <Txt tone="muted">
-        {isPrivate ? "This is a private community. Leaders approve new members." : community.ageGate >= 18 ? `This community is for ages ${community.ageGate} and over.` : "You'll get your own nickname here, separate from your other communities."}
+      <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+        <Pill label={isPrivate ? "Private" : "Public"} icon={isPrivate ? "lock-closed" : "globe-outline"} tone={isPrivate ? "orange" : "green"} />
+        {community.ageGate > 13 ? <Pill label={`${community.ageGate}+`} tone="pink" /> : null}
+      </View>
+      <Txt style={{ fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: theme.muted }}>
+        {isPrivate ? "This is a private community. Leaders approve new members." : community.ageGate > 13 ? `This community is for ages ${community.ageGate} and over.` : "You'll get your own nickname here, separate from your other communities."}
       </Txt>
       <Field label="Nickname in this community" value={nickname} onChangeText={setNickname} maxLength={24} placeholder="Optional" />
       {isPrivate && questions.length ? (
         <>
-          <Txt variant="label" tone="subtle">Questions from the leaders</Txt>
+          <Txt style={{ fontFamily: font.heavy, fontSize: 15, color: theme.ink }}>Questions from the leaders</Txt>
           {questions.map((q, i) => (
             <Field key={q.id} label={q.prompt} value={answers[i] ?? ""} onChangeText={(t) => setAnswers((a) => a.map((x, j) => (j === i ? t : x)))} multiline />
           ))}
         </>
       ) : null}
       {isPrivate ? <Field label="Have an invite code?" value={invite} onChangeText={setInvite} autoCapitalize="none" placeholder="Paste it here to skip the review" /> : null}
-      <Button label={isPrivate ? "Ask to join" : "Join"} onPress={() => void join()} busy={busy} />
+      <GradientButton label={isPrivate ? "Ask to join" : "Join"} icon={isPrivate ? "paper-plane" : "people"} onPress={() => void join()} busy={busy} size="lg" full />
     </Sheet>
   );
 }

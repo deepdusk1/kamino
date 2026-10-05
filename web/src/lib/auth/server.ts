@@ -30,12 +30,16 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { APIError } from 'better-auth/api';
+import { bearer, genericOAuth, captcha, phoneNumber } from "better-auth/plugins";
+import { phoneSafeTwoFactor } from './phone-safe-two-factor';
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
+import { createHash } from 'node:crypto';
+import { phoneOtpConfigured, sendPhoneOtp, verifyPhoneOtp } from './sms.server';
 import { Pool } from "pg";
-import { ensureDbReady, getPglite } from "../db";
+import { ensureDbReady, getPglite, getSql } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
@@ -122,6 +126,7 @@ const trustedOrigins: string[] = explicitBaseURL
       ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
       ...LOCAL_DEV_ORIGINS,
     ];
+if (env('APPLE_CLIENT_ID') && env('APPLE_CLIENT_SECRET')) trustedOrigins.push('https://appleid.apple.com');
 
 const databaseUrl = env("DATABASE_URL");
 
@@ -179,6 +184,15 @@ export const auth = betterAuth({
   // globalThis so HMR doesn't invalidate PGLite-backed sessions (see above).
   secret: env("BETTER_AUTH_SECRET") ?? previewAuthSecret(),
   database,
+  databaseHooks:{session:{create:{before:async(session)=>{
+    const sql=await getSql();const status=(await sql`select status,until from identity_account_status where user_id=${session.userId}`)[0];
+    if(status?.status==='banned'||(status?.status==='suspended'&&(!status.until||new Date(String(status.until)).getTime()>Date.now())))throw new APIError('FORBIDDEN',{message:'This account is suspended or banned. Contact Kamino support.'});
+    return {data:session};
+  }}}},
+  socialProviders: {
+    ...(env('GOOGLE_CLIENT_ID') && env('GOOGLE_CLIENT_SECRET') ? {google:{clientId:env('GOOGLE_CLIENT_ID')!,clientSecret:env('GOOGLE_CLIENT_SECRET')!}} : {}),
+    ...(env('APPLE_CLIENT_ID') && env('APPLE_CLIENT_SECRET') ? {apple:{clientId:env('APPLE_CLIENT_ID')!,clientSecret:env('APPLE_CLIENT_SECRET')!,appBundleIdentifier:env('APPLE_APP_BUNDLE_IDENTIFIER')}} : {}),
+  },
 
   // CSRF / origin check for credentialed auth POSTs (email sign-up/sign-in, …).
   // See `trustedOrigins` construction above — must cover live preview hosts AND
@@ -209,13 +223,15 @@ export const auth = betterAuth({
   // (incl. the client's `/get-session`) skip the DB — this shrinks the "loading"
   // window and reduces auth flicker. See the `auth` skill for the full
   // flicker-prevention guidance (gate on `isPending`; SSR the session).
-  session: { cookieCache: { enabled: true, maxAge: 300 } },
+  session: { cookieCache: { enabled: false } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
   ...(emailAndPasswordEnabled
     ? {
         emailAndPassword: {
           enabled: true,
+          requireEmailVerification: env('KAMINO_REQUIRE_EMAIL_VERIFICATION') === 'true' || (process.env.NODE_ENV === 'production' && env('KAMINO_REQUIRE_EMAIL_VERIFICATION') !== 'false'),
+          revokeSessionsOnPasswordReset: true,
           resetPasswordTokenExpiresIn: 60 * 60,
           // Never await the mail call: response time must not reveal whether an address exists.
           sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
@@ -229,6 +245,15 @@ export const auth = betterAuth({
         },
       }
     : {}),
+
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      const { sendMail } = await import('./mailer.server');
+      await sendMail({ to: user.email, subject: 'Confirm your Kamino email', text: `Confirm your email address to protect your Kamino account.\n\n${url}\n\nIf you did not create this account, ignore this email.` });
+    },
+  },
 
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a
@@ -250,6 +275,15 @@ export const auth = betterAuth({
 
   plugins: [
     gateIdentitySessions(),
+    phoneSafeTwoFactor(),
+    ...(phoneOtpConfigured() ? [phoneNumber({
+      requireVerification:true, allowedAttempts:3, expiresIn:300,
+      phoneNumberValidator: number => /^\+[1-9]\d{7,14}$/.test(number),
+      sendOTP: async ({phoneNumber:number}) => {await sendPhoneOtp(number);},
+      verifyOTP: async ({phoneNumber:number,code}) => verifyPhoneOtp(number,code),
+      signUpOnVerification: {getTempEmail:number => `${createHash('sha256').update(number).digest('hex')}@phone.kamino.invalid`,getTempName:()=> 'New member'},
+    })] : []),
+    ...(env('TURNSTILE_SECRET_KEY') ? [captcha({ provider: 'cloudflare-turnstile', secretKey: env('TURNSTILE_SECRET_KEY')!, endpoints: ['/sign-up/email'] })] : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.

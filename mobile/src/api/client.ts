@@ -80,10 +80,11 @@ export async function rpc<T>(name: string, data?: unknown): Promise<T> {
 export async function authRequest(
   path: string,
   json: unknown,
+  extraHeaders: Record<string,string> = {},
 ): Promise<{ body: Record<string, unknown>; token: string | null }> {
   const response = await fetch(`${apiBaseUrl()}/api/auth/${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: apiBaseUrl(), ...authHeaders() },
+    headers: { "content-type": "application/json", origin: apiBaseUrl(), ...authHeaders(), ...extraHeaders },
     body: JSON.stringify(json),
   }).catch(() => {
     throw new ApiError("Can't reach Kamino. Check your connection.", 0);

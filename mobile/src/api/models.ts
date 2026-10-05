@@ -1,7 +1,8 @@
 import type {
-  Achievement, AuthorChip, BoardRow, Broadcast, ChallengeEntry, Character, ChatMessage, ChatRoom, Comment, Community, HallEvent,
-  InviteCode, JoinQuestion, MemberTitle, Membership, Notification, Post, Profile, RankBoard, RankPeriod, RankRow, Report,
-  SharedItem, Strike, TitleDef, WallPost,
+  Achievement, AuthorChip, BoardRow, Broadcast, ChallengeEntry, Character, ChatMessage, ChatOverviewRoom, ChatRoom, Comment, Community,
+  CommunityCardData, CreatorCard, EventCard, HallEvent, Hero, InviteCode, JoinQuestion, LiveRoomCard, MediaItem, MemberTitle, Membership,
+  ModeratorRow, MutedPerson, Notification, NotificationItem, PersonRow, Post, Profile, ProfileCategoryOption, RankBoard, RankPeriod, RankRow, Report,
+  SharedItem, StreakInfo, Strike, TitleDef, WallPost,
 } from "./types";
 
 /** Shapes of what the server answers. They mirror the server functions in web/src/lib/kamino. */
@@ -82,6 +83,10 @@ export type PublicProfile = {
   stats: { reputation: number; following: number; followers: number };
   viewerFollows: boolean;
   wall: (WallPost & { author: AuthorChip })[];
+  /** A private account the viewer does not follow: only the header is filled in. */
+  locked?: boolean;
+  /** The viewer asked to follow this private account and is waiting. */
+  requested?: boolean;
 };
 
 export type Moderation = {
@@ -157,3 +162,96 @@ export type SearchResults = {
 export type IceServer = { urls: string | string[]; username?: string; credential?: string };
 /** Someone is calling a room you are in. Only rings for 45 seconds. */
 export type IncomingCall = { id: number; name: string; body: string; href: string; createdAt: string };
+
+// ───────────────────────────── Redesign (server: social.ts) ─────────────────────────────
+
+/** A post in a list that mixes communities (home feed tabs, search, profile posts). */
+export type FeedPost = Post & { communityName: string; communityIcon: string; communityHue: number };
+
+export type HomeOverview = {
+  heroes: Hero[];
+  recommended: CommunityCardData[];
+  trending: CommunityCardData[];
+  streak: StreakInfo;
+  liveEvent: EventCard | null;
+  featuredCreators: CreatorCard[];
+  liveRooms: LiveRoomCard[];
+};
+
+/** One page of a feed tab; pass `next` back as `cursor` for more (null = the end). */
+export type FeedPage = { posts: FeedPost[]; next: string | null };
+
+export type ExploreOverview = {
+  banners: Hero[];
+  recommended: CommunityCardData[];
+  trendingTags: { tag: string; count: number }[];
+  newest: CommunityCardData[];
+  growing: CommunityCardData[];
+  joined: CommunityCardData[];
+};
+
+export type RecentSearch = { query: string; at: string };
+export type OnboardingSuggestions = { communities: CommunityCardData[]; creators: CreatorCard[] };
+
+export type CommunityOverview = {
+  community: CommunityCardData;
+  member: Membership | null;
+  /** A private community the viewer cannot read: only the counts are filled in. */
+  locked: boolean;
+  onlineCount: number;
+  onlineFaces: AuthorChip[];
+  memberFaces: AuthorChip[];
+  /** 1, 5, 10, 25, 50 or 100: "Top 1%" and so on. */
+  rankPercent: number;
+  moderators: ModeratorRow[];
+  featured: Post[];
+  recent: Post[];
+  rooms: LiveRoomCard[];
+  events: HallEvent[];
+  media: MediaItem[];
+  trendingTags: { tag: string; count: number }[];
+};
+
+export type ChatsOverview = { rooms: ChatOverviewRoom[]; requests: number };
+export type RoomReceipts = { seenBy: { userId: string; lastReadId: number; name: string; handle: string; hue: number; avatarV: number }[] };
+export type TypingNow = { names: string[]; userIds: string[] };
+
+/** `next` is the id to pass as `before` for older notifications (null = no more). */
+export type NotificationsFeed = { items: NotificationItem[]; unread: number; next: number | null };
+
+export type ProfileOverviewProfile = Omit<Profile, "profileCategories"> & {
+  profileCategories: ProfileCategoryOption[];
+  profileCategoryKeys: string[];
+  online: boolean;
+};
+export type ProfileOverview = {
+  profile: ProfileOverviewProfile;
+  stats: { posts: number; followers: number; following: number; friends: number };
+  following: boolean;
+  followsYou: boolean;
+  requested: boolean;
+  isSelf: boolean;
+  blocked: boolean;
+  /** You muted this person (see `api.mutePerson`). Their posts still show here, on their own profile. */
+  muted: boolean;
+  /** Private account (or a block): only the header and counts are filled in. */
+  locked: boolean;
+  showcase: Achievement[];
+  streak: { days: number; best: number };
+  badges: Achievement[];
+  recentPosts: Post[];
+  communities: CommunityCardData[];
+  categoryCounts: Record<string, number>;
+};
+export type ProfilePostsPage = { posts: FeedPost[]; next: string | null; locked: boolean };
+export type FollowList = { people: PersonRow[]; counts: { followers: number; following: number; friends: number }; locked: boolean };
+export type FollowRequestRow = {
+  userId: string; handle: string; displayName: string; avatarHue: number; avatarV: number; headline: string; verified: boolean; createdAt: string;
+};
+export type ListedComment = Comment & { authorVerified: boolean; mine: boolean };
+export type FollowResult = { following: boolean; requested: boolean };
+export type MuteResult = { muted: boolean };
+/** One row of `api.listMutedPeople()`. */
+export type MutedRow = MutedPerson;
+export type DeleteCommentResult = { ok: true };
+export type CreatePostResult = { id: number; held: boolean; scheduled: boolean; publishAt: string | null };

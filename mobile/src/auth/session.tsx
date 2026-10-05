@@ -1,13 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { authRequest, setAuthToken, setUnauthorizedHandler } from "@/api/client";
+import { authRequest, rpc, setAuthToken, setUnauthorizedHandler } from "@/api/client";
+import {apiBaseUrl} from '@/api/config';
+import * as WebBrowser from 'expo-web-browser';
 import { api } from "@/api/endpoints";
 import { deleteSecret, readSecret, writeSecret } from "./storage";
 import { unregisterPushDevice } from "@/lib/push";
 
 const TOKEN_KEY = "kamino.session-token";
 
-/** `needsAge`: signed in, but has not passed the 18+ birthday check yet. */
+/** `needsAge`: signed in, but has not passed the 13+ birthday check yet. */
 type Status = "loading" | "signedOut" | "needsAge" | "signedIn";
 
 export type Birthday = { year: number; month: number; day: number };
@@ -20,6 +22,10 @@ type Session = {
   confirmAge: (birthday: Birthday) => Promise<boolean>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
+  verifyTwoFactor: (code: string, backup?: boolean) => Promise<void>;
+  socialSignIn: (provider:'google'|'apple') => Promise<void>;
+  sendPhoneCode: (phoneNumber:string) => Promise<void>;
+  verifyPhoneCode: (phoneNumber:string,code:string) => Promise<void>;
 };
 
 const SessionContext = createContext<Session | null>(null);
@@ -82,17 +88,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       signIn: async (email, password) => {
-        const { token } = await authRequest("sign-in/email", { email: email.trim(), password });
+        const { token, body } = await authRequest("sign-in/email", { email: email.trim(), password });
+        if (body.twoFactorRedirect) throw Object.assign(new Error('Enter your authenticator code to complete sign-in.'), { twoFactorRequired: true });
         await finishSignIn(token);
       },
       signUp: async (name, email, password, birthday) => {
-        const { token } = await authRequest("sign-up/email", { name: name.trim(), email: email.trim(), password });
-        if (!token) throw new Error("The server did not return a session. Please try again.");
+        const capabilities=await rpc<{captchaSiteKey:string|null}>('getSignInCapabilities');
+        let captchaToken='';
+        if(capabilities.captchaSiteKey){const result=await WebBrowser.openAuthSessionAsync(`${apiBaseUrl()}/captcha`,'kamino://captcha-complete');if(result.type!=='success')throw new Error('Complete the verification to create your account.');captchaToken=new URL(result.url).searchParams.get('token')??'';if(!captchaToken)throw new Error('Verification failed. Please try again.');}
+        const { token } = await authRequest("sign-up/email", { name: name.trim(), email: email.trim(), password },captchaToken?{'x-captcha-response':captchaToken}:{});
+        if (!token) throw new Error('Check your email for the confirmation link, then sign in to complete your account.');
         setAuthToken(token);
         const answer = await api.confirmAge(birthday);
         if (!answer.ok) {
           await clearLocal(); // the server has already erased the account
-          throw new Error("Kamino is for adults aged 18 and over, so we can't create an account for you.");
+          throw new Error("Kamino is for people aged 13 and over, so we can't create an account for you.");
         }
         await finishSignIn(token);
       },
@@ -114,6 +124,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       requestPasswordReset: async (email) => {
         await authRequest("request-password-reset", { email: email.trim(), redirectTo: "/reset-password" });
       },
+      verifyTwoFactor: async (code, backup = false) => {
+        const { token } = await authRequest(backup ? 'two-factor/verify-backup-code' : 'two-factor/verify-totp', { code: code.trim() });
+        await finishSignIn(token);
+      },
+      socialSignIn: async provider => {
+        const flow=await rpc<{flowId:string;verifier:string;url:string;returnUrl:string}>('beginMobileOAuth',provider);
+        const result=await WebBrowser.openAuthSessionAsync(flow.url,flow.returnUrl);
+        if(result.type!=='success')throw new Error('Sign-in was cancelled.');
+        const callback=new URL(result.url),callbackProof=callback.searchParams.get('proof');
+        if(callback.searchParams.get('flow')!==flow.flowId||!callbackProof)throw new Error('The sign-in response could not be verified.');
+        const exchanged=await rpc<{token:string}>('finishMobileOAuth',{flowId:flow.flowId,verifier:flow.verifier,callbackProof});await finishSignIn(exchanged.token);
+      },
+      sendPhoneCode: async phoneNumber => {await authRequest('phone-number/send-otp',{phoneNumber:phoneNumber.trim()});},
+      verifyPhoneCode: async(phoneNumber,code)=>{const response=await authRequest('phone-number/verify',{phoneNumber:phoneNumber.trim(),code:code.trim()});if(response.body.twoFactorRedirect)throw Object.assign(new Error('Enter your authenticator code to complete sign-in.'),{twoFactorRequired:true});await finishSignIn(response.token??(typeof response.body.token==='string'?response.body.token:null));},
     }),
     [status, finishSignIn, clearLocal, queryClient],
   );

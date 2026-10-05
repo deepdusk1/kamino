@@ -38,6 +38,12 @@ export type Community = {
   createdBy: string;
   memberCount: number;
   createdAt: string;
+  /** Up to 8 short topic labels shown as chips on the community page (leaders set them). */
+  topics: string[];
+  /** Main language, for example "en". */
+  language: string;
+  /** A blue tick set by the site owner. */
+  verified: boolean;
 };
 
 export type Membership = {
@@ -75,7 +81,7 @@ export type Profile = {
   bubbleHue: number;
   bubbleStyle: BubbleStyle;
   ageConfirmed: boolean;
-  /** True once the person has passed the 18+ birthday check (the date itself is never saved). */
+  /** True once the person has passed the 13+ birthday check (the date itself is never saved). */
   minAgeConfirmed: boolean;
   dmPrivacy: DmPrivacy;
   hideJoined: boolean;
@@ -89,7 +95,38 @@ export type Profile = {
   streak: number;
   lastCheckinAt: string | null;
   createdAt: string;
+  /** Optional, for example "she/her". */
+  pronouns: string;
+  location: string;
+  /** An http(s) link, or "". */
+  website: string;
+  /** A short line under the name, for example "Digital Artist". */
+  headline: string;
+  /** A blue tick set by the site owner. */
+  verified: boolean;
+  /** "Creator" badge: set by the site owner, or automatic at 1,000 followers. */
+  creator: boolean;
+  /** Interest keys picked during onboarding (see INTEREST_OPTIONS). */
+  interests: string[];
+  /** Up to six profile category keys (see PROFILE_CATEGORY_OPTIONS). */
+  profileCategories: string[];
+  /** When onboarding was finished; null means the person has not done it yet. */
+  onboardedAt: string | null;
+  /** Following needs approval; only followers see more than the profile header. */
+  privateAccount: boolean;
+  showReadReceipts: boolean;
+  /** Quiet hours for phone pushes (0-23 in `timezone`); null means off. */
+  quietStart: number | null;
+  quietEnd: number | null;
+  notifyPrefs: NotifyPrefs;
+  /** Time zone name such as "America/Vancouver" ("" = UTC). Used for quiet hours. */
+  timezone: string;
+  /** Longest daily check-in streak ever. */
+  bestStreak: number;
 };
+
+/** Which phone pushes to send, by notification category. The in-app list always fills. */
+export type NotifyPrefs = { social: boolean; community: boolean; events: boolean; messages: boolean; digest: boolean };
 
 export type TitleDef = {
   id: number;
@@ -163,6 +200,11 @@ export type SharedItem = {
   createdAt: string;
 };
 
+/** A post's pictures: the cover plus up to this many more (the server enforces it in `checkAlbum`). */
+export const MAX_ALBUM_EXTRAS = 9;
+/** Every picture of a post, the cover included (10). */
+export const MAX_POST_PICTURES = MAX_ALBUM_EXTRAS + 1;
+
 export type PostPayload = {
   format?: "markdown";
   templateSourceId?: number;
@@ -213,7 +255,19 @@ export type Post = {
   liked: boolean;
   expiresAt: string | null;
   createdAt: string;
+  /** Optional place name, for example "Kelowna". */
+  location: string;
+  /** "members" posts are only shown to active members of the community. */
+  visibility: PostVisibility;
+  /** When a scheduled post goes live (null = published straight away). */
+  publishAt: string | null;
+  /** True while the post is scheduled for later (only its author can see it then). */
+  scheduled: boolean;
+  /** The author has the site's blue tick. */
+  authorVerified: boolean;
 };
+
+export type PostVisibility = "public" | "members";
 
 export type Comment = {
   id: number;
@@ -270,6 +324,11 @@ export type Notification = {
   href: string;
   read: boolean;
   createdAt: string;
+  /** Who caused it (null for older rows and system messages). */
+  actorId: string | null;
+  /** What it is about: "post", "community", "room", "event", "profile" or "" (older rows). */
+  targetType: string;
+  targetId: string;
 };
 
 export type Report = {
@@ -467,4 +526,221 @@ export type RoleplayScene = RoleplaySceneSummary & {
   /** The viewer may end or delete the scene (its creator or a moderator). */
   canManage: boolean;
   canPlay: boolean;
+};
+
+// ───────────────────────────── Redesign (social.ts) ─────────────────────────────
+
+/** The fixed list of interests people pick during onboarding. The key is what is saved. */
+export const INTEREST_OPTIONS = [
+  { key: "anime", label: "Anime", emoji: "🐾" },
+  { key: "gaming", label: "Gaming", emoji: "🎮" },
+  { key: "art", label: "Art", emoji: "🎨" },
+  { key: "music", label: "Music", emoji: "🎵" },
+  { key: "kpop", label: "K-Pop", emoji: "📘" },
+  { key: "books", label: "Books", emoji: "📚" },
+  { key: "fitness", label: "Fitness", emoji: "🏋️" },
+  { key: "fashion", label: "Fashion", emoji: "👗" },
+  { key: "tech", label: "Tech", emoji: "💻" },
+  { key: "food", label: "Food", emoji: "🍴" },
+  { key: "movies", label: "Movies", emoji: "🎬" },
+  { key: "pets", label: "Pets", emoji: "🐱" },
+  { key: "astrology", label: "Astrology", emoji: "🌙" },
+  { key: "photography", label: "Photography", emoji: "📷" },
+  { key: "cars", label: "Cars", emoji: "🚗" },
+  { key: "travel", label: "Travel", emoji: "✈️" },
+  { key: "writing", label: "Writing", emoji: "✍️" },
+  { key: "manga", label: "Manga", emoji: "📖" },
+] as const;
+export type InterestKey = (typeof INTEREST_OPTIONS)[number]["key"];
+export type InterestOption = { key: string; label: string; emoji: string };
+
+/** Profile category tiles (an owner picks up to six). Each opens the person's posts tagged with the key (#art, #daily...). */
+export const PROFILE_CATEGORY_OPTIONS = [
+  { key: "art", label: "My Art", emoji: "🎨" },
+  { key: "daily", label: "Daily Life", emoji: "📷" },
+  { key: "gaming", label: "Gaming", emoji: "🎮" },
+  { key: "growth", label: "Growth", emoji: "🌱" },
+  { key: "qa", label: "Q&A", emoji: "❤️" },
+  { key: "milestones", label: "Milestones", emoji: "⭐" },
+  { key: "music", label: "Music", emoji: "🎵" },
+  { key: "writing", label: "Writing", emoji: "✍️" },
+  { key: "cosplay", label: "Cosplay", emoji: "🎭" },
+  { key: "photos", label: "Photos", emoji: "🖼️" },
+  { key: "reviews", label: "Reviews", emoji: "📝" },
+  { key: "fanfic", label: "Fanfic", emoji: "📖" },
+] as const;
+export type ProfileCategoryOption = { key: string; label: string; emoji: string };
+
+/** A slide of the home carousel or the explore banner. `art` is an artwork key (see brandArt `heroArt`). */
+export type Hero = { id: string; title: string; text: string; cta: string; href: string; art: string };
+
+/** A community as the cards show it: joined or not, how many are online, and up to four member faces. */
+export type CommunityCardData = Community & {
+  joined: boolean;
+  onlineCount: number;
+  memberFaces: AuthorChip[];
+};
+
+/** A person worth following (home "Featured Creators", onboarding step 4). */
+export type CreatorCard = {
+  userId: string;
+  handle: string;
+  displayName: string;
+  avatarHue: number;
+  avatarV: number;
+  headline: string;
+  verified: boolean;
+  /** Has the "Creator" badge. */
+  creator: boolean;
+  followers: number;
+  /** The viewer already follows them. */
+  following: boolean;
+  /** The viewer asked to follow (private account) and is waiting. */
+  requested: boolean;
+};
+
+/** A voice or screening room people are in right now. */
+export type LiveRoomCard = {
+  roomId: number;
+  communityId: string;
+  communityName: string;
+  title: string;
+  subtitle: string;
+  /** Category label, for example "Music" (the room's topic or the community's category). */
+  topic: string;
+  /** Picture for the card (the community banner). */
+  cover: string;
+  /** How many people are in the room's voice/watch session. */
+  liveCount: number;
+  faces: AuthorChip[];
+  /** Button colour for this card (cycles through the five join colours). */
+  color: string;
+  /** "voice" and "screening" are live rooms; community pages also list their text rooms ("public", "private"). */
+  kind: RoomKind;
+  /** The viewer is a member of the room's community (so Join opens it straight away). */
+  joined: boolean;
+};
+
+/** An upcoming event as the home "Live Event" card shows it. */
+export type EventCard = HallEvent & {
+  communityName: string;
+  communityCover: string;
+  communityHue: number;
+  /** Up to four people who said they are going. */
+  faces: AuthorChip[];
+};
+
+export type StreakInfo = {
+  /** Current daily check-in streak (0 when it has lapsed). */
+  days: number;
+  /** Monday to Sunday of this week (UTC days): true when checked in that day. */
+  week: boolean[];
+  checkedInToday: boolean;
+  best: number;
+};
+
+export type FeedTab = "forYou" | "following" | "communities";
+
+export type NotificationFilter = "all" | "social" | "community" | "events";
+export type NotificationCategory = "social" | "community" | "events" | "messages";
+
+/** A person shown on a notification (an AuthorChip plus what the Follow Back row needs). */
+export type NotificationActor = AuthorChip & { headline: string; verified: boolean; followers: number };
+
+export type NotificationItem = Notification & {
+  category: NotificationCategory;
+  actor: NotificationActor | null;
+  /** A small picture for the right side (post picture, community banner...), or "". */
+  thumb: string;
+  /** A quoted piece of text (the comment, the wall note...), or "". */
+  snippet: string;
+  /** Short words after the actor's name, for example "liked your post". "" for older rows (show title and body). */
+  verb: string;
+  action: "followBack" | "join" | "open" | null;
+  /** followBack: the person's user id. join: the community slug. open: the address to go to. */
+  actionTarget: string;
+  /** The viewer already follows the actor. */
+  actorFollowed: boolean;
+  /** A live room that is live right now, or a call that is still ringing. */
+  live: boolean;
+  /** For community invites and join notices. */
+  community: { id: string; name: string; memberCount: number; icon: string; cover: string; hue: number; faces: AuthorChip[] } | null;
+  /** For event reminders. */
+  event: { id: number; title: string; startsAt: string; communityId: string; communityName: string } | null;
+  /** For live rooms: the room's name and topic and how many are in it. */
+  room: { id: number; name: string; topic: string; communityName: string; liveCount: number } | null;
+};
+
+/** A row in "Messages" on the Chats screen. */
+export type ChatOverviewRoom = ChatRoom & {
+  peerOnline: boolean;
+  peerVerified: boolean;
+  /** "You" for your own last message, otherwise the sender's name. */
+  lastAuthor: string | null;
+  lastKind: "text" | "image" | "audio" | "video" | null;
+  /** A community group chat (not a DM and not a live room). */
+  isGroup: boolean;
+  /** A message request waiting for you to accept it. */
+  isRequest: boolean;
+  /** You started this DM and the other person has not accepted it yet. */
+  awaitingAccept: boolean;
+  communityName: string | null;
+  topic: string;
+};
+
+/** Someone in a followers / following / friends list. */
+export type PersonRow = {
+  userId: string;
+  handle: string;
+  displayName: string;
+  avatarHue: number;
+  avatarV: number;
+  headline: string;
+  verified: boolean;
+  online: boolean;
+  /** The viewer follows them. */
+  following: boolean;
+  /** They follow the viewer. */
+  followsYou: boolean;
+  requested: boolean;
+};
+
+/** Someone you muted (`listMutedPeople`), for a "Muted accounts" list in settings. */
+export type MutedPerson = {
+  userId: string;
+  handle: string;
+  displayName: string;
+  avatarHue: number;
+  avatarV: number;
+  headline: string;
+  verified: boolean;
+  mutedAt: string;
+};
+
+export type ModeratorRow = {
+  userId: string;
+  handle: string;
+  nickname: string;
+  avatarHue: number;
+  avatarV: number;
+  role: Role;
+  /** Badge to show: leader (crown), coleader (star) or moderator (shield). */
+  badge: "leader" | "coleader" | "moderator";
+  /** "Leader", "Co-leader" or "Moderator". */
+  label: string;
+};
+
+export type MediaItem = { postId: number; index: number; url: string };
+
+/** Search results, one list per kind. Lists not asked for (see `kind`) are empty. */
+export type SearchEverything = {
+  query: string;
+  people: (PersonRow & { creator: boolean; followers: number })[];
+  communities: CommunityCardData[];
+  posts: (Post & { communityName: string })[];
+  tags: { tag: string; count: number }[];
+  rooms: LiveRoomCard[];
+  events: (HallEvent & { communityName: string })[];
+  /** True when nothing matched exactly and the closest spellings were used instead. */
+  fuzzy: boolean;
 };

@@ -1,29 +1,66 @@
 import type { Ionicons } from "@expo/vector-icons";
 import type { Achievement } from "@/api/types";
+import type { Tone } from "@/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-/** The server sends a small icon word (see web/src/lib/kamino/achievements.ts); this is the phone's icon for it. */
-const ICONS: Record<string, IconName> = {
-  pen: "create-outline", chat: "chatbubble-outline", heart: "heart-outline", users: "people-outline", flame: "flame-outline",
-  star: "star-outline", message: "chatbubbles-outline", sticker: "color-palette-outline", smile: "happy-outline",
-  globe: "globe-outline", crown: "ribbon-outline", shield: "shield-checkmark-outline", brain: "bulb-outline",
-  target: "locate-outline", puzzle: "extension-puzzle-outline", chart: "bar-chart-outline", check: "checkbox-outline",
-  clock: "time-outline", book: "book-outline", image: "image-outline", mask: "color-wand-outline", film: "film-outline",
-  calendar: "calendar-outline", trophy: "trophy-outline", note: "document-text-outline", bookmark: "bookmark-outline",
-  sparkles: "sparkles-outline", cake: "gift-outline",
+/**
+ * The server sends a small icon word for each achievement (see web/src/lib/kamino/achievements.ts).
+ * Each word gets a filled phone icon (drawn white inside the hexagon medals) and a medal colour, so a row of
+ * badges looks colourful like the profile mockup (orange crown, blue brush, pink heart, green leaf…).
+ */
+const MEDALS: Record<string, { icon: IconName; tone: Tone }> = {
+  pen: { icon: "brush", tone: "blue" },
+  chat: { icon: "chatbubble-ellipses", tone: "blue" },
+  heart: { icon: "heart", tone: "pink" },
+  users: { icon: "people", tone: "blue" },
+  flame: { icon: "flame", tone: "orange" },
+  star: { icon: "star", tone: "yellow" },
+  message: { icon: "chatbubbles", tone: "violet" },
+  sticker: { icon: "color-palette", tone: "pink" },
+  smile: { icon: "happy", tone: "green" },
+  globe: { icon: "earth", tone: "green" },
+  crown: { icon: "ribbon", tone: "orange" },
+  shield: { icon: "shield-checkmark", tone: "violet" },
+  brain: { icon: "bulb", tone: "yellow" },
+  target: { icon: "locate", tone: "red" },
+  puzzle: { icon: "extension-puzzle", tone: "violet" },
+  chart: { icon: "bar-chart", tone: "blue" },
+  check: { icon: "checkbox", tone: "green" },
+  clock: { icon: "time", tone: "violet" },
+  book: { icon: "book", tone: "orange" },
+  image: { icon: "image", tone: "pink" },
+  mask: { icon: "color-wand", tone: "violet" },
+  film: { icon: "film", tone: "red" },
+  calendar: { icon: "calendar", tone: "orange" },
+  trophy: { icon: "trophy", tone: "yellow" },
+  note: { icon: "document-text", tone: "blue" },
+  bookmark: { icon: "bookmark", tone: "violet" },
+  sparkles: { icon: "sparkles", tone: "violet" },
+  cake: { icon: "gift", tone: "pink" },
+  leaf: { icon: "leaf", tone: "green" },
 };
 
-export function achievementIcon(icon: string): IconName {
-  return ICONS[icon] ?? "medal-outline";
+/** The medal look (filled icon + colour) for an achievement's icon word. Unknown words get a violet medal. */
+export function achievementMedal(icon: string): { icon: IconName; tone: Tone } {
+  return MEDALS[icon] ?? { icon: "medal", tone: "violet" };
 }
 
-/** Banner colours per tier, and a text colour that reads well on them (dark on the light tiers, white on legend). */
-export const TIER_LOOK: Record<Achievement["tier"], { colors: [string, string]; text: string; label: string }> = {
-  bronze: { colors: ["#b87333", "#e0a574"], text: "#2a1606", label: "Bronze" },
-  silver: { colors: ["#8e9aaf", "#dfe6ef"], text: "#1b2230", label: "Silver" },
-  gold: { colors: ["#c9a227", "#f5d77a"], text: "#241a02", label: "Gold" },
-  legend: { colors: ["#6a3de8", "#c2378f"], text: "#ffffff", label: "Legend" },
+/** The outline version of the icon, for small places on light backgrounds. */
+export function achievementIcon(icon: string): IconName {
+  const filled = achievementMedal(icon).icon;
+  return `${filled}-outline` as IconName;
+}
+
+/**
+ * Banner colours per tier (left → right) and the text colour on them. All four are deep enough for white text,
+ * in the redesign's palette: bronze = warm orange, silver = blue-violet, gold = amber, legend = the Top Creator gradient.
+ */
+export const TIER_LOOK: Record<Achievement["tier"], { colors: [string, string]; text: string; label: string; tone: Tone }> = {
+  bronze: { colors: ["#E8742A", "#C2410C"], text: "#ffffff", label: "Bronze", tone: "orange" },
+  silver: { colors: ["#5B6CF0", "#3B4FE0"], text: "#ffffff", label: "Silver", tone: "blue" },
+  gold: { colors: ["#D97706", "#B45309"], text: "#ffffff", label: "Gold", tone: "yellow" },
+  legend: { colors: ["#8B4DFB", "#B23FE0"], text: "#ffffff", label: "Legend", tone: "violet" },
 };
 
 /** Share of the way to the target, 0 to 1 (for progress bars). */

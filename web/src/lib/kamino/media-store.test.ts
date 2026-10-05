@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isMediaRef, parseMediaRef, s3ConfigFrom } from "./media-store.server.ts";
+import { deleteMediaObject } from "./media-store.server.ts";
 
 const good = {
   KAMINO_S3_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
@@ -42,4 +43,33 @@ test("files still inside the database keep working when storage is off", async (
   assert.equal(await loadMedia(dataUrl), dataUrl);
   await assert.rejects(() => loadMedia("s3:chat/abc|image/png"), /not configured/);
   await deleteMedia(["s3:chat/abc|image/png", null, undefined]); // does nothing, never throws
+});
+
+test("durable deletion rejects missing configuration and provider failures, accepts DELETE/404", async () => {
+  const previous = Object.fromEntries(Object.keys(good).map(key => [key, process.env[key]]));
+  const previousFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    for (const key of Object.keys(good)) delete process.env[key];
+    globalThis.fetch = async () => { calls++; throw new Error("No external request allowed"); };
+    await assert.rejects(deleteMediaObject("s3:post/object|image/png"), /not configured/);
+    await assert.rejects(deleteMediaObject("data:image/png;base64,AAAA"), /Invalid/);
+    assert.equal(calls, 0);
+    Object.assign(process.env, good);
+    for (const status of [204, 404, 403, 503]) {
+      globalThis.fetch = async (_url, init) => {
+        calls++; assert.equal(init?.method, "DELETE");
+        return new Response(null, { status });
+      };
+      if (status === 204 || status === 404) await deleteMediaObject("s3:post/object|image/png");
+      else await assert.rejects(deleteMediaObject("s3:post/object|image/png"), new RegExp(`HTTP ${status}`));
+    }
+    globalThis.fetch = async () => { throw new Error("Network unavailable"); };
+    await assert.rejects(deleteMediaObject("s3:post/object|image/png"), /request failed/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

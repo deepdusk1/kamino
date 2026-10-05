@@ -46,6 +46,7 @@ export const checkInCommunity = createServerFn({ method: "POST" })
       const current = (await sql`select streak, best_streak, rep from memberships where user_id = ${userId} and community_id = ${data.slug}`)[0];
       return { already: true, streak: Number(current?.streak) || 0, bestStreak: Number(current?.best_streak) || 0, rep: Number(current?.rep) || 0 };
     }
+    await sql`insert into community_checkin_days(user_id,community_id,day) values(${userId},${data.slug},(now() at time zone 'UTC')::date) on conflict do nothing`;
     return { already: false, streak: Number(rows[0].streak), bestStreak: Number(rows[0].best_streak), rep: Number(rows[0].rep) };
   });
 
@@ -145,6 +146,7 @@ export const enterChallenge = createServerFn({ method: "POST" })
     await requireMinAge(sql, userId);
     const event = await requireChallenge(sql, Number(data.eventId));
     await requireActiveMember(sql, userId, String(event.community_id));
+    await (await import('./billing.server')).assertPaidResourceAccess(sql,userId,'event',Number(data.eventId));
     if (event.judged_at) throw new Error("This challenge has already been judged.");
     const now = Date.now();
     if (new Date(String(event.starts_at)).getTime() > now) throw new Error("This challenge has not started yet.");
@@ -168,18 +170,18 @@ export const listChallengeEntries = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     const event = await requireChallenge(sql, Number(eventId));
     const community = await requireCommunity(sql, String(event.community_id));
-    const member = await membershipOf(sql, v.userId, community.id);
-    const readable = community.visibility !== "private" ? member?.status !== "banned" : member?.status === "active";
-    if (!readable) throw new Error("This community is private.");
+    await internals.assertCommunityReadable(sql,v.userId,community.id);
+    await (await import('./billing.server')).assertPaidResourceAccess(sql,v.userId,'event',Number(eventId));
     const blocked = await blockedSet(sql, v.userId);
     const rows = await sql.query(
       `select ${POST_SELECT}, e.placement, e.created_at as entered_at
        ${POST_JOIN}
        join challenge_entries e on e.post_id = p.id and e.user_id = p.author_user_id
        where e.event_id = $1 and coalesce(p.hidden, false) = false
+         and ${internals.visiblePosts("$2")}
        order by e.placement asc nulls last, p.like_count desc, e.created_at asc
        limit 60`,
-      [Number(eventId)],
+      [Number(eventId), v.userId ?? ""],
     );
     const entries: ChallengeEntry[] = rows
       .filter((r) => !blocked.has(String(r.author_user_id)))
@@ -207,6 +209,7 @@ export const judgeChallenge = createServerFn({ method: "POST" })
     const { userId } = context as Authed;
     const event = await requireChallenge(sql, Number(data.eventId));
     const me = await requireActiveMember(sql, userId, String(event.community_id));
+    await (await import('./billing.server')).assertPaidResourceAccess(sql,userId,'event',Number(data.eventId));
     if (!canLead(me.role)) throw new Error("Leaders pick the winners.");
     if (event.judged_at) throw new Error("This challenge has already been judged.");
     const winners = Array.isArray(data.winners) ? data.winners : [];
@@ -235,7 +238,10 @@ export const judgeChallenge = createServerFn({ method: "POST" })
       await sql`update challenge_entries set placement = ${place} where event_id = ${Number(data.eventId)} and user_id = ${winnerId}`;
       await sql`update memberships set rep = rep + ${PLACE_REP[place]!} where user_id = ${winnerId} and community_id = ${String(event.community_id)}`;
       await sql`update profiles set rep = rep + ${PLACE_REP[place]!} where user_id = ${winnerId}`;
-      await notify(sql, winnerId, "challenge", `You placed ${PLACE_LABEL[place]}!`, `Your entry won ${PLACE_LABEL[place]} place in "${String(event.title)}".`, `/c/${String(event.community_id)}`);
+      await notify(sql, winnerId, "challenge", `You placed ${PLACE_LABEL[place]}!`, `Your entry won ${PLACE_LABEL[place]} place in "${String(event.title)}".`, `/c/${String(event.community_id)}`, {
+        targetType: "event",
+        targetId: Number(data.eventId),
+      });
     }
     await sql`insert into audit_log (community_id, actor_id, action, detail)
       values (${String(event.community_id)}, ${userId}, 'challenge_judged', ${`Judged "${String(event.title)}"`})`;

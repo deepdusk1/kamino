@@ -1,4 +1,5 @@
 import { BUBBLE_STYLES, COMMUNITY_MODULES, PROFILE_FRAME_IDS, THEME_STYLES } from "./types";
+import { cleanInterests, cleanProfileCategories, cleanTopics, parseNotifyPrefs } from "./social-rules";
 import type {
   BubbleStyle,
   ThemeStyle,
@@ -61,7 +62,17 @@ export function mapCommunity(row: Record<string, unknown>): Community {
     createdBy: String(row.created_by),
     memberCount: Number(row.member_count) || 0,
     createdAt: iso(row.created_at),
+    topics: cleanTopics(parseJson<unknown>(row.topics, [])),
+    language: String(row.language ?? "en") || "en",
+    verified: asBool(row.verified),
   };
+}
+
+/** An hour 0-23, or null. */
+function hourOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= 23 ? n : null;
 }
 
 const FRAMES: readonly ProfileFrame[] = PROFILE_FRAME_IDS;
@@ -100,6 +111,22 @@ export function mapProfile(row: Record<string, unknown>): Profile {
     streak: Number(row.streak) || 0,
     lastCheckinAt: isoOrNull(row.last_checkin_at),
     createdAt: iso(row.created_at),
+    pronouns: String(row.pronouns ?? ""),
+    location: String(row.location ?? ""),
+    website: String(row.website ?? ""),
+    headline: String(row.headline ?? ""),
+    verified: asBool(row.verified),
+    creator: asBool(row.creator),
+    interests: cleanInterests(parseJson<unknown>(row.interests, [])),
+    profileCategories: cleanProfileCategories(parseJson<unknown>(row.profile_categories, [])),
+    onboardedAt: isoOrNull(row.onboarded_at),
+    privateAccount: asBool(row.private_account),
+    showReadReceipts: row.show_read_receipts == null ? true : asBool(row.show_read_receipts),
+    quietStart: hourOrNull(row.quiet_start),
+    quietEnd: hourOrNull(row.quiet_end),
+    notifyPrefs: parseNotifyPrefs(row.notify_prefs),
+    timezone: String(row.timezone ?? ""),
+    bestStreak: Math.max(Number(row.best_streak) || 0, Number(row.streak) || 0),
   };
 }
 
@@ -187,6 +214,11 @@ export function mapPost(row: Record<string, unknown>, liked: boolean, saved = fa
     liked,
     expiresAt: isoOrNull(row.expires_at),
     createdAt: iso(row.created_at),
+    location: String(row.location ?? ""),
+    visibility: row.visibility === "members" ? "members" : "public",
+    publishAt: isoOrNull(row.publish_at),
+    scheduled: row.publish_at ? new Date(iso(row.publish_at)).getTime() > Date.now() : false,
+    authorVerified: asBool(row.author_verified),
   };
 }
 
@@ -246,6 +278,9 @@ export function mapNote(row: Record<string, unknown>): Notification {
     href: String(row.href ?? "/"),
     read: asBool(row.read),
     createdAt: iso(row.created_at),
+    actorId: row.actor_id ? String(row.actor_id) : null,
+    targetType: String(row.target_type ?? ""),
+    targetId: String(row.target_id ?? ""),
   };
 }
 

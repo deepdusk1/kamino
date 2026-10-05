@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { Alert, Pressable, Share, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/api/endpoints";
+import { apiBaseUrl } from '@/api/config';
 import type { Moderation } from "@/api/models";
 import { COMMUNITY_MODULES, type CommunityModule } from "@/api/types";
 import { Button, Card, Chip, Field, Txt } from "@/components/ui";
@@ -37,7 +38,7 @@ export function ToolsTab({ slug, data, onChanged }: Props) {
   const [invite, inviting] = useAction(async () => {
     const { code } = await api.createInvite(slug);
     onChanged();
-    await Share.share({ message: `Join me on Kamino with invite code ${code}` });
+    await Share.share({ message: `Join me on Kamino: ${apiBaseUrl()}/invite/${code}` });
   });
 
   const [addFeed, addingFeed] = useAction(async () => {
@@ -73,6 +74,7 @@ export function ToolsTab({ slug, data, onChanged }: Props) {
 
   return (
     <View style={{ gap: space.md }}>
+      <Card><Txt variant="heading">Community space</Txt><Txt tone="muted">FAQs, boards, quests, permissions, member roles and analytics.</Txt><Button label="Open community tools" variant="secondary" onPress={()=>router.push(`/community/${slug}/tools`)}/></Card>
       {isLeader ? (
         <Card>
           <Txt variant="heading">Community look</Txt>
@@ -92,7 +94,7 @@ export function ToolsTab({ slug, data, onChanged }: Props) {
         {data.invites.map((i) => (
           <Txt key={i.code} variant="small" tone="muted">{i.code} · used {i.uses}{i.maxUses ? `/${i.maxUses}` : ""}</Txt>
         ))}
-        <Button label="Create and share a code" small variant="secondary" onPress={() => void invite()} busy={inviting} />
+        <Button label="Create and share a link" small variant="secondary" onPress={() => void invite()} busy={inviting} />
       </Card>
 
       {isLeader ? (

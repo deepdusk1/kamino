@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BookOpen, Plus, Search, CheckCircle2, Clock } from "lucide-react";
+import { BookOpen, Plus, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Composer } from "./composer";
-import { Button } from "./ui/button";
+import { EmptyHint, FilterPills, GradientButton, OutlineButton, Pill, SearchField } from "@/components/k";
+import { fieldClass } from "@/components/community/sheet";
 import { getWiki, reviewWiki, submitWiki } from "@/lib/kamino/server";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { cn } from "@/lib/utils";
 
 export function WikiLibrary({ slug }: { slug: string }) {
   const { user } = useCurrentUserState();
@@ -53,76 +53,61 @@ export function WikiLibrary({ slug }: { slug: string }) {
   }
   if (q.error)
     return (
-      <p role="alert" className="p-6 text-danger">
-        {q.error.message}
-      </p>
+      <div className="px-4 py-6">
+        <EmptyHint icon="☁️" title="The wiki didn't load" text={q.error.message} />
+      </div>
     );
   if (q.data?.locked)
-    return <p className="p-6 text-muted">Join this community to open its wiki.</p>;
+    return (
+      <div className="px-4 py-6">
+        <EmptyHint icon="🔒" title="Members only" text="Join this community to open its wiki." />
+      </div>
+    );
+  const pendingCount = entries.filter((e) => e.wikiStatus === "pending").length;
   return (
-    <div className="space-y-5 px-4 py-5">
-      <div className="relative overflow-hidden rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/15 via-surface to-surface p-6">
-        <BookOpen className="mb-3 size-7 text-accent" />
-        <p className="text-[10px] font-bold tracking-[.2em] text-accent uppercase">
-          Made by the community
-        </p>
-        <h1 className="mt-1 font-display text-3xl font-extrabold">
+    <div className="space-y-4 px-4 py-4 lg:space-y-5 lg:py-6">
+      <div className="relative overflow-hidden rounded-hero bg-[linear-gradient(120deg,var(--color-tint-green),var(--color-tint-blue)_60%,var(--color-tint-violet))] p-5 lg:p-8">
+        <span className="grid size-11 place-items-center rounded-full bg-surface text-green-ink shadow-card" aria-hidden>
+          <BookOpen className="size-6" />
+        </span>
+        <p className="mt-3 text-[12px] font-bold tracking-[0.12em] text-green-ink uppercase">Made by the community</p>
+        <h1 className="mt-1 text-[24px] leading-tight font-extrabold tracking-[-0.02em] text-ink lg:text-[32px]">
           A home for everything you know.
         </h1>
-        <p className="mt-2 max-w-lg text-sm text-muted">
-          Character lore, thoughtful guides, and stories worth keeping. Submit your page for a place
-          in the community library.
+        <p className="mt-1.5 max-w-lg text-[13.5px] text-body lg:text-[15px]">
+          Character lore, thoughtful guides, and stories worth keeping. Submit your page for a place in the
+          community library.
         </p>
         {member && user && (
-          <Button className="mt-4" size="sm" onClick={() => setOpen(true)}>
-            <Plus className="size-4" />
+          <GradientButton className="mt-4" size="sm" icon={<Plus className="size-4" aria-hidden />} onClick={() => setOpen(true)}>
             Create a wiki page
-          </Button>
+          </GradientButton>
         )}
       </div>
+      <FilterPills
+        label="Which pages"
+        value={filter}
+        onChange={setFilter}
+        items={[
+          { key: "library", label: "Community library" },
+          { key: "all", label: "All pages" },
+          ...(user ? [{ key: "mine", label: "My pages" }] : []),
+          ...(mod ? [{ key: "review", label: `Review queue (${pendingCount})` }] : []),
+        ]}
+      />
       <div className="flex flex-wrap gap-2">
-        {[
-          ["library", "Community library"],
-          ["all", "All pages"],
-          ...(user ? [["mine", "My pages"]] : []),
-          ...(mod
-            ? [
-                [
-                  "review",
-                  `Review queue (${entries.filter((e) => e.wikiStatus === "pending").length})`,
-                ],
-              ]
-            : []),
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            aria-pressed={filter === id}
-            onClick={() => setFilter(id)}
-            className={cn(
-              "rounded-full px-4 py-2 text-xs font-bold",
-              filter === id ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-elevated px-3">
-          <Search className="size-4 text-muted" />
-          <input
-            aria-label="Search wiki pages"
-            className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
-            placeholder="Search lore, guides, creators…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          label="Search wiki pages"
+          placeholder="Search lore, guides, creators…"
+          className="min-w-[220px] flex-1"
+        />
         <select
           aria-label="Wiki category filter"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="h-11 max-w-full rounded-xl bg-elevated px-3 text-sm"
+          className="k-focus h-10 max-w-full rounded-[14px] border border-border bg-surface px-3 text-[14px] text-ink shadow-card lg:h-12"
         >
           <option value="">All categories</option>
           {cats.map((c) => (
@@ -131,45 +116,43 @@ export function WikiLibrary({ slug }: { slug: string }) {
         </select>
       </div>
       {q.isPending ? (
-        <p className="py-8 text-center text-muted">Opening the library…</p>
+        <div className="grid gap-3 sm:grid-cols-2" aria-busy="true" aria-label="Opening the library">
+          <div className="h-40 animate-pulse rounded-card bg-surface-alt" />
+          <div className="h-40 animate-pulse rounded-card bg-surface-alt" />
+        </div>
       ) : !shown.length ? (
-        <div className="rounded-2xl border border-dashed border-border py-12 text-center">
-          <BookOpen className="mx-auto mb-3 size-8 text-muted" />
-          <p className="font-bold">
-            {search || category ? "No matching pages" : "No pages here yet"}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {search || category
+        <EmptyHint
+          icon="📚"
+          title={search || category ? "No matching pages" : "No pages here yet"}
+          text={
+            search || category
               ? "Try another search or category."
               : filter === "library"
-                ? "Approved submissions appear here. Explore All pages to find more."
-                : "Try a different search or create the first page."}
-          </p>
-        </div>
+                ? "Approved pages appear here. Look in All pages to find more."
+                : "Try a different search or create the first page."
+          }
+        />
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
         {shown.map((e) => (
-          <article
-            key={e.id}
-            className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface"
-          >
+          <article key={e.id} className="k-card relative flex min-w-0 flex-col overflow-hidden rounded-card">
             {e.cover && !e.contentWarning && (
-              <img src={e.cover} alt="" className="h-32 w-full object-cover" />
+              <img src={e.cover} alt="" className="aspect-[2.2] w-full object-cover" loading="lazy" />
             )}
-            <div className="flex flex-1 flex-col p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <span className="truncate text-[10px] font-bold uppercase tracking-wider text-accent">
+            <div className="flex flex-1 flex-col p-3.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <Pill tone="green" className="max-w-[60%] truncate">
                   {e.payload.category || "General"}
-                </span>
-                <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted">
+                </Pill>
+                <span className="flex shrink-0 items-center gap-1 text-[11.5px] font-semibold text-muted">
                   {e.wikiStatus === "approved" ? (
                     <>
-                      <CheckCircle2 className="size-3" />
-                      Approved
+                      <CheckCircle2 className="size-3.5 text-green-ink" aria-hidden />
+                      In the library
                     </>
                   ) : e.wikiStatus === "pending" ? (
                     <>
-                      <Clock className="size-3" />
+                      <Clock className="size-3.5 text-orange-ink" aria-hidden />
                       In review
                     </>
                   ) : (
@@ -180,28 +163,25 @@ export function WikiLibrary({ slug }: { slug: string }) {
               <Link
                 to="/c/$slug/p/$postId"
                 params={{ slug, postId: String(e.id) }}
-                className="font-display text-lg font-bold hover:text-accent"
+                className="k-focus text-[16px] leading-snug font-extrabold text-ink hover:text-violet"
               >
                 {e.title}
               </Link>
-              <p className="mt-2 line-clamp-3 break-words text-sm text-muted">
+              <p className="mt-1.5 line-clamp-3 text-[13px] leading-[19px] break-words text-muted">
                 {e.contentWarning ? `Content warning: ${e.contentWarning}` : e.body}
               </p>
-              <p className="mt-3 text-xs text-subtle">By {e.author.nickname}</p>
+              <p className="mt-2.5 text-[12px] text-subtle">By {e.author.nickname}</p>
               {e.author.userId === user?.id && (
-                <div className="mt-3 border-t border-border pt-3">
-                  {e.wikiReviewNote && (
-                    <p className="mb-2 text-xs text-muted">Review feedback: {e.wikiReviewNote}</p>
-                  )}
+                <div className="mt-3 space-y-2 border-t border-border pt-3">
+                  {e.wikiReviewNote && <p className="text-[12.5px] text-muted">Review feedback: {e.wikiReviewNote}</p>}
                   {["draft", "rejected"].includes(e.wikiStatus) && (
-                    <Button
-                      variant="secondary"
+                    <OutlineButton
                       size="sm"
                       disabled={pending !== null}
                       onClick={() => void act(e.id, () => submitWiki({ data: e.id }))}
                     >
                       Submit to library
-                    </Button>
+                    </OutlineButton>
                   )}
                 </div>
               )}
@@ -212,37 +192,32 @@ export function WikiLibrary({ slug }: { slug: string }) {
                     maxLength={500}
                     value={notes[e.id] ?? ""}
                     onChange={(ev) => setNotes({ ...notes, [e.id]: ev.target.value })}
-                    className="w-full rounded-lg bg-elevated p-2 text-xs"
+                    className={fieldClass}
                     placeholder="Helpful feedback (optional)"
                   />
-                  <div className="flex gap-2">
-                    <Button
+                  <div className="flex flex-wrap gap-2">
+                    <GradientButton
                       size="sm"
                       disabled={pending !== null}
                       onClick={() =>
                         void act(e.id, () =>
-                          reviewWiki({
-                            data: { postId: e.id, decision: "approved", note: notes[e.id] },
-                          }),
+                          reviewWiki({ data: { postId: e.id, decision: "approved", note: notes[e.id] } }),
                         )
                       }
                     >
                       Approve
-                    </Button>
-                    <Button
+                    </GradientButton>
+                    <OutlineButton
                       size="sm"
-                      variant="ghost"
                       disabled={pending !== null}
                       onClick={() =>
                         void act(e.id, () =>
-                          reviewWiki({
-                            data: { postId: e.id, decision: "rejected", note: notes[e.id] },
-                          }),
+                          reviewWiki({ data: { postId: e.id, decision: "rejected", note: notes[e.id] } }),
                         )
                       }
                     >
                       Request changes
-                    </Button>
+                    </OutlineButton>
                   </div>
                 </div>
               )}

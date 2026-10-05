@@ -1,4 +1,9 @@
+import { hueGradient } from "@/components/k/tokens";
 import { cn, initials } from "@/lib/utils";
+
+/**
+ * A round face: the person's photo, or their initials on a colourful gradient (redesign look, same props as before).
+ */
 
 export function Face({
   name,
@@ -32,13 +37,13 @@ export function Face({
     <span className={cn("relative inline-grid shrink-0", className)}>
       <span
         className={cn(
-          "grid place-items-center overflow-hidden rounded-full font-display font-bold tracking-tight text-fg",
+          "grid place-items-center overflow-hidden rounded-full font-extrabold tracking-tight text-white",
           dim,
-          ring && "outline-2 outline-offset-2 outline-accent",
+          ring && "outline-2 outline-offset-2 outline-violet",
         )}
         style={{
-          background: `linear-gradient(145deg, hsl(${hue} 48% 38%), hsl(${hue} 42% 18%))`,
-          boxShadow: "inset 0 0 0 1px color-mix(in oklab, white 16%, transparent)",
+          background: hueGradient(hue),
+          textShadow: "0 1px 1px rgba(0,0,0,0.25)",
         }}
         aria-hidden
       >
@@ -54,7 +59,7 @@ export function Face({
         )}
       </span>
       {level != null && (
-        <span className="absolute -right-0.5 -bottom-0.5 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold text-accent-fg">
+        <span className="absolute -right-0.5 -bottom-0.5 grid min-w-4 place-items-center rounded-full bg-violet-strong px-1 text-[9px] font-bold text-white ring-2 ring-surface">
           {level}
         </span>
       )}

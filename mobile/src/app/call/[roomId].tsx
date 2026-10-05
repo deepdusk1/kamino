@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { Pressable, View } from "react-native";
 import { api } from "@/api/endpoints";
-import { Avatar, Button, Card, Chip, Screen, Txt } from "@/components/ui";
+import { GradientButton, Pill, PersonAvatar } from "@/components/k";
+import { Button, Card, Screen, Txt } from "@/components/ui";
 import { useAction } from "@/lib/errors";
 import { loadWebRTC } from "@/lib/calls/webrtc";
 import { useCall } from "@/lib/calls/useCall";
-import { radius, space, useTheme } from "@/theme";
+import { font, radius, shadow, space, useTheme } from "@/theme";
 
 /** Words for the state of one connection. */
 const STATE_LABEL: Record<string, string> = {
@@ -89,7 +90,7 @@ export default function CallScreen() {
       ) : null}
 
       <View style={{ gap: space.sm }}>
-        <Txt variant="label" tone="subtle">In this call</Txt>
+        <Txt style={{ fontFamily: font.heavy, fontSize: 17, lineHeight: 22, color: theme.ink }}>In this call</Txt>
         <Card>
           <Person name={me.data?.profile.displayName ?? "You"} hue={me.data?.profile.avatarHue ?? 260} detail={call.muted ? "You (muted)" : "You"} />
         </Card>
@@ -110,10 +111,10 @@ export default function CallScreen() {
           <ControlButton icon="call" label="Leave the call" danger onPress={leave} />
         </View>
       ) : (
-        <Button label="Back to the chat" onPress={() => router.back()} />
+        <GradientButton label="Back to the chat" icon="chatbubble-ellipses" size="lg" full onPress={() => router.back()} />
       )}
-      {!ended ? <Button label="Ring everyone in this room" variant="secondary" small busy={ringing} onPress={() => void ring()} /> : null}
-      {!ended ? <Chip label="Tip: use headphones to avoid echo" /> : null}
+      {!ended ? <GradientButton label="Ring everyone in this room" icon="notifications" full busy={ringing} onPress={() => void ring()} /> : null}
+      {!ended ? <Pill label="Tip: use headphones to avoid echo" emoji="🎧" size="md" tone="blue" /> : null}
       <Txt variant="caption" tone="subtle" style={{ color: theme.subtle }}>
         Calls go directly between phones and browsers. On strict networks a relay server may be needed; the person running Kamino sets that up.
       </Txt>
@@ -132,9 +133,9 @@ function Person({ name, hue, userId, detail, good }: { name: string; hue: number
   const theme = useTheme();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-      <Avatar name={name} hue={hue} size={40} userId={userId} />
+      <PersonAvatar person={{ name, hue, userId }} size={44} online={good} />
       <View style={{ flex: 1 }}>
-        <Txt>{name}</Txt>
+        <Txt style={{ fontFamily: font.bold, fontSize: 15, lineHeight: 20, color: theme.ink }}>{name}</Txt>
         <Txt variant="caption" style={{ color: good ? theme.ok : theme.muted }}>{detail}</Txt>
       </View>
     </View>
@@ -148,9 +149,9 @@ function ControlButton({ icon, label, onPress, active, danger }: { icon: keyof t
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={{ width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", backgroundColor: danger ? theme.danger : active ? theme.accent : theme.elevated }}
+      style={[{ width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", backgroundColor: danger ? theme.red : active ? theme.violet : theme.surface, borderWidth: danger || active ? 0 : 1, borderColor: theme.border }, shadow.glow(danger ? theme.red : theme.violet, danger || active ? 0.35 : 0.12)]}
     >
-      <Ionicons name={icon} size={28} color={danger || active ? "#fff" : theme.fg} style={danger ? { transform: [{ rotate: "135deg" }] } : undefined} />
+      <Ionicons name={icon} size={28} color={danger || active ? "#fff" : theme.ink} style={danger ? { transform: [{ rotate: "135deg" }] } : undefined} />
     </Pressable>
   );
 }

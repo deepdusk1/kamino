@@ -37,7 +37,7 @@ export async function pickPhoto(source: "library" | "camera" = "library", maxByt
 }
 
 /** Picks or records a short video (max 30 s) and returns it as a data URL, or null if cancelled. */
-export async function pickVideo(source: "library" | "camera" = "library"): Promise<string | null> {
+export async function pickVideo(source: "library" | "camera" = "library",maxBytes:number=LIMITS.videoBytes): Promise<string | null> {
   const permission = source === "camera" ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) throw new MediaError("Allow camera or photo access in Settings to share videos.");
 
@@ -50,9 +50,9 @@ export async function pickVideo(source: "library" | "camera" = "library"): Promi
   const asset = result.assets?.[0];
   if (result.canceled || !asset) return null;
 
-  if (asset.fileSize && asset.fileSize > LIMITS.videoBytes) throw new MediaError("Videos must be under 12 MB. Try a shorter clip.");
+  if (asset.fileSize && asset.fileSize > maxBytes) throw new MediaError(`Videos must be under ${maxBytes/1_000_000} MB. Try a shorter clip.`);
   const base64 = await readAsStringAsync(asset.uri, { encoding: EncodingType.Base64 });
-  if (base64Bytes(base64) > LIMITS.videoBytes) throw new MediaError("Videos must be under 12 MB. Try a shorter clip.");
+  if (base64Bytes(base64) > maxBytes) throw new MediaError(`Videos must be under ${maxBytes/1_000_000} MB. Try a shorter clip.`);
   const mime = asset.mimeType && /^video\/(mp4|quicktime|webm|3gpp)$/.test(asset.mimeType) ? asset.mimeType : "video/mp4";
   return `data:${mime};base64,${base64}`;
 }

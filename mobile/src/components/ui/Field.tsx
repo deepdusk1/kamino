@@ -8,18 +8,18 @@ import { Txt } from "./Txt";
 type Props = TextInputProps & { label?: string; error?: string | null; hint?: string };
 
 /**
- * A labelled text box on frosted glass. It glows in the brand colour while you type in it.
+ * A labelled text box: a white rounded box with a hairline that turns violet while you type in it.
  * Pass `secureTextEntry` for passwords and it gets a show/hide eye.
  */
 export function Field({ label, error, hint, secureTextEntry, style, onFocus, onBlur, ...rest }: Props) {
   const theme = useTheme();
   const [hidden, setHidden] = useState(!!secureTextEntry);
   const focus = useSharedValue(0);
-  const idle = error ? theme.danger : theme.hairline;
+  const idle = error ? theme.danger : theme.border;
   const active = error ? theme.danger : theme.accent;
   const ring = useAnimatedStyle(() => ({
     borderColor: interpolateColor(focus.value, [0, 1], [idle, active]),
-    shadowOpacity: focus.value * 0.25,
+    shadowOpacity: focus.value * 0.12,
   }));
 
   return (
@@ -28,7 +28,7 @@ export function Field({ label, error, hint, secureTextEntry, style, onFocus, onB
       <Animated.View
         style={[
           styles.box,
-          { backgroundColor: theme.dark ? "rgba(30,22,64,0.6)" : "rgba(255,255,255,0.78)", shadowColor: theme.glow },
+          { backgroundColor: theme.surface, shadowColor: theme.glow },
           rest.multiline && { alignItems: "flex-start" },
           ring,
         ]}
@@ -47,7 +47,7 @@ export function Field({ label, error, hint, secureTextEntry, style, onFocus, onB
           secureTextEntry={hidden}
           placeholderTextColor={theme.subtle}
           selectionColor={theme.accent}
-          style={[styles.input, { color: theme.fg, fontFamily: font.regular }, rest.multiline && { minHeight: 96, textAlignVertical: "top" }, style]}
+          style={[styles.input, { color: theme.ink, fontFamily: font.regular }, rest.multiline && { minHeight: 96, textAlignVertical: "top" }, style]}
         />
         {secureTextEntry ? (
           <Pressable onPress={() => setHidden((h) => !h)} hitSlop={10} accessibilityLabel={hidden ? "Show password" : "Hide password"} accessibilityRole="button">
@@ -61,6 +61,6 @@ export function Field({ label, error, hint, secureTextEntry, style, onFocus, onB
 }
 
 const styles = StyleSheet.create({
-  box: { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: space.lg, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
-  input: { flex: 1, fontSize: 16, paddingVertical: 13, outlineWidth: 0 },
+  box: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: radius.md, paddingHorizontal: space.lg, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  input: { flex: 1, fontSize: 15, paddingVertical: 13, outlineWidth: 0 },
 });

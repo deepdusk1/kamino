@@ -35,5 +35,13 @@ export const optionalAuth = createMiddleware({ type: "function" })
       name: u?.name ?? null,
       image: u?.image ?? null,
     };
+    if (viewer.userId) {
+      const { getSql } = await import('../db');
+      const { internals } = await import('./server');
+      await internals.assertAccountAllowed(await getSql(), viewer.userId);
+      // "Online now": remember when this person was last active (at most one write a minute).
+      const { touchPresence } = await import("./presence.server");
+      touchPresence(viewer.userId);
+    }
     return next({ context: viewer });
   });

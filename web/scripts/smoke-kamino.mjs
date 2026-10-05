@@ -1,3 +1,4 @@
+import {fixtureAuthFetch} from "./fixture-auth.mjs";
 import {runWithStartContext} from '@tanstack/start-storage-context';
 import {serverFnFetcher} from '../node_modules/@tanstack/start-client-core/dist/esm/client-rpc/serverFnFetcher.js';
 import assert from 'node:assert/strict';
@@ -7,8 +8,15 @@ const moduleText=await (await fetch(base+'/src/lib/kamino/server.ts')).text();
 const functions=new Map([...moduleText.matchAll(/export const (\w+) = createServerFn\(\{ method: "(GET|POST)" \}\)[\s\S]*?createClientRpc\("([^"]+)"\)/g)].map(m=>[m[1],{method:m[2],id:m[3]}]));
 let token=''; let passed=0;
 const pass=name=>{passed++;console.log('PASS '+name)};
-async function rpc(name,data,auth=true){const f=functions.get(name);assert.ok(f,`Function available: ${name}`);const r=await runWithStartContext({startOptions:{}},()=>serverFnFetcher(base+'/_serverFn/'+f.id,[{method:f.method,data,headers:{origin:base,'sec-fetch-site':'same-origin',...(auth&&token?{authorization:'Bearer '+token}:{})}}],fetch));if(r.error)throw r.error;return r.result??r;}
-async function signup(){const response=await fetch(base+'/api/auth/sign-up/email',{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({name:'QA Member',email:'qa-'+randomBytes(8).toString('hex')+'@example.test',password:randomBytes(20).toString('hex')})});const user=await response.json();assert.equal(response.status,200,JSON.stringify(user));token=user.token;await rpc('bootstrap');const age=await fetch(base+'/api/v1/rpc/confirmMinimumAge',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify({data:{year:1990,month:1,day:1}})});assert.equal(age.status,200,'age check');return user}
+async function rpc(name,data,auth=true){
+  if(!functions.size){
+    // Production does not expose Vite's source descriptors; exercise its supported API bridge instead.
+    const response=await fetch(`${base}/api/v1/rpc/${name}`,{method:'POST',headers:{'content-type':'application/json',origin:base,...(auth&&token?{authorization:'Bearer '+token}:{})},body:JSON.stringify({data}),signal:AbortSignal.timeout(60000)});
+    const body=await response.json();if(body.error)throw new Error(body.error.message);assert.equal(response.status,200,`${name}: ${response.status}`);return body.result;
+  }
+  const f=functions.get(name);assert.ok(f,`Function available: ${name}`);const r=await runWithStartContext({startOptions:{}},()=>serverFnFetcher(base+'/_serverFn/'+f.id,[{method:f.method,data,headers:{origin:base,'sec-fetch-site':'same-origin',...(auth&&token?{authorization:'Bearer '+token}:{})}}],fetch));if(r.error)throw r.error;return r.result??r;
+}
+async function signup(){const response=await fixtureAuthFetch(base+'/api/auth/sign-up/email',{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({name:'QA Member',email:'qa-'+randomBytes(8).toString('hex')+'@example.test',password:randomBytes(20).toString('hex')})});const user=await response.json();assert.equal(response.status,200,JSON.stringify(user));token=user.token;await rpc('bootstrap');const age=await fetch(base+'/api/v1/rpc/confirmMinimumAge',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify({data:{year:1990,month:1,day:1}})});assert.equal(age.status,200,'age check');return user}
 assert.ok((await rpc('homeFeed')).communities.length);pass('public feed');
 await assert.rejects(()=>rpc('getMe',undefined,false));pass('private reads require sign-in');
 const account=await signup();const ownerToken=token;pass('email registration and session');

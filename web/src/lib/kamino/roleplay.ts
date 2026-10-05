@@ -10,13 +10,6 @@ export type SceneCharacter = { name: string; description: string };
 
 export type RoleplayTurnKind = "turn" | "narration" | "ending";
 
-/** Token budgets for storyteller replies. Endings run longer than mid-story narration.
- * Regression guard (2026-09-29): a budget under ~1000 tokens leaves the default reasoning
- * model with nothing for the reply itself, so narration after a player's turn came back
- * empty. Keep both at or above 1000. */
-export const STORYTELLER_NARRATION_TOKENS = 1000;
-export const STORYTELLER_ENDING_TOKENS = 1500;
-
 export type TurnForPrompt = { kind: RoleplayTurnKind; character: string; body: string };
 
 export const MAX_CHARACTERS = 8;
@@ -57,10 +50,10 @@ export function checkScene(input: {
   return { title, source, premise, characters };
 }
 
-/** The storyteller's standing instructions. They keep every story appropriate for an 18+ community. */
+/** The storyteller's standing instructions. They keep every story safe for a 13+ community. */
 export function storytellerRules(): string {
   return [
-    "You are the narrator of a collaborative role-play story inside a community app used by adults aged 18 and up.",
+    "You are the narrator of a collaborative role-play story inside a community app used by people aged 13 and up.",
     "Keep everything teen-appropriate: no sexual content or romance beyond a kiss, no graphic gore, no hate or slurs,",
     "and no real-world instructions for weapons, drugs, hacking, self-harm or crime. Conflict, danger and villains are fine.",
     "Characters may come from existing books, films, games or shows; this is fan fiction, so write only ORIGINAL prose.",
@@ -80,8 +73,8 @@ function castLines(characters: SceneCharacter[], cast: { name: string; player: s
     .join("\n");
 }
 
-/** The most recent part of the story, newest last, kept under `maxChars` so prompts stay small (and free). */
-export function recentStory(turns: TurnForPrompt[], maxChars = 6000): string {
+/** The most recent part of the story, newest last, kept under `maxChars` so prompts stay small (the free allowance is counted in words, not requests). */
+export function recentStory(turns: TurnForPrompt[], maxChars = 3500): string {
   const lines: string[] = [];
   let used = 0;
   for (let i = turns.length - 1; i >= 0; i -= 1) {

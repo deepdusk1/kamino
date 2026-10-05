@@ -12,8 +12,19 @@ dist/
 .DS_Store
 backups/
 .contract/
-
-# Apple signing material — never commit
-mobile/ios-certs/
-*.aab
-*.ipa
+.env*
+!.env.example
+.local-*
+.project_id
+.test*
+.export*
+.grok/
+__pycache__/
+*.tsbuildinfo
+*.pyc
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+*.pem

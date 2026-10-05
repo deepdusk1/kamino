@@ -218,11 +218,38 @@ view = await ok(member.token, "getScene", { sceneId: scene.id });
 assert.ok(!view.turns.some((t) => /selling meth/.test(t.body)), "the storyteller's own writing is checked and held too");
 queue = await ok(leader.token, "listSafetyFlags", { slug: hall.id });
 assert.ok(queue.some((f) => f.targetType === "roleplay" && f.authorName === "AI storyteller"));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Every request for a thinking model asks for little thinking and leaves room for the answer.
+for (const request of mock.log.chat) {
+  assert.equal(request.reasoning_effort, "low", "thinking models are asked to think briefly");
+  assert.ok(request.max_tokens >= 1000, "and are given room for the answer");
+}
+// The bug seen with the real service: the model spends the allowance thinking and answers with nothing. Kamino asks
+// again with more room instead of failing.
+mock.setThinkingCost(1500);
+const askedBefore = mock.log.chat.length;
+await ok(friend.token, "continueScene", { sceneId: scene.id, nudge: "a bell rings" });
+const retried = mock.log.chat.slice(askedBefore);
+assert.equal(retried.length, 2, "an empty answer is asked for again");
+assert.ok(retried[1].max_tokens > retried[0].max_tokens, "with more room the second time");
+assert.match((await ok(member.token, "getScene", { sceneId: scene.id })).turns.at(-1).body, /wind rises/);
+mock.setThinkingCost(0);
+// A model that has used up its free day is skipped: the next model answers.
+mock.setModelStatus("openai/gpt-oss-20b", 429);
+const failoverFrom = mock.log.chat.length;
+await ok(friend.token, "continueScene", { sceneId: scene.id, nudge: "the lights flicker" });
+assert.equal(mock.log.chat.at(-1).model, "openai/gpt-oss-120b", "the backup model takes over");
+await ok(friend.token, "continueScene", { sceneId: scene.id, nudge: "a whistle blows" });
+assert.equal(mock.log.chat.slice(failoverFrom).filter((r) => r.model === "openai/gpt-oss-20b").length, 1, "a used-up model is left alone for a while");
+mock.setModelStatus("openai/gpt-oss-20b", 200);
+// Both models busy: the member sees a friendly message and their own turn is kept.
 mock.setChatStatus(429);
+await sleep(2200);
 const busy = await ok(member.token, "addTurn", { sceneId: scene.id, body: "Rose laughs." });
 assert.match(busy.aiError, /busy/, "a busy storyteller never loses the member's turn");
 assert.equal((await ok(member.token, "getScene", { sceneId: scene.id })).turns.at(-1).body, "Rose laughs.");
 mock.setChatStatus(200);
+await sleep(2200);
 assert.match(await refused(outsider.token, "addTurn", { sceneId: scene.id, body: "hi" }), /Join this community/);
 await ok(outsider.token, "joinCommunity", { slug: hall.id });
 assert.match(await refused(outsider.token, "addTurn", { sceneId: scene.id, body: "hi" }), /Pick a character/);
@@ -238,7 +265,7 @@ const unsafeScene = await ok(member.token, "createScene", { slug: hall.id, title
 assert.equal(unsafeScene.held, true);
 assert.ok(!(await ok(friend.token, "listScenes", { slug: hall.id })).some((s) => s.id === unsafeScene.id), "a held story is hidden from others");
 const statusAfter = await ok(null, "getAiStatus", undefined);
-assert.equal(statusAfter.repliesLeft, 500 - mock.log.chat.length, "every storyteller reply counts against the daily free allowance");
+assert.equal(statusAfter.repliesLeft, 500 - mock.log.chatOk, "every storyteller reply that was written counts against the daily free allowance (failed attempts do not)");
 pass("role-play: AI set-up, characters, narration after turns, twists, alternate endings, teen-safe prompts, AI output checked, failures never lose turns");
 
 // ── Achievements ────────────────────────────────────────────────────────────

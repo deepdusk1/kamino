@@ -9,7 +9,7 @@ import type { ExpoConfig } from "expo/config";
  *   - EAS_PROJECT_ID      : printed by `npx eas-cli init`; paste it below (needed for push notifications)
  */
 const IDENTIFIER = "com.kelnovalabs.kamino";
-const EAS_PROJECT_ID = "c7e6db5e-9724-406a-b6a0-b95b79842823"; // Linked 2026-09-29 to the kelnovalabs Expo account.
+const EAS_PROJECT_ID = ""; // e.g. "1a2b3c4d-...". Leave empty until you have run `npx eas-cli init`.
 
 const config: ExpoConfig = {
   name: "Kamino",
@@ -40,10 +40,12 @@ const config: ExpoConfig = {
     },
     permissions: ["CAMERA", "RECORD_AUDIO", "POST_NOTIFICATIONS"],
     // The calling library asks for "draw over other apps", which Kamino does not use and stores dislike.
-    blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
+    blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.WRITE_CONTACTS"],
   },
   web: { bundler: "metro", output: "single", favicon: "./assets/favicon.png" },
   plugins: [
+    ['expo-contacts', { contactsPermission: 'Kamino reads contact email addresses only when you choose to preview them. You select which addresses to match; contact names stay on your device.' }],
+    'expo-sharing',
     "expo-router",
     "expo-secure-store",
     "expo-font",
@@ -68,7 +70,7 @@ const config: ExpoConfig = {
   ],
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? "",
-    supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? "info.kelnova@gmail.com",
+    supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? "",
     eas: { projectId: EAS_PROJECT_ID },
   },
 };

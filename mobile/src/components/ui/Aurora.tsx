@@ -21,14 +21,16 @@ import { useTheme } from "@/theme";
  * that is what makes it feel alive.
  */
 const ORBS = [
-  { x: -0.35, y: -0.05, size: 1.15, dx: 34, dy: 26 },
-  { x: 0.45, y: 0.12, size: 1.0, dx: -30, dy: 34 },
-  { x: -0.25, y: 0.58, size: 1.05, dx: 28, dy: -30 },
-  { x: 0.4, y: 0.78, size: 1.1, dx: -36, dy: -22 },
+  { x: -0.35, y: -0.05, size: 1.15, dx: 14, dy: 10 },
+  { x: 0.45, y: 0.12, size: 1.0, dx: -12, dy: 14 },
+  { x: -0.25, y: 0.58, size: 1.05, dx: 12, dy: -12 },
+  { x: 0.4, y: 0.78, size: 1.1, dx: -14, dy: -10 },
 ] as const;
 
 /**
- * The colourful, slowly moving background behind every screen.
+ * The calm background behind every screen: the near-white page colour with four very faint washes of lavender,
+ * pink, blue and peach that drift slowly (the redesign keeps it subtle so the page reads as near-white, like the
+ * mockups).
  *
  * It is cheap to draw: four soft radial gradients that are only moved and scaled (the phone's
  * graphics chip does that for free). It stays still when `active` is false (a screen you can't
@@ -45,7 +47,7 @@ export function Aurora({ active = true }: { active?: boolean }) {
       cancelAnimation(t);
       return;
     }
-    t.set(withRepeat(withTiming(1, { duration: 10000, easing: Easing.inOut(Easing.sin) }), -1, true));
+    t.set(withRepeat(withTiming(1, { duration: 20000, easing: Easing.inOut(Easing.sin) }), -1, true));
     return () => cancelAnimation(t);
   }, [active, reduceMotion, t]);
 
@@ -67,7 +69,7 @@ function Orb({ index, t, color, opacity, left, top, size, dx, dy }: { index: num
     const p = (t.value + phase) % 1;
     const wave = Math.sin(p * Math.PI * 2);
     const wave2 = Math.cos(p * Math.PI * 2);
-    return { transform: [{ translateX: wave * dx }, { translateY: wave2 * dy }, { scale: 1 + wave2 * 0.08 }] };
+    return { transform: [{ translateX: wave * dx }, { translateY: wave2 * dy }, { scale: 1 + wave2 * 0.04 }] };
   });
   const id = `orb${index}`;
   return (
@@ -75,8 +77,8 @@ function Orb({ index, t, color, opacity, left, top, size, dx, dy }: { index: num
       <Svg width={size} height={size}>
         <Defs>
           <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={color} stopOpacity={0.95} />
-            <Stop offset="0.45" stopColor={color} stopOpacity={0.45} />
+            <Stop offset="0" stopColor={color} stopOpacity={0.9} />
+            <Stop offset="0.5" stopColor={color} stopOpacity={0.35} />
             <Stop offset="1" stopColor={color} stopOpacity={0} />
           </RadialGradient>
         </Defs>
@@ -87,7 +89,7 @@ function Orb({ index, t, color, opacity, left, top, size, dx, dy }: { index: num
 }
 
 /**
- * Puts the aurora behind a screen. Used once per screen by the navigators in `_layout.tsx`.
+ * Puts the background wash behind a screen. Used once per screen by the navigators in `_layout.tsx`.
  * It must sit inside a navigator (it asks whether its screen is the one on display).
  */
 export function Backdrop({ children }: { children: React.ReactNode }) {

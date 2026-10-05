@@ -5,129 +5,60 @@ export const Route = createFileRoute("/privacy")({ component: Privacy });
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="September 29, 2026">
+    <LegalPage title="Privacy policy" updated="September 2026">
       <p>
-        Kamino is operated by <strong>Kelnova Labs</strong> of Kelowna, British Columbia, Canada.
-        This policy explains what personal information we collect, why, and what choices you have.
-        Contact us any time at <strong>info.kelnova@gmail.com</strong>.
+        Kamino is a community app. This page explains, in plain language, what we store and why.
+        It is a starting point written for the app as built; have it reviewed for your region and
+        your hosting setup before you publish.
       </p>
-
-      <h2>1. What we collect</h2>
+      <h2>What we collect</h2>
       <ul>
-        <li>
-          <strong>Account details:</strong> email address, display name, and a password stored only
-          as a one-way hash (we never see your password).
-        </li>
-        <li>
-          <strong>What you create:</strong> profile, posts, comments, polls, quiz answers, chat
-          messages, photos, voice notes and videos you share.
-        </li>
-        <li>
-          <strong>Activity that runs the app:</strong> communities you join, follows, blocks,
-          reports, notifications, reputation points and moderation strikes on your account.
-        </li>
-        <li>
-          <strong>Device information:</strong> your phone&apos;s push-notification token, only if
-          you allow notifications, so we can deliver them.
-        </li>
-        <li>
-          <strong>Technical logs:</strong> basic server logs (such as request times and error
-          traces) used to keep the service running and secure.
-        </li>
+        <li>Account details: email address, display name and a password (stored only as a one-way hash).</li>
+        <li>What you create: profile, posts, comments, polls, quiz answers, chat messages, photos, voice notes and videos you send.</li>
+        <li>Activity that powers the app: communities you join, follows, blocks, reports, notifications and your reputation points.</li>
+        <li>Your phone&apos;s push-notification address, only if you allow notifications.</li>
       </ul>
-
-      <h2>2. What we do NOT do</h2>
+      <h2>What we do not do</h2>
       <ul>
+        <li>We do not show ads and we do not sell your data.</li>
         <li>
-          <strong>We do not sell your personal information</strong> and we do not share it with
-          advertisers or data brokers. Kamino has no ads.
+          People do not read your private messages. Automatic safety checks do scan everything shared,
+          direct messages included, for illegal or dangerous content. If one is paused, a moderator (or,
+          for direct messages, the site owner) sees a short excerpt so a person can decide.
         </li>
-        <li>We do not track you across other apps or websites.</li>
-        <li>
-          We do not use your content to train AI models. Content is sent to our AI sub-processors
-          only to perform the specific job you asked for (see §4).
-        </li>
+        <li>Kamino does not track you across other apps or websites.</li>
       </ul>
-
-      <h2>3. Why we use your information</h2>
-      <ul>
-        <li>To run your account and show your content to the audience you chose.</li>
-        <li>To keep Kamino safe: automated checks and human review of reported or flagged content.</li>
-        <li>To send notifications you asked for.</li>
-        <li>To fix bugs, keep the service secure, and meet our legal obligations.</li>
-      </ul>
-
-      <h2>4. AI sub-processors</h2>
+      <h2>Who can see what</h2>
       <p>
-        Where the server operator has switched them on, Kamino uses two outside AI services, and
-        only the content needed for that job is sent:
+        Posts in public communities are visible to anyone. Private communities, direct messages and
+        private rooms are visible only to their members. Blocking someone hides their content from you.
       </p>
-      <ul>
-        <li>
-          <strong>OpenAI moderation:</strong> text and images you share are checked for illegal or
-          dangerous content. They do not receive your email address.
-        </li>
-        <li>
-          <strong>Groq storyteller:</strong> role-play story turns are sent so the AI can continue
-          the story. It does not receive your email address.
-        </li>
-      </ul>
+      <h2>Safety</h2>
       <p>
-        These providers handle the data under their own terms and do not use it for advertising.
-        No decision about your account is made by AI alone — a person always reviews flagged content.
+        Kamino is for people aged 13 and older. Community leaders can remove content, mute or remove
+        members, and members can appeal. Some phrases are filtered automatically to stop scams and
+        harmful content.
       </p>
-
-      <h2>5. Who can see what</h2>
-      <ul>
-        <li>Posts in public communities are visible to anyone, including people without an account.</li>
-        <li>Private communities, direct messages and private rooms are visible only to their members.</li>
-        <li>Blocking someone hides their content from you.</li>
-        <li>
-          Safety review: automatic checks scan everything shared, direct messages included, for
-          illegal or dangerous content. If an item is flagged, a human moderator (or, for direct
-          messages, the site owner) sees a short excerpt to decide. No person routinely reads your
-          private messages.
-        </li>
-      </ul>
-
-      <h2>6. How long we keep it</h2>
+      <h2>AI services</h2>
       <p>
-        We keep your information while your account is active. When you delete your account we
-        remove your profile, posts, comments, messages, follows and notifications. Minimal
-        moderation records that protect other members (such as a strike log without your content)
-        may be kept. Server logs are kept for a limited time for security and debugging.
+        If this server has them switched on, Kamino uses two outside AI services. Text and pictures you
+        share are sent to OpenAI's moderation service to check them for illegal or dangerous content.
+        Role-play story turns are sent to an AI storyteller service (Groq by default) so it can continue
+        the story. They receive only the content needed for that job, not your email address, and handle
+        it under their own terms. Kamino does not use them for ads or profiling. No decision about your
+        account is made by the AI alone: a person always decides.
       </p>
-
-      <h2>7. Your rights</h2>
+      <h2>Your choices</h2>
       <ul>
-        <li>Export your content any time from Settings → Export my data.</li>
+        <li>Download your content from Settings → Export my data.</li>
         <li>Delete your account and your content from Settings → Delete account, or see the <a href="/delete-account">account deletion page</a>.</li>
         <li>Turn notification types on or off in Settings.</li>
-        <li>
-          Ask us to access, correct or delete your personal information by emailing{" "}
-          <strong>info.kelnova@gmail.com</strong> — we respond to requests under Canadian privacy
-          law (including BC PIPA and PIPEDA).
-        </li>
       </ul>
-
-      <h2>8. Age requirement</h2>
+      <h2>Retention</h2>
       <p>
-        Kamino is for adults aged 18 and older. We do not knowingly collect personal information
-        from anyone under 18; if we learn we have, we delete it promptly.
-      </p>
-
-      <h2>9. Security</h2>
-      <p>
-        We use reasonable technical and organizational measures to protect your information —
-        encrypted connections, hashed passwords, and access limited to what is needed. No system is
-        perfectly secure, so we cannot guarantee absolute security.
-      </p>
-
-      <h2>10. Changes</h2>
-      <p>
-        We may update this policy and will announce material changes in the app before they take
-        effect, with the new date shown above. Continuing to use Kamino means you accept the
-        updated policy.
+        When you delete your account we remove your profile, posts, comments, messages, follows and
+        notifications. Moderation records that protect other members (such as a strike log without
+        your content) may be kept.
       </p>
     </LegalPage>
   );

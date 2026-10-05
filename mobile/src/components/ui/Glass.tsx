@@ -27,7 +27,8 @@ type Props = {
 };
 
 /**
- * A see-through, blurred surface that shows the colours behind it: the look of iOS.
+ * A see-through, blurred surface that shows the colours behind it: the look of iOS. Since the redesign the page
+ * behind is near-white, so this mostly reads as a soft white panel; new code should prefer `Card`.
  *
  * - iPhone with iOS 26+: Apple's real Liquid Glass.
  * - Older iPhones and the web: a real blur of what is behind (frosted glass).

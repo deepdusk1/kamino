@@ -1,6 +1,9 @@
 import { rpc } from "./client";
 import type * as M from "./models";
-import type { AiStatus, PostPayload, PostType, RankBoard, RankPeriod, RoleplayScene, RoleplaySceneSummary, RoomKind, SafetyFlag } from "./types";
+import type {
+  AiStatus, FeedTab, InterestOption, LiveRoomCard, NotificationFilter, NotifyPrefs, PostPayload, PostType, PostVisibility, RankBoard, RankPeriod,
+  RoleplayScene, RoleplaySceneSummary, RoomKind, SafetyFlag, SearchEverything,
+} from "./types";
 
 /**
  * One typed function per server call. Screens use `api.something()` and never build
@@ -13,7 +16,7 @@ export const api = {
   discover: () => rpc<M.Discover>("listDiscover"),
   search: (q: string) => rpc<M.SearchResults>("searchAll", q),
   checkIn: () => rpc<M.CheckIn>("checkIn"),
-  /** The 18+ birthday check. The date is compared once on the server and never saved. */
+  /** The 13+ birthday check. The date is compared once on the server and never saved. */
   confirmAge: (input: { year: number; month: number; day: number }) => rpc<{ ok: boolean }>("confirmMinimumAge", input),
 
   // ── Communities ──────────────────────────────────────────────────────────
@@ -49,7 +52,15 @@ export const api = {
   createPost: (input: {
     slug: string; type: PostType; title: string; body: string; cover?: string; album?: string[]; questionImages?: string[]; payload?: PostPayload;
     contentWarning?: string; commentsDisabled?: boolean; announcement?: boolean;
-  }) => rpc<{ id: number; held: boolean }>("createPost", input),
+    /** Optional place name. */
+    location?: string;
+    /** "members": only active members see it. */
+    visibility?: PostVisibility;
+    /** ISO date-time to publish later (up to 60 days ahead). */
+    publishAt?: string | null;
+    /** Tags picked in the composer (up to 10, merged with #tags in the text). */
+    hashtags?: string[];
+  }) => rpc<M.CreatePostResult>("createPost", input),
   updateLook: (input: {
     slug: string; name?: string; tagline?: string; description?: string; rules?: string; hue?: number; themeStyle?: string;
     cover?: string; coverUpload?: string; iconUpload?: string | null;
@@ -104,7 +115,7 @@ export const api = {
   // ── Chat ─────────────────────────────────────────────────────────────────
   rooms: () => rpc<import("./types").ChatRoom[]>("listRooms"),
   room: (roomId: number, afterId?: number) => rpc<M.RoomPage>("getRoom", { roomId, afterId }),
-  olderMessages: (roomId: number, beforeId: number) => rpc<import("./types").ChatMessage[]>("getOlderMessages", { roomId, beforeId }),
+  olderMessages: (roomId: number, beforeId: number) => rpc<{ messages: import("./types").ChatMessage[]; hasMore: boolean }>("getOlderMessages", { roomId, beforeId }),
   searchMessages: (roomId: number, query: string) => rpc<import("./types").ChatMessage[]>("searchRoomMessages", { roomId, query }),
   send: (input: { roomId: number; body: string; replyTo?: number | null; media?: { kind: "image" | "audio" | "video"; dataUrl: string } }) =>
     rpc<{ id: number; held: boolean }>("sendMessage", input),
@@ -123,11 +134,18 @@ export const api = {
   // ── People & profile ─────────────────────────────────────────────────────
   me: () => rpc<M.Me>("getMe"),
   profile: (handle: string) => rpc<M.PublicProfile>("getPublicProfile", handle),
-  updateSettings: (patch: Partial<Omit<import("./types").Profile, "userId" | "handle" | "avatarHue" | "lastSeenAt" | "rep" | "streak" | "lastCheckinAt" | "createdAt">>) =>
-    rpc<unknown>("updateSettings", patch),
+  updateSettings: (
+    patch: Partial<
+      Omit<
+        import("./types").Profile,
+        "userId" | "handle" | "avatarHue" | "lastSeenAt" | "rep" | "streak" | "lastCheckinAt" | "createdAt" | "verified" | "creator" | "onboardedAt" | "bestStreak" | "notifyPrefs"
+      > & { notifyPrefs: Partial<NotifyPrefs> }
+    >,
+  ) => rpc<unknown>("updateSettings", patch),
   setAvatar: (dataUrl: string) => rpc<unknown>("setAvatar", { dataUrl }),
   removeAvatar: () => rpc<unknown>("removeAvatar", {}),
-  followProfile: (targetId: string) => rpc<unknown>("toggleFollowProfile", targetId),
+  /** Follow / unfollow. A private account gets a request instead (`requested: true`); calling again cancels it. */
+  followProfile: (targetId: string) => rpc<M.FollowResult>("toggleFollowProfile", targetId),
   block: (targetId: string) => rpc<unknown>("blockUser", targetId),
   addWallPost: (handle: string, body: string) => rpc<{ ok: boolean; held: boolean }>("addWallPost", { handle, body }),
   /** Your own picture as your profile's wall cover. */
@@ -177,6 +195,74 @@ export const api = {
   markNotificationsRead: () => rpc<unknown>("markNotificationsRead"),
   registerPush: (token: string, platform: "ios" | "android" | "web" | "unknown") => rpc<unknown>("registerPushToken", { token, platform }),
   unregisterPush: (token: string) => rpc<unknown>("unregisterPushToken", token),
+
+  // ── Redesign: home, feed, explore, search ────────────────────────────────
+  /** Home cards. `interest` is a chip key such as "gaming" ("forYou" or nothing = your own interests). */
+  homeOverview: (interest?: string) => rpc<M.HomeOverview>("homeOverview", { interest }),
+  /** Feed tabs under the home cards. Pass the previous page's `next` as `cursor`. */
+  feed: (tab: FeedTab, cursor?: string | null) => rpc<M.FeedPage>("feed", { tab, cursor }),
+  exploreOverview: (category?: string) => rpc<M.ExploreOverview>("exploreOverview", { category }),
+  searchEverything: (input: {
+    q: string; kind?: "all" | "people" | "communities" | "posts" | "tags" | "rooms" | "events"; category?: string;
+    sort?: "relevance" | "trending" | "new" | "growing" | "members"; minMembers?: number; language?: string; safe?: boolean;
+  }) => rpc<SearchEverything>("searchEverything", input),
+  recentSearches: () => rpc<M.RecentSearch[]>("recentSearches"),
+  clearRecentSearches: () => rpc<{ ok: boolean }>("clearRecentSearches"),
+
+  // ── Redesign: onboarding ─────────────────────────────────────────────────
+  interestOptions: () => rpc<InterestOption[]>("interestOptions"),
+  saveInterests: (keys: string[]) => rpc<{ keys: string[] }>("saveInterests", { keys }),
+  onboardingSuggestions: () => rpc<M.OnboardingSuggestions>("onboardingSuggestions"),
+  finishOnboarding: () => rpc<{ onboardedAt: string }>("finishOnboarding"),
+
+  // ── Redesign: communities and live rooms ─────────────────────────────────
+  communityOverview: (slug: string) => rpc<M.CommunityOverview>("communityOverview", { slug }),
+  setCommunityTopics: (slug: string, topics: string[]) => rpc<{ topics: string[] }>("setCommunityTopics", { slug, topics }),
+  inviteToCommunity: (slug: string, userId: string) => rpc<{ ok: boolean; already: boolean }>("inviteToCommunity", { slug, userId }),
+  liveRooms: (scope: "joined" | "all" = "all") => rpc<LiveRoomCard[]>("liveRooms", { scope }),
+  /** Starts a voice room you are in, and tells your followers in that community. */
+  startLiveRoom: (slug: string, name: string, topic?: string) => rpc<{ id: number; roomId: number }>("startLiveRoom", { slug, name, topic }),
+
+  // ── Redesign: chats ──────────────────────────────────────────────────────
+  chatsOverview: () => rpc<M.ChatsOverview>("chatsOverview"),
+  acceptMessageRequest: (roomId: number) => rpc<{ ok: boolean }>("acceptMessageRequest", { roomId }),
+  declineMessageRequest: (roomId: number) => rpc<{ ok: boolean }>("declineMessageRequest", { roomId }),
+  markRoomRead: (roomId: number, lastId: number) => rpc<{ ok: boolean; lastReadId: number }>("markRoomRead", { roomId, lastId }),
+  roomReceipts: (roomId: number) => rpc<M.RoomReceipts>("roomReceipts", { roomId }),
+  /** Call every few seconds while the person is typing. */
+  setTyping: (roomId: number) => rpc<{ ok: boolean }>("setTyping", { roomId }),
+  typingIn: (roomId: number) => rpc<M.TypingNow>("typingIn", { roomId }),
+
+  // ── Redesign: notifications ──────────────────────────────────────────────
+  notificationsFeed: (filter: NotificationFilter = "all", before?: number) => rpc<M.NotificationsFeed>("notificationsFeed", { filter, before }),
+  markAllNotificationsRead: () => rpc<{ ok: boolean }>("markAllNotificationsRead"),
+
+  // ── Redesign: profiles and people ────────────────────────────────────────
+  profileOverview: (handle: string) => rpc<M.ProfileOverview>("profileOverview", { handle }),
+  /** A person's posts, optionally only one tag (the profile category tiles). */
+  profilePosts: (handle: string, tag?: string, cursor?: string | null) => rpc<M.ProfilePostsPage>("profilePosts", { handle, tag, cursor }),
+  followLists: (handle: string, kind: "followers" | "following" | "friends") => rpc<M.FollowList>("followLists", { handle, kind }),
+  followRequests: () => rpc<M.FollowRequestRow[]>("followRequests"),
+  answerFollowRequest: (userId: string, accept: boolean) => rpc<{ ok: boolean; accepted: boolean }>("answerFollowRequest", { userId, accept }),
+  /**
+   * Mute (muted = true) or unmute a person, just for you: their posts, comments, notifications and pushes stay
+   * away and their messages wait in your Requests. They can still see you and message you, and are never told.
+   */
+  mutePerson: (userId: string, muted: boolean) => rpc<M.MuteResult>("mutePerson", { userId, muted }),
+  /** The people you muted, most recent first (a "Muted accounts" list in settings). */
+  listMutedPeople: () => rpc<M.MutedRow[]>("listMutedPeople"),
+  /** Site owners only. */
+  /** Whether the viewer is a site owner (KAMINO_ADMIN_EMAILS). */
+  safetyRole: () => rpc<{ siteAdmin: boolean }>("getSafetyRole"),
+  adminSetVerified: (input: { userId?: string; handle?: string; verified?: boolean; creator?: boolean }) =>
+    rpc<{ userId: string; verified: boolean; creator: boolean }>("adminSetVerified", input),
+  adminSetCommunityVerified: (slug: string, verified: boolean) => rpc<{ slug: string; verified: boolean }>("adminSetCommunityVerified", { slug, verified }),
+
+  // ── Redesign: post page and composer ─────────────────────────────────────
+  listComments: (postId: number, sort: "newest" | "top" | "oldest" = "newest") => rpc<M.ListedComment[]>("listComments", { postId, sort }),
+  /** Delete a comment: your own, or any comment in a community you moderate. Fails with a kind message otherwise. */
+  deleteComment: (commentId: number) => rpc<M.DeleteCommentResult>("deleteComment", { commentId }),
+  suggestTags: (text: string, slug?: string) => rpc<string[]>("suggestTags", { text, slug }),
 
   // ── Moderation ───────────────────────────────────────────────────────────
   moderation: (slug: string) => rpc<M.Moderation>("getModeration", slug),

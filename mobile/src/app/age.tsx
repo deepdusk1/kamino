@@ -1,18 +1,20 @@
 import { useState } from "react";
-import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, View } from "react-native";
 import { useSession } from "@/auth/session";
 import { BirthdayFields, EMPTY_BIRTHDAY, judgeBirthday, YOUNG_MESSAGE } from "@/components/BirthdayFields";
-import { Appear, Button, Glass, LogoOrb, Screen, Txt } from "@/components/ui";
+import { GradientWord, VIOLET_GRADIENT } from "@/components/home/Decor";
+import { StepHeader } from "@/components/home/StepHeader";
+import { GradientButton } from "@/components/k";
+import { Appear, Screen, Txt } from "@/components/ui";
 import { errorMessage } from "@/lib/errors";
-import { radius, space } from "@/theme";
+import { font, radius, shadow, space, useTheme } from "@/theme";
 
 /**
- * Shown to a signed-in person who has not passed the 18+ birthday check yet
+ * Onboarding step 1 (part two): shown to a signed-in person who has not passed the 13+ birthday check yet
  * (for example an account created before the check existed, or through another sign-in method).
  */
 export default function AgeCheck() {
-  const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { confirmAge, signOut } = useSession();
   const [birthday, setBirthday] = useState(EMPTY_BIRTHDAY);
   const [error, setError] = useState<string | null>(null);
@@ -36,19 +38,26 @@ export default function AgeCheck() {
 
   return (
     <Screen padded={false}>
-      <View style={{ paddingTop: insets.top + space.xxl, paddingHorizontal: space.xl, gap: space.md }}>
-        <Appear><LogoOrb size={64} /></Appear>
-        <Appear index={1}><Txt variant="display">One quick thing</Txt></Appear>
-        <Appear index={2}><Txt tone="muted">Kamino is for adults aged 18 and over. Tell us your birthday to continue.</Txt></Appear>
-      </View>
-      <Appear index={3} style={{ padding: space.lg, paddingTop: space.xl }}>
-        <Glass intensity={70} style={{ borderRadius: radius.xl, padding: space.xl, gap: space.lg }}>
+      <StepHeader step={1} />
+      <Appear style={{ alignItems: "center", paddingHorizontal: space.xl, gap: 6, marginTop: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-end" }} accessible accessibilityRole="header" accessibilityLabel="One Quick Thing">
+          <Txt style={{ fontFamily: font.heavy, fontSize: 32, lineHeight: 38, letterSpacing: -0.8, color: theme.ink }}>One Quick </Txt>
+          <GradientWord text="Thing" size={32} colors={VIOLET_GRADIENT} />
+        </View>
+        <Txt style={{ textAlign: "center", fontFamily: font.regular, fontSize: 15, lineHeight: 20, color: theme.muted, maxWidth: 320 }}>
+          Kamino is for people aged 13 and over. Tell us your birthday to continue.
+        </Txt>
+      </Appear>
+      <Appear index={1} style={{ padding: space.lg }}>
+        <View style={[{ backgroundColor: theme.surface, borderRadius: radius.card, borderWidth: 1, borderColor: theme.border, padding: space.lg, gap: space.lg }, shadow.card]}>
           <BirthdayFields value={birthday} onChange={setBirthday} />
           {error ? <Txt tone="danger" accessibilityLiveRegion="polite">{error}</Txt> : null}
-          <Button label="Continue" onPress={submit} busy={busy} />
-          <Button label="Sign out" variant="ghost" onPress={() => void signOut()} />
-        </Glass>
+          <GradientButton label="Continue" gradient="hero" size="lg" iconRight="arrow-forward" full busy={busy} onPress={() => void submit()} />
+        </View>
       </Appear>
+      <Pressable onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Sign out" style={{ alignSelf: "center", minHeight: 44, justifyContent: "center", paddingHorizontal: 12 }}>
+        <Txt style={{ fontFamily: font.semibold, fontSize: 15, lineHeight: 20, color: theme.accent }}>Sign out</Txt>
+      </Pressable>
     </Screen>
   );
 }

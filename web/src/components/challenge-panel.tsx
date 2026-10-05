@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Trophy } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { GradientButton, OutlineButton, Pill } from "@/components/k";
+import { fieldClass } from "@/components/community/sheet";
 import { enterChallenge, judgeChallenge, listChallengeEntries, listMyPostsIn } from "@/lib/kamino/engagement";
 import type { HallEvent } from "@/lib/kamino/types";
 
@@ -49,19 +50,22 @@ export function ChallengePanel({ slug, event, isMember, isLeader, onChanged }: {
   return (
     <div className="mt-3 border-t border-border pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-sm font-bold">
-          <Trophy className="size-4 text-accent" aria-hidden /> {event.entryCount} {event.entryCount === 1 ? "entry" : "entries"} · {status}
+        <p className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-bold text-ink">
+          <Trophy className="size-4 text-orange" aria-hidden /> {event.entryCount} {event.entryCount === 1 ? "entry" : "entries"}
+          <Pill tone={event.phase === "open" ? "green" : event.phase === "judged" ? "violet" : event.phase === "closed" ? "neutral" : "orange"}>
+            {status}
+          </Pill>
         </p>
         <div className="flex gap-2">
           {event.entryCount > 0 && (
-            <Button size="sm" variant="secondary" onClick={() => setShowEntries((v) => !v)}>
+            <OutlineButton size="sm" onClick={() => setShowEntries((v) => !v)} aria-expanded={showEntries}>
               {showEntries ? "Hide entries" : "See entries"}
-            </Button>
+            </OutlineButton>
           )}
           {open && isMember && (
-            <Button size="sm" onClick={() => setEntering((v) => !v)}>
+            <GradientButton size="sm" onClick={() => setEntering((v) => !v)}>
               {event.myEntryPostId ? "Change my entry" : "Enter"}
-            </Button>
+            </GradientButton>
           )}
         </div>
       </div>
@@ -78,28 +82,30 @@ export function ChallengePanel({ slug, event, isMember, isLeader, onChanged }: {
             });
           }}
         >
-          <select aria-label="Choose one of your posts" required value={pickedPost} onChange={(e) => setPickedPost(e.target.value)} className="h-11 min-w-0 flex-1 rounded-lg bg-elevated px-3 text-sm">
+          <select aria-label="Choose one of your posts" required value={pickedPost} onChange={(e) => setPickedPost(e.target.value)} className={`${fieldClass} h-11 min-w-0 flex-1 py-0`}>
             <option value="">{myPosts.data?.length === 0 ? "Write a post here first" : "Choose one of your posts…"}</option>
             {myPosts.data?.map((p) => (
               <option key={p.id} value={p.id}>{p.title}</option>
             ))}
           </select>
-          <Button type="submit" size="sm" disabled={busy || !pickedPost}>Submit entry</Button>
+          <GradientButton type="submit" size="sm" disabled={busy || !pickedPost}>
+            Submit entry
+          </GradientButton>
         </form>
       )}
 
       {showEntries && entries.data && (
         <ul className="mt-3 space-y-2">
           {entries.data.entries.map((entry) => (
-            <li key={entry.postId} className="flex flex-wrap items-center gap-3 rounded-xl bg-elevated px-3 py-2">
+            <li key={entry.postId} className="flex flex-wrap items-center gap-3 rounded-tile bg-surface-alt px-3 py-2.5">
               <div className="min-w-0 flex-1">
-                <Link to="/c/$slug/p/$postId" params={{ slug, postId: String(entry.postId) }} className="block truncate font-bold hover:underline">
+                <Link to="/c/$slug/p/$postId" params={{ slug, postId: String(entry.postId) }} className="k-focus block truncate text-[14px] font-bold text-ink hover:underline">
                   {entry.placement ? `${MEDAL[entry.placement]} · ` : ""}{entry.title}
                 </Link>
-                <p className="text-xs text-subtle">by {entry.author.nickname} · {entry.likeCount} likes</p>
+                <p className="text-[12px] text-subtle">by {entry.author.nickname} · {entry.likeCount} likes</p>
               </div>
               {isLeader && !event.judged && (
-                <select aria-label={`Place for ${entry.title}`} value={places[entry.postId] ?? ""} onChange={(e) => setPlaces((cur) => ({ ...cur, [entry.postId]: e.target.value }))} className="h-9 rounded-lg bg-surface px-2 text-sm">
+                <select aria-label={`Place for ${entry.title}`} value={places[entry.postId] ?? ""} onChange={(e) => setPlaces((cur) => ({ ...cur, [entry.postId]: e.target.value }))} className="k-focus h-11 rounded-full border border-border bg-surface px-3 text-[14px] text-ink">
                   <option value="">No place</option>
                   <option value="1">1st</option>
                   <option value="2">2nd</option>
@@ -112,7 +118,7 @@ export function ChallengePanel({ slug, event, isMember, isLeader, onChanged }: {
       )}
 
       {isLeader && !event.judged && showEntries && (
-        <Button
+        <GradientButton
           className="mt-3"
           size="sm"
           disabled={busy || !Object.values(places).some(Boolean)}
@@ -125,9 +131,9 @@ export function ChallengePanel({ slug, event, isMember, isLeader, onChanged }: {
           }}
         >
           Announce winners
-        </Button>
+        </GradientButton>
       )}
-      {error ? <p role="alert" className="mt-2 text-sm text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="mt-2 text-[13.5px] text-danger">{error}</p> : null}
     </div>
   );
 }

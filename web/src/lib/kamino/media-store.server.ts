@@ -163,6 +163,22 @@ export async function loadMedia(stored: string): Promise<string> {
   return `data:${ref.mime};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
 }
 
+/** Deletes one object, rejecting failures so durable cleanup can retain and retry its reference. */
+export async function deleteMediaObject(stored: string): Promise<void> {
+  const ref = parseMediaRef(stored);
+  if (!ref) throw new Error("Invalid stored media reference.");
+  const cfg = config();
+  if (!cfg) throw new Error("Object storage is not configured on this server.");
+  let response: Response;
+  try {
+    response = await s3Request(cfg, "DELETE", ref.key);
+  } catch {
+    throw new Error("Object storage deletion request failed.");
+  }
+  if (!response.ok && response.status !== 404)
+    throw new Error(`Object storage deletion refused (HTTP ${response.status}).`);
+}
+
 /** Removes stored files (best effort: a failure is logged and never stops what the person was doing). */
 export async function deleteMedia(stored: Array<string | null | undefined>): Promise<void> {
   const cfg = config();

@@ -3,21 +3,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, Switch, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import { api } from "@/api/endpoints";
 import type { Draft, DraftContent } from "@/api/models";
-import type { PostType } from "@/api/types";
-import { Button, Card, Chip, Field, Screen, Sheet, Txt } from "@/components/ui";
+import { MAX_ALBUM_EXTRAS, type PostType } from "@/api/types";
+import { GradientButton, Pill } from "@/components/k";
+import { ToggleRow as KToggleRow } from "@/components/create/parts";
+import { Button, Card, Field, Screen, Sheet, Txt } from "@/components/ui";
 import { showError, useAction } from "@/lib/errors";
 import { pickPhoto } from "@/lib/media";
 import { MAX_TIME_LIMIT, MIN_TIME_LIMIT, albumFor, blankQuestion, buildPayload, emptyContent, questionImagesFor, validateContent } from "@/lib/compose";
 import { uuid } from "@/lib/uuid";
-import { radius, space, useTheme } from "@/theme";
+import { font, radius, space, useTheme } from "@/theme";
 import { withCommunityTheme } from "@/components/CommunityTheme";
 import { tellIfHeld } from "@/lib/held";
 
 /** Extra pictures beyond the cover (the server allows the same). */
-const MAX_ALBUM_EXTRAS = 5;
 
 const TYPES: { type: PostType; label: string; hint: string }[] = [
   { type: "blog", label: "Blog", hint: "Write something longer." },
@@ -32,13 +33,14 @@ const TYPES: { type: PostType; label: string; hint: string }[] = [
 
 function Compose() {
   const theme = useTheme();
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  // `?type=story` (or quiz, wiki, poll…) opens the editor on that kind of post (the Create tab links here).
+  const { slug, type: typeParam } = useLocalSearchParams<{ slug: string; type?: string }>();
   const queryClient = useQueryClient();
   const page = useQuery({ queryKey: ["community", slug], queryFn: () => api.community(slug!), enabled: !!slug });
   const categories = useQuery({ queryKey: ["wikiCategories", slug], queryFn: () => api.wikiCategories(slug!), enabled: !!slug });
   const drafts = useQuery({ queryKey: ["drafts", slug], queryFn: () => api.drafts(slug!), enabled: !!slug });
 
-  const [content, setContent] = useState<DraftContent>(() => emptyContent());
+  const [content, setContent] = useState<DraftContent>(() => emptyContent(TYPES.some((t) => t.type === typeParam) ? (typeParam as PostType) : "blog"));
   const [category, setCategory] = useState("");
   const [draftsOpen, setDraftsOpen] = useState(false);
   // Which saved draft is open (if any). The revision lets the server refuse a stale overwrite.
@@ -183,12 +185,23 @@ function Compose() {
 
   return (
     <Screen>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+      <View style={{ gap: 4 }}>
+        <Txt accessibilityRole="header" style={{ fontFamily: font.heavy, fontSize: 24, lineHeight: 30, letterSpacing: -0.4, color: theme.ink }}>{page.data?.community.name ? `Post in ${page.data.community.name}` : "New post"}</Txt>
+        <Txt variant="small" tone="muted">{active.hint}</Txt>
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {TYPES.map((t) => (
-          <Chip key={t.type} label={t.label} selected={content.type === t.type} onPress={() => update({ type: t.type })} />
+          <Pill
+            key={t.type}
+            label={t.label}
+            size="md"
+            tone={content.type === t.type ? "violet" : "neutral"}
+            variant={content.type === t.type ? "solid" : "tint"}
+            onPress={() => update({ type: t.type })}
+            accessibilityLabel={`${t.label}${content.type === t.type ? ", chosen" : ""}`}
+          />
         ))}
       </View>
-      <Txt variant="small" tone="muted">{active.hint}</Txt>
 
       <Field label="Title" value={content.title} onChangeText={(title) => update({ title })} maxLength={120} placeholder="What's this about?" />
 
@@ -306,7 +319,7 @@ function Compose() {
           <Txt variant="label" tone="subtle">Category</Txt>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
             {categories.data!.map((path) => (
-              <Chip key={path} label={path.split("/").join(" › ")} selected={category === path} onPress={() => setCategory(category === path ? "" : path)} />
+              <Pill key={path} label={path.split("/").join(" › ")} size="md" tone={category === path ? "violet" : "neutral"} variant={category === path ? "solid" : "tint"} onPress={() => setCategory(category === path ? "" : path)} />
             ))}
           </View>
         </View>
@@ -320,7 +333,7 @@ function Compose() {
       </Card>
 
       <View style={{ gap: space.sm }}>
-        <Button label={content.type === "wiki" ? "Create wiki page" : "Publish"} onPress={() => void publish()} busy={publishing} />
+        <GradientButton label={content.type === "wiki" ? "Create wiki page" : "Publish Post"} gradient="publish" icon="paper-plane" size="lg" full onPress={() => void publish()} busy={publishing} />
         <View style={{ flexDirection: "row", gap: space.sm }}>
           <Button label="Save draft" variant="secondary" style={{ flex: 1 }} onPress={() => void saveDraft()} busy={savingDraft} />
           <Button label={`Drafts${drafts.data?.length ? ` (${drafts.data.length})` : ""}`} variant="secondary" style={{ flex: 1 }} onPress={() => setDraftsOpen(true)} />
@@ -350,14 +363,8 @@ function Compose() {
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  const theme = useTheme();
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-      <Txt>{label}</Txt>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: theme.accent, false: theme.border }} thumbColor="#ffffff" ios_backgroundColor={theme.border} />
-    </View>
-  );
+function ToggleRow(props: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return <KToggleRow {...props} />;
 }
 
 export default withCommunityTheme(Compose);

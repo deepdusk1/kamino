@@ -1,188 +1,98 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Bell,
-  Bookmark,
-  Coins,
-  Compass,
-  House,
-  MessageCircle,
-  Search,
-  Shield,
-  User,
-} from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { UserButton } from "@/lib/auth/gates";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { bootstrap } from "@/lib/kamino/server";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { KMark } from "./k-mark";
-import { IncomingCall } from "./incoming-call";
 import { AgeGate } from "./age-gate";
+import { IncomingCall } from "./incoming-call";
+import { AppHeader } from "./k/app-header";
+import { BottomNav } from "./k/bottom-nav";
+import { useShellData } from "./k/use-shell-data";
 
-const NAV = [
-  { to: "/", label: "Home", icon: House },
-  { to: "/explore", label: "Explore", icon: Compass },
-  { to: "/chats", label: "Chats", icon: MessageCircle },
-  { to: "/notifications", label: "Activity", icon: Bell },
-  { to: "/me", label: "Me", icon: User },
-] as const;
-
+/**
+ * The frame around every app screen.
+ *
+ * - `AppHeader` on top (logo, search, bell, your avatar; on computers also the main links).
+ * - `BottomNav` fixed at the bottom on phones (Home · Communities · + · Chats · Profile).
+ *   The page is padded at the bottom so nothing hides behind it.
+ * - Content is centred, up to 1120px wide.
+ *
+ * Options:
+ * - `chrome="none"`: no header and no nav (welcome, onboarding — screens that draw their own top).
+ * - `hideNav`: keep the header but drop the phone bottom nav (post page with its comment bar, chat room).
+ * - `back`: show a "<" back button in the header (true = history back, or an address).
+ * - `headerActions`: replace the header's right-hand icons (search / share / ⋯ on a community).
+ * - `title` + `actions`: older pages show a heading row with optional buttons. New screens draw
+ *   their own title (use `ScreenTitle` from the kit) and leave `title` out.
+ * - `padded`: add the standard 16px side padding around the content.
+ */
 export function AppShell({
   children,
   title,
   actions,
   hideNav = false,
+  chrome = "full",
+  back,
+  headerActions,
+  padded = false,
+  className,
 }: {
   children: ReactNode;
   title?: string;
   actions?: ReactNode;
   hideNav?: boolean;
+  chrome?: "full" | "none";
+  back?: boolean | string;
+  headerActions?: ReactNode;
+  padded?: boolean;
+  className?: string;
 }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { user, isPending } = useCurrentUserState();
-  const [unread, setUnread] = useState(0);
-  const [needsAge, setNeedsAge] = useState(false);
+  const { user, needsAge } = useShellData();
+  const [ageDone, setAgeDone] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    void bootstrap()
-      .then((b) => {
-        setUnread(b.unread);
-        setNeedsAge(b.profile ? !b.profile.minAgeConfirmed : false);
-      })
-      .catch(() => undefined);
-  }, [user]);
+  if (chrome === "none") {
+    return (
+      <div className={cn("kamino-shell min-h-dvh bg-bg text-body", className)}>
+        <main id="main">{children}</main>
+        {user ? <IncomingCall /> : null}
+      </div>
+    );
+  }
 
   return (
-    <div className="kamino-shell min-h-dvh bg-bg text-fg">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border bg-bg px-4 py-5 md:flex">
-        <Link to="/" className="mb-8 flex items-center gap-2.5 px-2 text-fg">
-          <KMark className="size-8 text-accent" />
-          <span className="font-display text-xl font-extrabold tracking-tight">Kamino</span>
-        </Link>
-        <nav className="flex flex-1 flex-col gap-1">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex h-11 items-center gap-3 rounded-full px-3 text-sm font-bold transition-colors duration-150",
-                  active ? "bg-accent text-accent-fg" : "text-muted hover:bg-surface hover:text-fg",
-                )}
-              >
-                <span className="relative">
-                  <Icon className="size-5" strokeWidth={1.8} />
-                  {item.to === "/notifications" && unread > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent-fg" />
-                  )}
-                </span>
-                {item.label}
-              </Link>
-            );
-          })}
-          <Link
-            to="/wallet"
-            className={cn(
-              "mt-2 flex h-11 items-center gap-3 rounded-full px-3 text-sm font-bold text-muted hover:bg-surface hover:text-fg",
-              pathname.startsWith("/wallet") && "bg-elevated text-fg",
-            )}
+    <div className="kamino-shell min-h-dvh bg-bg text-body">
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-full bg-surface px-4 py-2 font-bold text-violet shadow-lift focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Skip to content
+      </a>
+      <AppHeader back={back} actions={headerActions} />
+      <main
+        id="main"
+        className={cn(
+          "mx-auto w-full max-w-[1120px]",
+          // Room for the bottom nav (56px bar + the raised + button + breathing space).
+          hideNav ? "pb-8" : "pb-[calc(84px+env(safe-area-inset-bottom))] lg:pb-12",
+          padded && "px-4",
+          className,
+        )}
+      >
+        {title && (
+          <div
+            className={cn("flex items-center justify-between gap-3 pt-2 pb-3", !padded && "px-4")}
           >
-            <Coins className="size-5" strokeWidth={1.8} />
-            Coins
-          </Link>
-          <Link
-            to="/saved"
-            className={cn(
-              "mt-2 flex h-11 items-center gap-3 rounded-full px-3 text-sm font-bold text-muted hover:bg-surface hover:text-fg",
-              pathname.startsWith("/saved") && "bg-elevated text-fg",
-            )}
-          >
-            <Bookmark className="size-5" strokeWidth={1.8} />
-            Saved
-          </Link>
-          <Link
-            to="/settings"
-            className={cn(
-              "mt-2 flex h-11 items-center gap-3 rounded-full px-3 text-sm font-bold text-muted hover:bg-surface hover:text-fg",
-              pathname.startsWith("/settings") && "bg-elevated text-fg",
-            )}
-          >
-            <Shield className="size-5" strokeWidth={1.8} />
-            Safety
-          </Link>
-        </nav>
-        <div className="mt-auto border-t border-border pt-4">
-          {isPending ? (
-            <div className="h-10 w-full animate-pulse rounded-full bg-elevated" />
-          ) : user ? (
-            <UserButton />
-          ) : (
-            <Link
-              to="/login"
-              className="flex h-11 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-fg"
-            >
-              Sign in
-            </Link>
-          )}
-        </div>
-      </aside>
-
-      <div className={cn("md:pl-60", hideNav ? "" : "pb-20 md:pb-0")}>
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-3 bg-bg/90 px-4 backdrop-blur-sm">
-          <Link to="/" className="flex items-center gap-2 text-accent md:hidden">
-            <KMark className="size-7" />
-          </Link>
-          <p className="min-w-0 flex-1 truncate font-display text-lg font-extrabold tracking-tight">
-            {title ?? "Kamino"}
-          </p>
-          {actions}
-          <Link
-            to="/explore"
-            className="grid size-11 place-items-center rounded-full text-fg hover:bg-elevated"
-            aria-label="Search"
-          >
-            <Search className="size-5" strokeWidth={1.8} />
-          </Link>
-        </header>
-        <div className={cn("mx-auto w-full", pathname === "/" ? "max-w-[1440px]" : "max-w-4xl")}>
-          {children}
-        </div>
-      </div>
-
-      {!hideNav && (
-        <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden">
-          <ul className="grid grid-cols-5">
-            {NAV.map((item) => {
-              const Icon = item.icon;
-              const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-              return (
-                <li key={item.to}>
-                  <Link
-                    to={item.to}
-                    className={cn(
-                      "relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-bold",
-                      active ? "text-accent" : "text-muted",
-                    )}
-                  >
-                    <span className="relative">
-                      <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} />
-                      {item.to === "/notifications" && unread > 0 && (
-                        <span className="absolute -top-0.5 -right-1 size-2 rounded-full bg-accent" />
-                      )}
-                    </span>
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      )}
+            <h1 className="min-w-0 truncate text-[26px] leading-tight font-extrabold tracking-[-0.03em] text-ink lg:text-[30px]">
+              {title}
+            </h1>
+            {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          </div>
+        )}
+        {!title && actions && (
+          <div className={cn("flex justify-end gap-2 pb-2", !padded && "px-4")}>{actions}</div>
+        )}
+        {children}
+      </main>
+      {!hideNav && <BottomNav />}
       {user ? <IncomingCall /> : null}
-      {user && needsAge ? <AgeGate onDone={() => setNeedsAge(false)} /> : null}
+      {user && needsAge && !ageDone ? <AgeGate onDone={() => setAgeDone(true)} /> : null}
     </div>
   );
 }

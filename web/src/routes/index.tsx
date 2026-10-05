@@ -1,273 +1,396 @@
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import {
-  ArrowUpRight,
-  CalendarDays,
-  Flame,
-  Plus,
-  Sparkles,
-  Search,
-  BookOpen,
-  MessageCircle,
-  PenLine,
-} from "lucide-react";
-import { AppShell } from "@/components/app-shell";
-import { PostCard } from "@/components/post-card";
-import { Composer } from "@/components/composer";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { homeFeed, toggleLike, toggleFavorite, checkIn } from "@/lib/kamino/server";
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Newspaper, Sparkles, Users } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-export const Route = createFileRoute("/")({ loader: () => homeFeed(), component: Home });
-function Home() {
-  const initial = Route.useLoaderData();
-  const { user } = useCurrentUserState();
-  const feed = useQuery({ queryKey: ["home"], queryFn: () => homeFeed(), initialData: initial });
-  const [tab, setTab] = useState("For you");
-  const [term, setTerm] = useState("");
-  const [compose, setCompose] = useState(false);
-  const [slug, setSlug] = useState("");
-  const data = feed.data;
-  const posts = (
-    tab === "Following"
-      ? data.latest
-      : tab === "Latest"
-        ? Array.from(new Map([...data.latest, ...data.featured].map((p) => [p.id, p])).values())
-        : data.featured
-  ).filter((p) => !term || (p.title + " " + p.body).toLowerCase().includes(term.toLowerCase()));
-  async function like(id: number) {
-    if (!user) {
-      toast.error("Sign in to like a post.");
-      return;
-    }
+import { AppShell } from "@/components/app-shell";
+import { HomeToolsStrip } from '@/components/platform-tools';
+import { TutorialPrompt } from '@/components/tutorial-prompt';
+import { afterCheckIn, eventWhen, patchPages, uniqueById, wasOnboardingShown } from "@/components/home/home-data";
+import { CommunityRow, CreatorRow, HomeSection, HomeSkeleton, StreakAndEvent } from "@/components/home/home-sections";
+import { WelcomeScreen } from "@/components/home/welcome-screen";
+import { CategoryChips, EmptyHint, GradientButton, HOME_CATEGORIES, HeroCarousel, SectionHeader, TabsUnderline } from "@/components/k";
+import { PostCard } from "@/components/post-card";
+import { heroArt } from "@/lib/brand-art";
+import { bootstrap, checkIn, joinCommunity, leaveCommunity, rsvpEvent, toggleFavorite, toggleFollowProfile, toggleLike } from "@/lib/kamino/server";
+import { feed, homeOverview } from "@/lib/kamino/social";
+import type { CommunityCardData, CreatorCard, FeedTab } from "@/lib/kamino/types";
+
+/**
+ * Home (mockup 03-home). Visitors who are not signed in see the Welcome screen here instead.
+ *
+ * Signed in: header, hero banners, category chips (they filter the cards below), Recommended and
+ * Trending communities, Daily Streak + Live Event, Featured Creators, then "Your feed" with three
+ * tabs (For You / Following / Communities) that loads more posts as you scroll. People who have
+ * not finished onboarding are sent there once. Same order and behaviour as the phone app's Home.
+ *
+ * The cards above the feed are rendered on the server (fast first paint); the feed loads in the
+ * browser, because post times ("3m") would otherwise differ between server and browser.
+ */
+export const Route = createFileRoute("/")({
+  loader: async () => {
+    // `bootstrap` also creates the profile on a first visit, so it runs before the Home cards.
+    const boot = await bootstrap();
+    if (!boot.profile) return { signedIn: false as const };
+    const overview = await homeOverview({ data: {} });
+    return {
+      signedIn: true as const,
+      userId: boot.profile.userId,
+      onboardedAt: boot.profile.onboardedAt,
+      overview,
+    };
+  },
+  component: HomeRoute,
+});
+
+type Overview = Awaited<ReturnType<typeof homeOverview>>;
+type FeedPage = Awaited<ReturnType<typeof feed>>;
+type FeedPost = FeedPage["posts"][number];
+
+const FEED_TABS: { key: FeedTab; label: string; icon: React.ReactNode }[] = [
+  { key: "forYou", label: "For You", icon: <Sparkles /> },
+  { key: "following", label: "Following", icon: <Users /> },
+  { key: "communities", label: "Communities", icon: <Newspaper /> },
+];
+
+const FEED_EMPTY: Record<FeedTab, { icon: string; title: string; body: string; action: { label: string; to: string } }> = {
+  forYou: { icon: "🌱", title: "Your feed is quiet", body: "Join a few communities and their posts will show up here.", action: { label: "Find communities", to: "/explore" } },
+  following: { icon: "👋", title: "No posts from people you follow", body: "Follow creators you like to see their posts here.", action: { label: "Find people", to: "/explore" } },
+  communities: { icon: "🏡", title: "Nothing new in your communities", body: "Join communities to see their newest posts here.", action: { label: "Explore communities", to: "/explore" } },
+};
+
+function HomeRoute() {
+  const data = Route.useLoaderData();
+  if (!data.signedIn) return <WelcomeScreen />;
+  return <Home userId={data.userId} onboardedAt={data.onboardedAt} initial={data.overview} />;
+}
+
+function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: string | null; initial: Overview }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [category, setCategory] = useState("forYou");
+  const [tab, setTab] = useState<FeedTab>("forYou");
+  const [busy, setBusy] = useState<string | null>(null);
+  // Things that depend on the browser (time zone, saved "onboarding shown") wait until the page has loaded,
+  // so the server's HTML and the browser's first render match exactly.
+  const [loaded, setLoaded] = useState(false);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(onboardedAt === null);
+
+  useEffect(() => {
+    setLoaded(true);
+    if (onboardedAt !== null) return;
+    if (wasOnboardingShown(userId)) setCheckingOnboarding(false);
+    else void navigate({ to: "/onboarding", replace: true });
+  }, [onboardedAt, userId, navigate]);
+
+  const interest = category === "forYou" ? undefined : category;
+  const overviewKey = ["homeOverview", userId, interest ?? "forYou"] as const;
+  const overview = useQuery({
+    queryKey: overviewKey,
+    queryFn: () => homeOverview({ data: interest ? { interest } : {} }),
+    initialData: interest ? undefined : initial,
+    // Keep showing the last cards while another category loads, so the page doesn't jump.
+    placeholderData: keepPreviousData,
+    enabled: loaded,
+  });
+  const feedQuery = useInfiniteQuery({
+    queryKey: ["feed", userId, tab],
+    queryFn: ({ pageParam }) => feed({ data: { tab, cursor: pageParam } }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next,
+    enabled: loaded,
+  });
+
+  // Changes every cached copy of the Home cards (all categories) at once, so the page updates straight away.
+  const patchOverview = (change: (o: Overview) => Overview) =>
+    queryClient.setQueriesData<Overview>({ queryKey: ["homeOverview", userId] }, (old) => (old ? change(old) : old));
+  const patchCommunity = (slug: string, joined: boolean) =>
+    patchOverview((o) => {
+      const fix = (c: CommunityCardData) =>
+        c.id === slug ? { ...c, joined, memberCount: Math.max(0, c.memberCount + (joined ? 1 : -1)) } : c;
+      return { ...o, recommended: o.recommended.map(fix), trending: o.trending.map(fix) };
+    });
+  const patchPost = (id: number, change: (p: FeedPost) => FeedPost) =>
+    queryClient.setQueriesData<InfiniteData<FeedPage, string | null>>({ queryKey: ["feed", userId] }, (old) =>
+      old ? { ...old, pages: patchPages(old.pages, id, change) } : old,
+    );
+
+  const fail = (e: unknown) => toast.error(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+
+  async function toggleJoin(c: CommunityCardData) {
+    // Private communities ask questions first: their page has the join form.
+    if (!c.joined && c.visibility === "private") return void navigate({ to: "/c/$slug", params: { slug: c.id } });
+    setBusy(c.id);
     try {
-      await toggleLike({ data: id });
-      await feed.refetch();
+      if (c.joined) {
+        await leaveCommunity({ data: c.id });
+        patchCommunity(c.id, false);
+      } else {
+        const result = await joinCommunity({ data: { slug: c.id } });
+        if (result.pending) toast("Request sent", { description: "The leaders will review it. You'll get a notification when you're in." });
+        else {
+          patchCommunity(c.id, true);
+          toast.success(`You joined ${c.name}`);
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ["shell"] });
+      void queryClient.invalidateQueries({ queryKey: ["feed", userId] });
     } catch (e) {
-      toast.error((e as Error).message);
+      fail(e);
+    } finally {
+      setBusy(null);
     }
   }
-  return (
-    <AppShell title="Your daily orbit">
-      <div className="home-layout">
-        <div className="home-main">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">GOOD TO SEE YOU HERE</p>
-              <h1>
-                Your people. <span>Your universe.</span>
-              </h1>
-            </div>
-            <span className="pill">
-              <Sparkles size={14} /> Made for belonging
-            </span>
-          </div>
-          <section className="orbit-banner">
-            <img
-              src="/covers/orbit-vivid.png"
-              alt="Colorful illustrated worlds linked by music, stories, art and conversation"
-            />
-            <div>
-              <span className="eyebrow">A LITTLE LESS SCROLLING. A LOT MORE CONNECTION.</span>
-              <h2>
-                Find the corner
-                <br />
-                that feels like you.
-              </h2>
-              <Link to="/explore" className="solid-button">
-                Explore communities <ArrowUpRight size={17} />
-              </Link>
-            </div>
-          </section>
-          <div className="section-heading small">
-            <h2>{data.joined?.length ? "Your communities" : "Find your next obsession"}</h2>
-            <Link to="/explore">
-              View all <ArrowUpRight size={15} />
-            </Link>
-          </div>
-          <div className="community-strip">
-            {(data.joined.length ? data.joined : data.communities).slice(0, 6).map((c) => (
-              <Link key={c.id} to="/c/$slug" params={{ slug: c.id }}>
-                <img src={c.cover} alt="" />
-                <strong>{c.name}</strong>
-                <span>{c.category}</span>
-              </Link>
-            ))}
-          </div>
-          <div className="compose-bar">
-            <div className="compose-avatar">
-              <PenLine size={20} />
-            </div>
-            <button
-              onClick={() => {
-                if (!user) {
-                  toast.error("Sign in to create a post.");
-                  return;
-                }
-                if (!data.joined.length) {
-                  toast.error("Join a community to start posting.");
-                  return;
-                }
-                setSlug(data.joined[0].id);
-                setCompose(true);
-              }}
-            >
-              What’s happening in your world?
-            </button>
-            <Plus size={20} />
-          </div>
-          <div className="feed-toolbar">
-            <div role="tablist" aria-label="Feed">
-              {["For you", "Following", "Latest"].map((t) => (
-                <button
-                  role="tab"
-                  aria-selected={tab === t}
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={tab === t ? "active" : ""}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <label className="feed-search">
-              <Search size={16} />
-              <input
-                aria-label="Search posts"
-                placeholder="Find a post…"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className="post-grid">
-            {posts?.map((p) => (
-              <PostCard
-                key={p.id}
-                post={p}
-                communityName={data.communities.find((c) => c.id === p.communityId)?.name}
-                onLike={like}
-                onSave={async (id) => {
-                  try {
-                    await toggleFavorite({ data: id });
-                    void feed.refetch();
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  }
-                }}
-              />
-            ))}
-          </div>
-          {!posts?.length && (
-            <div className="empty-state">
-              <BookOpen />
-              <h3>
-                {tab === "Following" ? "Your feed starts with your communities" : "No posts found"}
-              </h3>
-              <p>
-                {tab === "Following"
-                  ? "Join a community and follow people you enjoy."
-                  : "Try a different search or share the first post."}
-              </p>
-              <Link to="/explore">Explore communities →</Link>
-            </div>
-          )}
+
+  async function toggleFollow(c: CreatorCard) {
+    setBusy(c.userId);
+    try {
+      const result = await toggleFollowProfile({ data: c.userId });
+      patchOverview((o) => ({
+        ...o,
+        featuredCreators: o.featuredCreators.map((x) =>
+          x.userId === c.userId
+            ? { ...x, following: result.following, requested: result.requested, followers: x.followers + (result.following ? 1 : x.following ? -1 : 0) }
+            : x,
+        ),
+      }));
+      if (result.requested) toast("Request sent", { description: "This account is private. You'll see their posts once they accept." });
+      void queryClient.invalidateQueries({ queryKey: ["feed", userId, "following"] });
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function doCheckIn() {
+    const streak = overview.data?.streak;
+    if (!streak || streak.checkedInToday) return;
+    setBusy("checkin");
+    patchOverview((o) => ({ ...o, streak: afterCheckIn(o.streak) }));
+    try {
+      const r = await checkIn();
+      toast.success(r.already ? `Already checked in · ${r.streak} day streak` : `Checked in! ${r.streak} day streak`);
+      void queryClient.invalidateQueries({ queryKey: ["shell"] });
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+      void queryClient.invalidateQueries({ queryKey: ["homeOverview", userId] });
+    }
+  }
+
+  async function rsvp() {
+    const event = overview.data?.liveEvent;
+    if (!event) return;
+    setBusy("rsvp");
+    try {
+      const r = await rsvpEvent({ data: { slug: event.communityId, eventId: event.id } });
+      patchOverview((o) =>
+        o.liveEvent && o.liveEvent.id === event.id
+          ? { ...o, liveEvent: { ...o.liveEvent, going: r.going, rsvpCount: Math.max(0, event.rsvpCount + (r.going === event.going ? 0 : r.going ? 1 : -1)) } }
+          : o,
+      );
+      if (r.going) toast.success("You're going! We'll remind you before it starts.");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function like(id: number) {
+    const r = await toggleLike({ data: id });
+    patchPost(id, (p) => (p.liked === r.liked ? p : { ...p, liked: r.liked, likeCount: Math.max(0, p.likeCount + (r.liked ? 1 : -1)) }));
+  }
+  async function save(id: number) {
+    const r = await toggleFavorite({ data: id });
+    patchPost(id, (p) => ({ ...p, saved: r.saved }));
+    toast.success(r.saved ? "Saved" : "Removed from saved");
+  }
+
+  // Until the page has loaded in the browser, draw exactly what the server sent (the loader's data). The
+  // server keeps one shared query cache, so its cached copy can be older than this visit's data.
+  const o = loaded ? overview.data : initial;
+  const posts = loaded ? uniqueById(feedQuery.data?.pages.flatMap((p) => p.posts) ?? []) : [];
+  const empty = FEED_EMPTY[tab];
+
+  // Loads the next page when the bottom of the feed comes into view (the button below does the same).
+  const sentinel = useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !hasNextPage) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  if (checkingOnboarding) {
+    return (
+      <AppShell>
+        <div className="px-4 pt-1">
+          <HomeSkeleton />
         </div>
-        <aside className="home-rail">
-          <section className="rail-card checkin-card">
-            <span className="round-icon">
-              <Flame />
-            </span>
-            <p className="eyebrow">MAKE IT A DAILY THING</p>
-            <h2>
-              A little hello
-              <br />
-              goes a long way.
-            </h2>
-            <p>Check in, build your streak, and grow with your communities.</p>
-            <button
-              className="solid-button"
-              onClick={async () => {
-                try {
-                  const r = await checkIn();
-                  toast.success(
-                    r.already
-                      ? `Already checked in · ${r.streak} day streak`
-                      : `Checked in! ${r.streak} day streak · +5 coins`,
-                  );
-                } catch {
-                  toast.error("Sign in to check in.");
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell>
+      <h1 className="sr-only">Home</h1>
+      <div className="px-4 pt-2"><HomeToolsStrip /></div>
+      <TutorialPrompt />
+      <div className="flex flex-col gap-2.5 px-4 pt-0.5 lg:gap-6 lg:pt-2">
+        {o ? (
+          <>
+            <HeroCarousel
+              label="Highlights"
+              slides={o.heroes.map((h, i) => ({
+                id: h.id,
+                title: h.title,
+                text: h.text,
+                cta: h.cta,
+                to: h.href,
+                image: heroArt[h.art] ?? heroArt[`home-${(i % 4) + 1}`],
+                hue: 262 + i * 20,
+              }))}
+            />
+            <CategoryChips
+              items={HOME_CATEGORIES}
+              value={category}
+              onChange={setCategory}
+              onMore={() => void navigate({ to: "/explore" })}
+              label="Show communities about"
+              className="-my-1.5"
+            />
+            {o.recommended.length ? (
+              <HomeSection icon="✨" title="Recommended for You" seeAllTo="/explore">
+                <CommunityRow label="Recommended communities" communities={o.recommended} variant="vertical" busy={busy} onJoin={(c) => void toggleJoin(c)} />
+              </HomeSection>
+            ) : (
+              <EmptyHint
+                icon="🪐"
+                title="Nothing here yet"
+                text="No communities in this category yet. Try another one or start your own."
+                action={
+                  <GradientButton to="/new" size="sm">
+                    Create a community
+                  </GradientButton>
                 }
-              }}
-            >
-              Daily check-in <Plus size={16} />
-            </button>
-          </section>
-          <section className="rail-card">
-            <div className="section-heading small">
-              <h2>Go a little deeper</h2>
-              <Sparkles size={17} />
-            </div>
-            {[
-              {
-                to: "/explore",
-                icon: CalendarDays,
-                title: "Find your community",
-                copy: "A home for every interest",
-              },
-              {
-                to: "/chats",
-                icon: MessageCircle,
-                title: "Find a conversation",
-                copy: "Chat, roleplay & hang out",
-              },
-              {
-                to: "/saved",
-                icon: BookOpen,
-                title: "Your little collection",
-                copy: "Bookmarks worth keeping",
-              },
-            ].map((x) => (
-              <Link key={x.to} to={x.to as "/"} className="rail-link">
-                <x.icon size={21} />
-                <div>
-                  <strong>{x.title}</strong>
-                  <span>{x.copy}</span>
-                </div>
-                <ArrowUpRight size={15} />
-              </Link>
-            ))}
-          </section>
-          <section className="rail-card community-spotlight">
-            <img src="/covers/atelier.jpg" alt="Art community" />
-            <p className="eyebrow">COMMUNITY SPOTLIGHT</p>
-            <h2>
-              Make something.
-              <br />
-              Share the process.
-            </h2>
-            <Link to="/c/$slug" params={{ slug: "atelier" }}>
-              Step into the Atelier <ArrowUpRight size={15} />
-            </Link>
-          </section>
-          <p className="rail-footer">
-            A space for every side of you.
-            <br />
-            <Link to="/settings">Privacy & safety</Link> · Kamino
-          </p>
-        </aside>
+              />
+            )}
+            {o.trending.length > 0 && (
+              <HomeSection icon="🔥" title="Trending Communities" seeAllTo="/explore">
+                <CommunityRow label="Trending communities" communities={o.trending} variant="compact" busy={busy} />
+              </HomeSection>
+            )}
+            <StreakAndEvent
+              streak={o.streak}
+              event={o.liveEvent}
+              when={loaded && o.liveEvent ? eventWhen(o.liveEvent.startsAt) : ""}
+              checkingIn={busy === "checkin"}
+              onCheckIn={() => void doCheckIn()}
+              rsvpBusy={busy === "rsvp"}
+              onRsvp={() => void rsvp()}
+            />
+            {o.featuredCreators.length > 0 && (
+              <HomeSection icon="⭐" title="Featured Creators" seeAllTo="/explore">
+                <CreatorRow creators={o.featuredCreators} busy={busy} onFollow={(c) => void toggleFollow(c)} />
+              </HomeSection>
+            )}
+          </>
+        ) : overview.isError ? (
+          <EmptyHint
+            icon="🌧️"
+            title="We couldn't load Home"
+            text="Check your connection and try again."
+            action={
+              <GradientButton size="sm" onClick={() => void overview.refetch()}>
+                Try again
+              </GradientButton>
+            }
+          />
+        ) : (
+          <HomeSkeleton />
+        )}
+
+        {/* Your feed: the posts, in three tabs. */}
+        <section className="mt-1.5 flex flex-col gap-3 lg:mt-2" aria-label="Your feed">
+          <SectionHeader icon="💜" title="Your feed" />
+          <TabsUnderline label="Feed" tabs={FEED_TABS} value={tab} onChange={(k) => setTab(k as FeedTab)} className="rounded-t-tile" />
+          {!loaded || feedQuery.isPending ? (
+            <FeedSkeleton />
+          ) : feedQuery.isError ? (
+            <EmptyHint
+              icon="🌧️"
+              title="We couldn't load posts"
+              text="Check your connection and try again."
+              action={
+                <GradientButton size="sm" onClick={() => void feedQuery.refetch()}>
+                  Try again
+                </GradientButton>
+              }
+            />
+          ) : posts.length === 0 ? (
+            <EmptyHint
+              icon={empty.icon}
+              title={empty.title}
+              text={empty.body}
+              action={
+                <GradientButton to={empty.action.to} size="sm">
+                  {empty.action.label}
+                </GradientButton>
+              }
+            />
+          ) : (
+            <>
+              <div className="grid gap-3 lg:grid-cols-2 lg:items-start lg:gap-4">
+                {posts.map((p) => (
+                  <PostCard key={p.id} post={p} communityName={p.communityName} onLike={like} onSave={save} />
+                ))}
+              </div>
+              <div ref={sentinel} className="flex justify-center py-2">
+                {feedQuery.hasNextPage ? (
+                  <GradientButton
+                    size="sm"
+                    disabled={feedQuery.isFetchingNextPage}
+                    onClick={() => void feedQuery.fetchNextPage()}
+                  >
+                    {feedQuery.isFetchingNextPage ? "Loading more posts…" : "Load more posts"}
+                  </GradientButton>
+                ) : (
+                  <p className="text-[13px] font-semibold text-subtle">You're all caught up ✨</p>
+                )}
+              </div>
+            </>
+          )}
+        </section>
       </div>
-      {compose && (
-        <Composer
-          slug={slug}
-          onClose={() => setCompose(false)}
-          onCreated={() => {
-            setCompose(false);
-            void feed.refetch();
-            toast.success("Your post is live.");
-          }}
-        />
-      )}
     </AppShell>
+  );
+}
+
+/** Soft placeholder cards while the feed loads. */
+function FeedSkeleton() {
+  return (
+    <div className="grid gap-3 lg:grid-cols-2 lg:gap-4" role="status" aria-label="Loading posts">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="k-card flex flex-col gap-3 p-4">
+          <div className="flex items-center gap-2.5">
+            <div className="size-10 animate-pulse rounded-full bg-surface-alt" />
+            <div className="h-3.5 w-32 animate-pulse rounded-full bg-surface-alt" />
+          </div>
+          <div className="h-4 w-3/4 animate-pulse rounded-full bg-surface-alt" />
+          <div className="h-3 w-full animate-pulse rounded-full bg-surface-alt" />
+          <div className="h-3 w-2/3 animate-pulse rounded-full bg-surface-alt" />
+        </div>
+      ))}
+    </div>
   );
 }

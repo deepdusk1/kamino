@@ -1,23 +1,24 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
+import { useShellData } from "@/components/k";
+import { ProfilePage } from "@/components/profile/profile-page";
 import { RedirectToSignIn } from "@/lib/auth/gates";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getMe } from "@/lib/kamino/server";
 
 export const Route = createFileRoute("/me")({ component: Me });
 
+/** Your own profile: the same page as /u/<your handle>, without a back button. */
 function Me() {
-  const { user, isPending } = useCurrentUserState();
-  const q = useQuery({ queryKey: ["me"], queryFn: () => getMe(), enabled: !!user });
-  if (isPending) return <AppShell title="Me"><div className="h-24" /></AppShell>;
-  if (!user) return <RedirectToSignIn />;
-  if (q.data?.profile.handle) {
-    return <Navigate to="/u/$handle" params={{ handle: q.data.profile.handle }} />;
+  const { user, isPending, profile } = useShellData();
+  if (!isPending && !user) return <RedirectToSignIn />;
+  if (!profile?.handle) {
+    return (
+      <AppShell>
+        <div className="space-y-3 px-4 pt-2" aria-busy="true" aria-label="Opening your profile">
+          <div className="h-[150px] animate-pulse rounded-t-[22px] bg-surface-alt lg:h-[260px]" />
+          <div className="h-6 w-48 animate-pulse rounded-full bg-surface-alt" />
+        </div>
+      </AppShell>
+    );
   }
-  return (
-    <AppShell title="Me">
-      <p className="px-4 py-12 text-center text-sm text-muted">Opening your profile…</p>
-    </AppShell>
-  );
+  return <ProfilePage handle={profile.handle} inTabs />;
 }

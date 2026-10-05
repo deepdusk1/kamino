@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { getSql, type Sql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { hashHue, levelFromRep, slugify } from "@/lib/utils";
@@ -24,7 +24,24 @@ import { QUIZ_IMAGE_BASE, checkAlbum, checkQuestionImages, checkTimeLimit, isQui
 import { deleteMedia, isMediaRef, loadMedia, storeMedia } from "./media-store.server";
 import { BUBBLE_STYLES, COMMUNITY_MODULES, PROFILE_FRAME_IDS, THEME_STYLES, type CommunityModule } from "./types";
 import { clampHue } from "./theme";
-import { reviewContent } from "./safety.server";
+import { checkContent, reviewContent } from "./safety.server";
+import { paidResourceAccessSql } from './billing-policy';
+import { paidRoomAccessSql } from './paid-room-policy';
+import { notificationTargetSql, legacyEventNotificationAccessSql } from './notification-target-sql';
+import { paidPostAccessSql } from './paid-post-policy';
+import { fileReportSchema } from './report-rules';
+import {
+  cleanInterests,
+  cleanProfileCategories,
+  cleanWebsite,
+  isValidTimezone,
+  mergeHashtags,
+  messageRequestFor,
+  muteSilences,
+  parseNotifyPrefs,
+  scrubProfile,
+  shouldPush,
+} from "./social-rules";
 import {
   mapCommunity,
   mapMembership,
@@ -51,6 +68,7 @@ import type {
   JoinQuestion,
   MemberTitle,
   Membership,
+  NotifyPrefs,
   Post,
   PostPayload,
   PostType,
@@ -66,11 +84,11 @@ import type {
 
 type Authed = { userId: string };
 
-async function db(): Promise<Sql> {
+const db = createServerOnlyFn(async (): Promise<Sql> => {
   const sql = await getSql();
   await ensureSeeded(sql);
   return sql;
-}
+});
 
 async function ensureProfile(
   sql: Sql,
@@ -106,6 +124,16 @@ async function blockedSet(sql: Sql, userId: string | null): Promise<Set<string>>
   );
 }
 
+/**
+ * People the viewer muted (a personal mute, see `mutePerson` in social.ts). Unlike `blockedSet` this only goes one
+ * way: muting someone hides THEM from YOU, and they never find out. Lists filter with it the same way as blocks.
+ */
+async function mutedSet(sql: Sql, userId: string | null): Promise<Set<string>> {
+  if (!userId) return new Set();
+  const rows = await sql<{ muted_user_id: string }>`select muted_user_id from muted_people where user_id = ${userId}`;
+  return new Set(rows.map((r) => String(r.muted_user_id)));
+}
+
 async function membershipOf(
   sql: Sql,
   userId: string | null,
@@ -117,10 +145,10 @@ async function membershipOf(
   return rows[0] ? mapMembership(rows[0]) : null;
 }
 
-/** New accounts must pass the 18+ birthday check (see `confirmMinimumAge`) before they take part. */
+/** New accounts must pass the 13+ birthday check (see `confirmMinimumAge`) before they take part. */
 async function requireMinAge(sql: Sql, userId: string) {
   const row = (await sql`select min_age_confirmed_at from profiles where user_id = ${userId}`)[0];
-  if (!row?.min_age_confirmed_at) throw new Error("Please confirm your age first (Kamino is for adults aged 18 and over).");
+  if (!row?.min_age_confirmed_at) throw new Error("Please confirm your age first (Kamino is for people aged 13 and over).");
 }
 
 /**
@@ -145,14 +173,120 @@ function canRead(community: Community, member: Membership | null): boolean {
   return member?.status === "active";
 }
 
+/** Public metadata may be discoverable, but age-gated content always requires checked eligibility. */
+async function canReadForViewer(sql: Sql, userId: string | null, community: Community, member: Membership | null) {
+  if (!canRead(community, member)) return false;
+  const paid = (await sql.query<{allowed: boolean}>(`select ${paidResourceAccessSql('$1','community','$2')} as allowed`,[userId??'',community.id]))[0];
+  if (!asBool(paid?.allowed)) return false;
+  if (community.ageGate < 16) return true;
+  if (!userId) return false;
+  const row = (await sql`select age_eligible_at_16, age_eligible_at_18, restricted_mode from profiles where user_id = ${userId}`)[0];
+  if (!row || asBool(row.restricted_mode)) return false;
+  const eligible = community.ageGate >= 18 ? row.age_eligible_at_18 : row.age_eligible_at_16;
+  return Boolean(eligible && new Date(String(eligible)).getTime() <= Date.now());
+}
+
+async function assertAccountAllowed(sql: Sql, userId: string) {
+  const status = (await sql`select status, reason, until from identity_account_status where user_id = ${userId}`)[0];
+  if (status?.status === 'banned' || (status?.status === 'suspended' && (!status.until || new Date(String(status.until)).getTime() > Date.now()))) {
+    const error = new Error(`Your account is ${status.status}. ${String(status.reason ?? '')}`);
+    Object.assign(error, { status: 403 });
+    throw error;
+  }
+}
+
+async function assertCommunityReadable(sql: Sql, userId: string | null, communityId: string) {
+  if (userId) await assertAccountAllowed(sql, userId);
+  const community = await requireCommunity(sql, communityId);
+  const member = await membershipOf(sql, userId, communityId);
+  if (!(await canReadForViewer(sql, userId, community, member))) throw new Error('This community is private or outside your age eligibility.');
+  return community;
+}
+
+async function assertPeerContactAllowed(sql: Sql, userId: string, targetId: string) {
+  await assertAccountAllowed(sql, targetId);
+  const ages = await sql`select user_id, age_eligible_at_18 from profiles where user_id in (${userId}, ${targetId})`;
+  if (ages.length !== 2) throw new Error('This conversation is unavailable.');
+  const adult = (row: Record<string, unknown>) => Boolean(row.age_eligible_at_18 && new Date(String(row.age_eligible_at_18)).getTime() <= Date.now());
+  const teen = ages.some(row => !adult(row));
+  const restricted = await sql`select 1 from identity_relationships where kind = 'restrict' and ((user_id = ${targetId} and target_user_id = ${userId}) or (user_id = ${userId} and target_user_id = ${targetId}))`;
+  if (restricted.length) throw new Error('This conversation is unavailable.');
+  if (teen) {
+    const mutual = await sql`select 1 from profile_follows a join profile_follows b on a.follower_id = b.followee_id and a.followee_id = b.follower_id where a.follower_id = ${userId} and a.followee_id = ${targetId}`;
+    if (!mutual.length) throw new Error('For teen safety, both people must follow each other before messaging.');
+  }
+}
+
+/** Basic metadata is discoverable before payment, while age, private membership and bans still apply. */
+function communityMetadataAccessSql(viewer: string, c = 'c', privateInviteSql='false'): string {
+  return `not exists (select 1 from memberships gate_ban where gate_ban.community_id = ${c}.id and gate_ban.user_id = ${viewer} and gate_ban.status = 'banned')
+    and (${c}.visibility in ('public','unlisted') or (${privateInviteSql}) or exists (select 1 from memberships gate_mem where gate_mem.community_id = ${c}.id and gate_mem.user_id = ${viewer} and gate_mem.status = 'active'))
+    and (coalesce(${c}.age_gate,13) < 16 or exists (select 1 from profiles gate_age where gate_age.user_id = ${viewer} and gate_age.restricted_mode = false
+      and case when ${c}.age_gate >= 18 then gate_age.age_eligible_at_18 else gate_age.age_eligible_at_16 end <= current_date))`;
+}
+
+/** Use this for every content list whose community table has alias `c`. */
+function communityAccessSql(viewer: string, c = 'c'): string {
+  return `(${communityMetadataAccessSql(viewer,c)}) and ${paidResourceAccessSql(viewer,'community',`${c}.id`)}`;
+}
+
 const POST_SELECT = `
-  p.*, m.nickname, m.persona_hue, pr.handle, pr.display_name, pr.avatar_hue, pr.avatar_version
+  p.*, m.nickname, m.persona_hue, pr.handle, pr.display_name, pr.avatar_hue, pr.avatar_version, pr.verified as author_verified
 `;
 const POST_JOIN = `
   from posts p
   left join memberships m on m.user_id = p.author_user_id and m.community_id = p.community_id
   left join profiles pr on pr.user_id = p.author_user_id
 `;
+
+/**
+ * The SQL condition every list of posts adds, so nobody sees a post before they should:
+ *   - a scheduled post stays hidden until its time comes (no timer needed: the time is checked on every read);
+ *   - a members-only post is only for active members of its community.
+ * Authors always see their own posts. `viewer` is the query placeholder holding the viewer's id, or "" when
+ * signed out (for example "$2"); `p` is the posts table's alias in the query.
+ */
+function visiblePosts(viewer: string, p = "p"): string {
+  return `exists (select 1 from communities post_gate where post_gate.id = ${p}.community_id and ${communityAccessSql(viewer, 'post_gate')})
+    and ${paidPostAccessSql(viewer,`${p}.id`,`exists(select 1 from communities original_community where original_community.id=paid_source.community_id and ${communityAccessSql(viewer,'original_community')})`)}
+    and not exists (select 1 from post_content_settings post_age where post_age.post_id = ${p}.id and post_age.minimum_age >= 16 and not exists (select 1 from profiles age_v where age_v.user_id = ${viewer} and age_v.restricted_mode = false and case when post_age.minimum_age >= 18 then age_v.age_eligible_at_18 else age_v.age_eligible_at_16 end <= current_date))
+    and not exists (select 1 from post_personal_settings personal where personal.post_id = ${p}.id and personal.user_id = ${viewer} and (personal.hidden = true or personal.muted = true))
+    and not exists (select 1 from profiles sensitivity where sensitivity.user_id = ${viewer} and sensitivity.sensitive_content = 'hide' and coalesce(${p}.content_warning,'') <> '')
+    and (${p}.publish_at is null or ${p}.publish_at <= now() or ${p}.author_user_id = ${viewer})
+    and (coalesce(${p}.visibility, 'public') <> 'members' or ${p}.author_user_id = ${viewer}
+      or exists (select 1 from memberships vis_m where vis_m.community_id = ${p}.community_id
+                 and vis_m.user_id = ${viewer} and vis_m.status = 'active'))`;
+}
+
+/** Re-check saved notification previews after access, age eligibility or subscriptions change. */
+function notificationAccessSql(viewer: string, n = 'n') {
+  const {type,id,numericId}=notificationTargetSql(n);
+  const invite=`${n}.kind='invite' and exists(select 1 from invite_codes note_invite where note_invite.community_id=note_community.id and note_invite.code=substring(${n}.href from '^/invite/([a-z0-9]+)$') and (note_invite.expires_at is null or note_invite.expires_at>now()) and (note_invite.max_uses=0 or note_invite.uses<note_invite.max_uses))`;
+  return `not exists(select 1 from blocks note_block where (note_block.blocker_id=${viewer} and note_block.blocked_id=${n}.actor_id) or (note_block.blocked_id=${viewer} and note_block.blocker_id=${n}.actor_id)) and case
+    when (${type})='post' then exists(select 1 from posts note_post where note_post.id=${numericId}
+      and (${visiblePosts(viewer,'note_post')})
+      and (note_post.hidden=false or note_post.author_user_id=${viewer} or exists(select 1 from memberships note_mod where note_mod.community_id=note_post.community_id and note_mod.user_id=${viewer} and note_mod.status='active' and note_mod.role in ('leader','agent','curator'))))
+    when (${type})='event' then exists(select 1 from events note_event join communities note_community on note_community.id=note_event.community_id where note_event.id=${numericId}
+      and ${paidResourceAccessSql(viewer,'event','note_event.id')} and (${communityAccessSql(viewer,'note_community')}))
+    when (${type})='room' then exists(select 1 from chat_rooms note_room where note_room.id=${numericId}
+      and (${paidRoomAccessSql(viewer,'note_room')})
+      and (note_room.community_id is null or exists(select 1 from communities note_community where note_community.id=note_room.community_id and (${communityAccessSql(viewer,'note_community')})))
+      and not exists(select 1 from chat_members note_removed where note_removed.room_id=note_room.id and note_removed.user_id=${viewer} and note_removed.room_removed=true)
+      and (${n}.kind not in ('chat','call') or exists(select 1 from chat_members note_member where note_member.room_id=note_room.id and note_member.user_id=${viewer})))
+    when (${type})='community' then exists(select 1 from communities note_community where note_community.id=(${id})
+      and (${communityMetadataAccessSql(viewer,'note_community',invite)})
+      and ((${invite}) or ${paidResourceAccessSql(viewer,'community','note_community.id')})
+      and (${legacyEventNotificationAccessSql(viewer,n,id)}))
+    else true end`;
+}
+
+/** The same rule as `visiblePosts`, for one post row already loaded (used where a single post is opened). */
+function canSeePostRow(row: Record<string, unknown>, userId: string | null, member: Membership | null): boolean {
+  if (userId && row.author_user_id === userId) return true;
+  if (row.publish_at && new Date(String(row.publish_at)).getTime() > Date.now()) return false;
+  if (row.visibility === "members" && member?.status !== "active") return false;
+  return true;
+}
 
 async function likedSet(sql: Sql, userId: string | null, ids: number[]): Promise<Set<number>> {
   if (!userId || !ids.length) return new Set();
@@ -188,34 +322,57 @@ async function requirePostAccess(sql: Sql, userId: string | null, postId: number
   if (!row) throw new Error("Post not found.");
   const community = await requireCommunity(sql, String(row.community_id));
   const m = await membershipOf(sql, userId, community.id);
+  const policy = (await sql`select minimum_age from post_content_settings where post_id = ${postId}`)[0];
+  if (Number(policy?.minimum_age ?? 13) >= 16) {
+    if (!(await canReadForViewer(sql, userId, { ...community, ageGate: Number(policy!.minimum_age) as Community['ageGate'] }, m))) throw new Error('This post is outside your age eligibility.');
+  }
   if (
-    !canRead(community, m) ||
+    !(await canReadForViewer(sql, userId, community, m)) ||
     (row.expires_at && new Date(String(row.expires_at)).getTime() <= Date.now()) ||
     (asBool(row.hidden) &&
       row.author_user_id !== userId &&
-      !(m?.status === "active" && canModerate(m.role)))
+      !(m?.status === "active" && canModerate(m.role))) ||
+    !canSeePostRow(row, userId, m)
   )
     throw new Error("This post is unavailable.");
   if ((await blockedSet(sql, userId)).has(String(row.author_user_id)))
     throw new Error("This post is unavailable.");
+  const paid = (await sql.query<{allowed:boolean}>(`select ${paidPostAccessSql('$1','$2',`exists(select 1 from communities original_community where original_community.id=paid_source.community_id and ${communityAccessSql('$1','original_community')})`)} as allowed`,[userId??'',postId]))[0];
+  if (!asBool(paid?.allowed)) throw new Error('An active subscription is required to access this post.');
   return row;
 }
 
 async function requireRoomAccess(sql: Sql, userId: string, roomId: number) {
   const roomRow = (await sql`select * from chat_rooms where id = ${roomId}`)[0];
   if (!roomRow) throw new Error("Room not found");
+  const paid = (await sql.query<{allowed:boolean}>(`select (${paidRoomAccessSql('$1','r')}) as allowed from chat_rooms r where r.id=$2`,[userId,roomId]))[0];
+  if (!asBool(paid?.allowed)) throw new Error('An active subscription is required to access this room.');
   const inRoom =
-    await sql`select 1 from chat_members where room_id = ${roomId} and user_id = ${userId}`;
+    await sql`select room_removed from chat_members where room_id = ${roomId} and user_id = ${userId}`;
+  if (inRoom[0] && asBool(inRoom[0].room_removed)) throw new Error('You were removed from this room.');
   if (roomRow.community_id) await requireActiveMember(sql, userId, String(roomRow.community_id));
-  if (String(roomRow.kind) === "dm") {
+  if (["dm", "group"].includes(String(roomRow.kind))) {
     const blocked = await blockedSet(sql, userId);
     const peers = await sql`select user_id from chat_members where room_id = ${roomId}`;
     if (peers.some((p) => blocked.has(String(p.user_id))))
       throw new Error("This conversation is unavailable.");
+    for (const peer of peers) if (String(peer.user_id) !== userId) await assertPeerContactAllowed(sql, userId, String(peer.user_id));
   }
   if (inRoom.length) return roomRow;
   const communityId = roomRow.community_id ? String(roomRow.community_id) : null;
   const kind = String(roomRow.kind);
+  if (communityId && kind === 'private') {
+    // Buying this explicitly mapped room grants entry, while an unrelated offer grants nothing.
+    const purchased = await sql`select 1 from billing_resource_requirements br
+      join billing_entitlements be on be.offer_id=br.offer_id
+      where br.resource_kind='chat' and br.resource_id=${String(roomId)}
+        and be.beneficiary_id=${userId} and be.state='active' and be.test_mode=true
+        and (be.expires_at is null or be.expires_at>now()) limit 1`;
+    if (purchased.length) {
+      await sql`insert into chat_members(room_id,user_id) values(${roomId},${userId}) on conflict do nothing`;
+      return roomRow;
+    }
+  }
   if (!communityId || kind === "dm" || kind === "private") {
     throw new Error("You are not in this room.");
   }
@@ -309,6 +466,7 @@ async function attachPeer(sql: Sql, row: Record<string, unknown>, userId: string
 }
 
 async function requireActiveMember(sql: Sql, userId: string, communityId: string) {
+  await assertCommunityReadable(sql, userId, communityId);
   const m = await membershipOf(sql, userId, communityId);
   if (m?.status !== "active") throw new Error("Join this community first.");
   return m;
@@ -329,6 +487,19 @@ const emptyLocked = {
   joinQuestions: [] as JoinQuestion[],
 };
 
+/** Optional details a notification can carry, so the list can show who did it and what it is about. */
+export type NotifyExtra = {
+  /** The person who caused it (their avatar is shown). Leave out for system messages and anonymous ones (reports). */
+  actorId?: string | null;
+  /** "post", "community", "room", "event" or "profile". */
+  targetType?: string;
+  targetId?: string | number;
+  /** A small picture address for the right side of the row (optional; posts and communities get one automatically). */
+  thumb?: string;
+  /** false: in-app only, never a phone push (message requests, quiet things). */
+  push?: boolean;
+};
+
 async function notify(
   sql: Sql,
   userId: string,
@@ -336,33 +507,149 @@ async function notify(
   title: string,
   body: string,
   href: string,
+  extra: NotifyExtra = {},
 ) {
   if (userId.startsWith("seed:")) return;
+  if (extra.targetType==='post' && extra.targetId && ['comment','mention','like'].includes(kind)) {
+    try {await requirePostAccess(sql,userId,Number(extra.targetId));} catch{return;}
+  }
+  if (extra.targetType==='room' && extra.targetId && ['chat','call'].includes(kind)) {
+    try {await requireRoomAccess(sql,userId,Number(extra.targetId));} catch{return;}
+  }
+  if (extra.targetType==='event' && extra.targetId) {
+    const access = (await sql.query<{allowed:boolean}>(`select (${paidResourceAccessSql('$1','event','e.id')}) and (${communityAccessSql('$1','c')}) as allowed from events e join communities c on c.id=e.community_id where e.id=$2`,[userId,Number(extra.targetId)]))[0];
+    if(!asBool(access?.allowed))return;
+  }
+  if (extra.targetType === 'post' && extra.targetId && ['comment','mention','like'].includes(kind)) {
+    const threadMuted = await sql`select 1 from post_personal_settings where post_id=${Number(extra.targetId)} and user_id=${userId} and muted=true`;
+    if (threadMuted.length) return;
+  }
+  const actorId = extra.actorId && !extra.actorId.startsWith("kamino:") ? extra.actorId : null;
+  if (actorId && actorId === userId) return; // never notify people about their own actions
+  let push = extra.push !== false;
   try {
     const pref = (
-      await sql`select notify_likes, notify_comments, notify_follows, notify_chat, notify_wall from profiles where user_id = ${userId}`
+      await sql`select notify_likes, notify_comments, notify_follows, notify_chat, notify_wall,
+                       notify_prefs, quiet_start, quiet_end, timezone
+                from profiles where user_id = ${userId}`
     )[0];
     if (pref) {
       const allow =
         (kind === "like" && asBool(pref.notify_likes)) ||
         (kind === "comment" && asBool(pref.notify_comments)) ||
-        (kind === "follow" && asBool(pref.notify_follows)) ||
+        ((kind === "follow" || kind === "follow_request") && asBool(pref.notify_follows)) ||
         (kind === "chat" && asBool(pref.notify_chat)) ||
         (kind === "wall" && asBool(pref.notify_wall)) ||
-        !["like", "comment", "follow", "chat", "wall"].includes(kind);
+        !["like", "comment", "follow", "follow_request", "chat", "wall"].includes(kind);
       if (!allow) return;
+      // Phone pushes also follow the per-category switches and quiet hours. The in-app list still gets the row.
+      push =
+        push &&
+        shouldPush({
+          kind,
+          prefs: parseNotifyPrefs(pref.notify_prefs),
+          quietStart: pref.quiet_start == null ? null : Number(pref.quiet_start),
+          quietEnd: pref.quiet_end == null ? null : Number(pref.quiet_end),
+          timezone: String(pref.timezone ?? ""),
+        });
     }
   } catch {
     // prefs columns may not exist yet
   }
+  if (actorId) {
+    // Someone you blocked (or who blocked you) never shows up in your notifications.
+    const blocked = await sql`
+      select 1 from blocks where (blocker_id = ${userId} and blocked_id = ${actorId}) or (blocker_id = ${actorId} and blocked_id = ${userId}) limit 1`;
+    if (blocked.length) return;
+    // Someone you muted makes no notification and no push for you (moderation notices still arrive).
+    if (muteSilences(kind)) {
+      const muted = await sql`select 1 from muted_people where user_id = ${userId} and muted_user_id = ${actorId} limit 1`;
+      if (muted.length) return;
+    }
+  }
+  const targetId = extra.targetId === undefined || extra.targetId === null ? "" : String(extra.targetId);
+  // A picture sent as a data: URL is far too big to copy into every notification; those are worked out when read.
+  const thumb = extra.thumb && !extra.thumb.startsWith("data:") ? extra.thumb.slice(0, 500) : "";
   await sql`
-    insert into notifications (user_id, kind, title, body, href)
-    values (${userId}, ${kind}, ${title}, ${body}, ${href})
+    insert into notifications (user_id, kind, title, body, href, actor_id, target_type, target_id, thumb)
+    values (${userId}, ${kind}, ${title}, ${body}, ${href}, ${actorId}, ${extra.targetType ?? ""}, ${targetId}, ${thumb})
   `;
+  if (!push) return;
   // Phones get a push as well. Failures are swallowed inside: a broken push
   // service must never make a like, comment or message fail.
-  const { sendPush } = await import("./push.server");
+  const { sendPush } = await loadPush();
   void sendPush(sql, userId, { title, body, href });
+}
+
+/** Loads the push sender on the server only (the website's browser bundle never includes it). */
+const loadPush = createServerOnlyFn(() => import("./push.server"));
+
+/**
+ * When each person's event reminders were last looked at (so busy screens do not query every time). Kept on
+ * `globalThis` so every copy of this module the dev server loads shares one map.
+ */
+const lastReminderSweep: Map<string, number> = ((globalThis as { __kaminoReminderSweep?: Map<string, number> }).__kaminoReminderSweep ??= new Map());
+
+/**
+ * Event reminders without a timer: when someone opens Kamino, any event they said they are going to that starts
+ * within the next 24 hours gets one "Reminder" notification (once per event).
+ */
+async function ensureEventReminders(sql: Sql, userId: string) {
+  const now = Date.now();
+  if (now - (lastReminderSweep.get(userId) ?? 0) < 120_000) return;
+  lastReminderSweep.set(userId, now);
+  try {
+    const due = await sql<{ id: number; title: string; community_id: string; name: string }>`
+      select e.id, e.title, e.community_id, c.name
+      from events e
+      join event_rsvps r on r.event_id = e.id and r.user_id = ${userId}
+      join communities c on c.id = e.community_id
+      where e.starts_at > now() and e.starts_at <= now() + interval '24 hours'
+        and not exists (select 1 from notifications n where n.user_id = ${userId} and n.kind = 'event'
+                          and n.target_type = 'event' and n.target_id = cast(e.id as text))
+      limit 5`;
+    for (const e of due)
+      await notify(sql, userId, "event", `Reminder: ${e.title}`, `Starts soon in ${e.name}.`, `/c/${e.community_id}/events`, {
+        targetType: "event",
+        targetId: Number(e.id),
+      });
+  } catch (error) {
+    console.warn("[events] reminders skipped:", error instanceof Error ? error.message : error);
+  }
+}
+
+/** "@mira and @jun-park" -> ["mira", "jun-park"] (lower case, once each, at most five). */
+function mentionedHandles(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/(?:^|[^a-zA-Z0-9_@])@([a-zA-Z0-9_-]{2,30})/g)) {
+    const handle = m[1]!.toLowerCase();
+    if (!out.includes(handle)) out.push(handle);
+  }
+  return out.slice(0, 5);
+}
+
+/** Tells people who were @mentioned in a post or comment, when they are allowed to read it. */
+async function notifyMentions(
+  sql: Sql,
+  input: { text: string; actorId: string; communityId: string; postId: number; snippet: string; membersOnly: boolean; skip?: string[] },
+) {
+  const handles = mentionedHandles(input.text);
+  if (!handles.length) return;
+  const community = await requireCommunity(sql, input.communityId);
+  const people = await sql<{ user_id: string }>`select user_id from profiles where lower(handle) = any(${handles})`;
+  for (const person of people) {
+    if (person.user_id === input.actorId || input.skip?.includes(person.user_id)) continue;
+    const m = await membershipOf(sql, person.user_id, input.communityId);
+    if (!(await canReadForViewer(sql, person.user_id, community, m)) || (input.membersOnly && m?.status !== "active")) continue;
+    const prefs = (await sql`select mention_privacy from profiles where user_id = ${person.user_id}`)[0];
+    if (prefs?.mention_privacy === 'none') continue;
+    if (prefs?.mention_privacy === 'following' && !(await sql`select 1 from profile_follows where follower_id = ${person.user_id} and followee_id = ${input.actorId}`).length) continue;
+    await notify(sql, person.user_id, "mention", "Mentioned you", input.snippet, `/c/${input.communityId}/p/${input.postId}`, {
+      actorId: input.actorId,
+      targetType: "post",
+      targetId: input.postId,
+    });
+  }
 }
 
 /** Members serving a timed mute may read and react, but not write. */
@@ -496,7 +783,10 @@ async function syncAchievements(sql: Sql, userId: string, options: { force?: boo
     const message = firstTime ? null : unlockMessage(fresh);
     if (message) {
       const handle = (await sql<{ handle: string }>`select handle from profiles where user_id = ${userId}`)[0]?.handle;
-      await notify(sql, userId, "achievement", message.title, message.body, handle ? `/u/${handle}` : "/");
+      await notify(sql, userId, "achievement", message.title, message.body, handle ? `/u/${handle}` : "/", {
+        targetType: "profile",
+        targetId: userId,
+      });
     }
   } catch (error) {
     console.warn("[achievements] could not sync:", error instanceof Error ? error.message : error);
@@ -536,6 +826,7 @@ export const bootstrap = createServerFn({ method: "GET" })
     if (v.userId) {
       await ensureProfile(sql, { userId: v.userId, email: v.email, name: v.name });
       await syncAchievements(sql, v.userId);
+      await ensureEventReminders(sql, v.userId);
       try {
         await sql`update profiles set last_seen_at = now() where user_id = ${v.userId}`;
       } catch {
@@ -548,20 +839,18 @@ export const bootstrap = createServerFn({ method: "GET" })
     const unread = v.userId
       ? Number(
           (
-            await sql<{
-              n: number;
-            }>`select count(*)::int as n from notifications where user_id = ${v.userId} and read = false`
+            await sql.query<{n:number}>(`select count(*)::int as n from notifications n where n.user_id=$1 and n.read=false and n.kind not in ('chat','message') and (${notificationAccessSql('$1','n')})`,[v.userId])
           )[0]?.n ?? 0,
         )
       : 0;
     const joined = v.userId
       ? (
-          await sql`
+          await sql.query(`
           select c.* from communities c
           join memberships m on m.community_id = c.id
-          where m.user_id = ${v.userId} and m.status = 'active'
+          where m.user_id = $1 and m.status = 'active' and (${communityMetadataAccessSql('$1','c')})
           order by m.joined_at desc
-        `
+        `,[v.userId])
         ).map(mapCommunity)
       : [];
     return {
@@ -606,7 +895,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     const community = await requireCommunity(sql, data.slug);
     const member = await membershipOf(sql, v.userId, community.id);
-    if (!canRead(community, member)) {
+    if (!(await canReadForViewer(sql, v.userId, community, member))) {
       let joinQuestions: JoinQuestion[] = [];
       try {
         joinQuestions = (
@@ -623,6 +912,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
       return { community, member, ...emptyLocked, joinQuestions };
     }
     const blocked = await blockedSet(sql, v.userId);
+    const muted = await mutedSet(sql, v.userId);
     const followingRows = v.userId
       ? await sql<{ followee_id: string }>`
           select followee_id from follows where follower_id = ${v.userId} and community_id = ${community.id}
@@ -637,6 +927,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
          where p.community_id = $1
            and (p.expires_at is null or p.expires_at > now())
            and (coalesce(p.hidden, false) = false or p.author_user_id = $2 or $3)
+           and ${visiblePosts("$2")}
          order by coalesce(p.announcement, false) desc, coalesce(p.pinned, false) desc, p.featured desc, p.created_at desc
          limit 80`,
         [community.id, v.userId ?? "", isMod],
@@ -646,9 +937,10 @@ export const getCommunityPage = createServerFn({ method: "GET" })
         `select ${POST_SELECT} ${POST_JOIN}
          where p.community_id = $1
            and (p.expires_at is null or p.expires_at > now())
+           and ${visiblePosts("$2")}
          order by p.featured desc, p.created_at desc
          limit 80`,
-        [community.id],
+        [community.id, v.userId ?? ""],
       );
     }
     const ids = raw.map((r) => Number(r.id));
@@ -656,7 +948,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
     const saved = await savedSet(sql, v.userId, ids);
     let posts = raw
       .map((r) => mapPost(r, liked.has(Number(r.id)), saved.has(Number(r.id))))
-      .filter((p) => !blocked.has(p.author.userId));
+      .filter((p) => !blocked.has(p.author.userId) && !muted.has(p.author.userId));
     if (data.tab === "featured") posts = posts.filter((p) => p.featured);
     if (data.tab === "following" && followIds.length) {
       posts = posts.filter((p) => followIds.includes(p.author.userId));
@@ -678,6 +970,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
             (select count(*)::int from chat_members cm where cm.room_id = r.id and cm.in_voice = true) as voice_count
          from chat_rooms r
          where r.community_id = $1
+           and ${paidRoomAccessSql('$2','r')}
            and (r.kind <> 'private' or exists (
              select 1 from chat_members cm where cm.room_id = r.id and cm.user_id = $2
            ))
@@ -740,6 +1033,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
         `select e.*, ${EVENT_COUNTS}
          from events e
          where e.community_id = $1 and (e.ends_at is null or e.ends_at > now())
+           and ${paidResourceAccessSql('$2','event','e.id')}
          order by e.starts_at
          limit 12`,
         [community.id, v.userId ?? ""],
@@ -798,7 +1092,7 @@ export const getWiki = createServerFn({ method: "GET" })
     const sql = await db();
     const community = await requireCommunity(sql, slug);
     const member = await membershipOf(sql, (context as unknown as Viewer).userId, slug);
-    if (!canRead(community, member))
+    if (!(await canReadForViewer(sql, (context as unknown as Viewer).userId, community, member)))
       return { community, member, locked: true, entries: [] as Post[] };
     const userId = (context as unknown as Viewer).userId;
     const blocked = await blockedSet(sql, userId);
@@ -806,8 +1100,9 @@ export const getWiki = createServerFn({ method: "GET" })
       `select ${POST_SELECT} ${POST_JOIN}
        where p.community_id = $1 and p.type = 'wiki' and p.hidden = false
          and (p.expires_at is null or p.expires_at > now())
+         and ${visiblePosts("$2")}
        order by p.featured desc, p.title`,
-      [slug],
+      [slug, userId ?? ""],
     );
     const visible = raw.filter((r) => !blocked.has(String(r.author_user_id)));
     return { community, member, locked: false, entries: visible.map((r) => mapPost(r, false)) };
@@ -859,6 +1154,8 @@ export const copyWikiTemplate = createServerFn({ method: "POST" })
     const source = await requirePostAccess(sql, userId, postId);
     if (source.type !== "wiki" || source.wiki_status !== "approved" || source.hidden)
       throw new Error("Only approved library pages can be used as templates.");
+    const freelyShareable=(await sql.query<{allowed:boolean}>(`select ${paidPostAccessSql("''",'$1')} as allowed`,[postId]))[0];
+    if(!asBool(freelyShareable?.allowed))throw new Error('Subscriber library pages cannot be copied into unrestricted templates.');
     await requireActiveMember(sql, userId, String(source.community_id));
     const title = `${String(source.title).slice(0, 105)} (copy)`;
     const payload = {
@@ -955,7 +1252,7 @@ export const getPostPage = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     const community = await requireCommunity(sql, data.slug);
     const member = await membershipOf(sql, v.userId, data.slug);
-    if (!canRead(community, member)) throw new Error("This community is private.");
+    if (!(await canReadForViewer(sql, v.userId, community, member))) throw new Error("This community is private.");
     const raw = await sql.query(
       `select ${POST_SELECT} ${POST_JOIN} where p.id = $1 and p.community_id = $2`,
       [data.postId, data.slug],
@@ -975,7 +1272,10 @@ export const getPostPage = createServerFn({ method: "GET" })
        order by c.id`,
       [data.postId, data.slug],
     );
-    const wantComments = new Set(commentsRaw.map((r) => Number(r.id)));
+    // Comments by people the viewer blocked (either way) or muted are left out.
+    const hiddenAuthors = new Set([...(await blockedSet(sql, v.userId)), ...(await mutedSet(sql, v.userId))]);
+    const visibleComments = commentsRaw.filter((r) => !hiddenAuthors.has(String(r.author_user_id)));
+    const wantComments = new Set(visibleComments.map((r) => Number(r.id)));
     const likedCommentIds = new Set<number>();
     if (v.userId && wantComments.size) {
       const likedRows = await sql<{ comment_id: number }>`
@@ -986,7 +1286,7 @@ export const getPostPage = createServerFn({ method: "GET" })
         if (wantComments.has(id)) likedCommentIds.add(id);
       }
     }
-    const comments = commentsRaw.map((row) => ({
+    const comments = visibleComments.map((row) => ({
       id: Number(row.id),
       postId: Number(row.post_id),
       author: {
@@ -1078,9 +1378,7 @@ export const joinCommunity = createServerFn({ method: "POST" })
     if (existing?.status === "active") return { ok: true, pending: false };
     if (existing?.status === "pending") return { ok: true, pending: true };
     const profile = mapProfile((await sql`select * from profiles where user_id = ${userId}`)[0]!);
-    if (community.ageGate >= 16 && !profile.ageConfirmed) {
-      throw new Error("Confirm you meet the age requirement in Settings first.");
-    }
+    if (!(await canReadForViewer(sql, userId, { ...community, visibility: 'public' }, null))) throw new Error('This community is outside your checked age eligibility.');
     let invited = false;
     const code = (data.invite ?? "").trim().toLowerCase();
     if (code) {
@@ -1124,7 +1422,9 @@ export const joinCommunity = createServerFn({ method: "POST" })
       }
     }
     const nick = (data.nickname || profile.displayName).slice(0, 24);
-    const pending = community.visibility === "private" && !invited;
+    const joinPolicy = (await sql`select join_policy from communities where id = ${data.slug}`)[0]?.join_policy;
+    if (joinPolicy === 'invite' && !invited) throw new Error('This community requires an invitation.');
+    const pending = (community.visibility === "private" || joinPolicy === 'approval') && !invited;
     await sql`
       insert into memberships (user_id, community_id, role, status, nickname, persona_hue)
       values (${userId}, ${data.slug}, 'member', ${pending ? "pending" : "active"}, ${nick}, ${profile.avatarHue})
@@ -1145,6 +1445,7 @@ export const joinCommunity = createServerFn({ method: "POST" })
         "Join request",
         `${nick} asked to enter ${community.name}`,
         `/c/${data.slug}/mod`,
+        { actorId: userId, targetType: "community", targetId: data.slug },
       );
     }
     return { ok: true, pending };
@@ -1248,6 +1549,14 @@ export const createPost = createServerFn({ method: "POST" })
       featured?: boolean;
       commentsDisabled?: boolean;
       announcement?: boolean;
+      /** Optional place name (up to 60 characters). */
+      location?: string;
+      /** "members": only active members of the community can see it. Default "public". */
+      visibility?: "public" | "members";
+      /** Publish later: an ISO date-time within the next 60 days. Hidden from everyone else until then. */
+      publishAt?: string | null;
+      /** Tags picked in the composer (up to 10, merged with #tags written in the text). */
+      hashtags?: string[];
     }) => d,
   )
   .handler(async ({ context, data }) => {
@@ -1257,10 +1566,28 @@ export const createPost = createServerFn({ method: "POST" })
     await requireMinAge(sql, userId);
     const m = await membershipOf(sql, userId, data.slug);
     if (m?.status !== "active") throw new Error("Join this community to post.");
+    await assertCommunityReadable(sql,userId,data.slug);
+    const { enforceCommunityPolicy } = await import('./community-v9');
+    await enforceCommunityPolicy(sql,userId,data.slug,'post');
+    const keywordRow = (await sql`select keyword_filters from communities where id = ${data.slug}`)[0];
+    const keywords = parseJson<string[]>(keywordRow?.keyword_filters, []);
+    if (keywords.some(word => word && `${data.title}\n${data.body}`.toLowerCase().includes(word.toLowerCase()))) throw new Error('Your post includes a term blocked by this community.');
     await assertNotMuted(sql, userId, data.slug);
-    const err = scanText(`${data.title}\n${data.body}\n${data.payload?.url ?? ""}`);
+    const location = String(data.location ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+    const err = scanText(`${data.title}\n${data.body}\n${data.payload?.url ?? ""}\n${location}`);
     if (err) throw new Error(err);
     if (data.title.trim().length < 3) throw new Error("Give it a title.");
+    if (data.visibility !== undefined && data.visibility !== "public" && data.visibility !== "members")
+      throw new Error("Choose who can see the post: everyone or members only.");
+    const visibility = data.visibility === "members" ? "members" : "public";
+    let publishAt: Date | null = null;
+    if (data.publishAt) {
+      publishAt = new Date(data.publishAt);
+      if (Number.isNaN(publishAt.getTime())) throw new Error("Pick a date and time to publish.");
+      if (publishAt.getTime() > Date.now() + 60 * 86_400_000) throw new Error("Posts can be scheduled up to 60 days ahead.");
+      // A time that has already passed (or is under a minute away) simply means "publish now".
+      if (publishAt.getTime() <= Date.now() + 60_000) publishAt = null;
+    }
     if (data.type === "link") {
       const url = (data.payload?.url ?? "").trim();
       if (!/^https?:\/\//i.test(url)) throw new Error("Add a http(s) link.");
@@ -1345,15 +1672,19 @@ export const createPost = createServerFn({ method: "POST" })
     // With object storage on, an uploaded cover picture goes to the bucket; links and built-in covers stay as they are.
     const storedCover = cover.startsWith("data:") ? await storeMedia("post", cover) : cover;
     const announcement = Boolean(data.announcement) && canLead(m.role);
+    // A scheduled post is dated at its publish time, so it lands in "newest first" lists exactly when it appears.
+    const publishedAt = publishAt ?? new Date();
     const expires =
-      data.type === "story" ? new Date(Date.now() + 24 * 3600 * 1000).toISOString() : null;
-    const hashtags = extractHashtags(`${data.title}\n${data.body}`);
+      data.type === "story" ? new Date(publishedAt.getTime() + 24 * 3600 * 1000).toISOString() : null;
+    const hashtags = mergeHashtags(data.hashtags, extractHashtags(`${data.title}\n${data.body}`));
     const rows = await sql<{ id: number }>`
-      insert into posts (community_id, author_user_id, type, title, body, cover, payload, featured, content_warning, expires_at, comments_disabled, announcement, hashtags)
+      insert into posts (hidden, community_id, author_user_id, type, title, body, cover, payload, featured, content_warning, expires_at, comments_disabled, announcement, hashtags,
+                         location, visibility, publish_at, created_at)
       values (
-        ${data.slug}, ${userId}, ${data.type}, ${data.title.trim().slice(0, 120)}, ${data.body.slice(0, 8000)},
+        true, ${data.slug}, ${userId}, ${data.type}, ${data.title.trim().slice(0, 120)}, ${data.body.slice(0, 8000)},
         ${storedCover}, ${JSON.stringify(payload)}, ${featured}, ${data.contentWarning ?? ""}, ${expires},
-        ${Boolean(data.commentsDisabled)}, ${announcement}, ${JSON.stringify(hashtags)}
+        ${Boolean(data.commentsDisabled)}, ${announcement}, ${JSON.stringify(hashtags)},
+        ${location}, ${visibility}, ${publishAt ? publishAt.toISOString() : null}, ${publishedAt.toISOString()}
       )
       returning id
     `;
@@ -1382,10 +1713,21 @@ export const createPost = createServerFn({ method: "POST" })
       notify,
     );
     if (!held) {
+      await sql`update posts set hidden = false where id = ${postId}`;
       await sql`update memberships set rep = rep + 4 where user_id = ${userId} and community_id = ${data.slug}`;
       await sql`update profiles set rep = rep + 4 where user_id = ${userId}`;
+      // @mentions: only for posts that are visible now (a scheduled post would give itself away early).
+      if (!publishAt)
+        await notifyMentions(sql, {
+          text: `${data.title}\n${data.body}`,
+          actorId: userId,
+          communityId: data.slug,
+          postId,
+          snippet: data.title.trim().slice(0, 80),
+          membersOnly: visibility === "members",
+        });
     }
-    return { id: postId, held };
+    return { id: postId, held, scheduled: Boolean(publishAt), publishAt: publishAt ? publishAt.toISOString() : null };
   });
 
 export const toggleLike = createServerFn({ method: "POST" })
@@ -1414,6 +1756,7 @@ export const toggleLike = createServerFn({ method: "POST" })
         "Liked your post",
         post[0].title,
         `/c/${post[0].community_id}/p/${postId}`,
+        { actorId: userId, targetType: "post", targetId: postId },
       );
     }
     return { liked: true };
@@ -1436,15 +1779,18 @@ export const addComment = createServerFn({ method: "POST" })
       author_user_id: string;
       comments_disabled?: unknown;
     }>`
-      select community_id, author_user_id, comments_disabled from posts where id = ${data.postId}
+      select community_id, author_user_id, comments_disabled, visibility from posts where id = ${data.postId}
     `;
     if (!post[0]) throw new Error("Post not found");
     if (asBool(post[0].comments_disabled)) throw new Error("Comments are closed on this post.");
+    const commentPolicy = (await sql`select comment_rule from post_content_settings where post_id = ${data.postId}`)[0]?.comment_rule;
+    if (commentPolicy === 'none') throw new Error('Comments are closed on this post.');
+    if (commentPolicy === 'followers' && post[0].author_user_id !== userId && !(await sql`select 1 from profile_follows where follower_id = ${userId} and followee_id = ${post[0].author_user_id}`).length) throw new Error('Only followers may comment on this post.');
     const m = await membershipOf(sql, userId, post[0].community_id);
     if (m?.status !== "active") throw new Error("Join to comment.");
     await assertNotMuted(sql, userId, post[0].community_id);
-    const inserted = await sql<{ id: number }>`insert into comments (post_id, author_user_id, body)
-      values (${data.postId}, ${userId}, ${data.body.trim().slice(0, 2000)}) returning id`;
+    const inserted = await sql<{ id: number }>`insert into comments (post_id, author_user_id, body, held)
+      values (${data.postId}, ${userId}, ${data.body.trim().slice(0, 2000)}, true) returning id`;
     const { held } = await reviewContent(
       sql,
       {
@@ -1458,6 +1804,7 @@ export const addComment = createServerFn({ method: "POST" })
       notify,
     );
     if (held) return { ok: true, held };
+    await sql`update comments set held = false where id = ${inserted[0]!.id}`;
     await sql`update posts set comment_count = comment_count + 1 where id = ${data.postId}`;
     if (post[0].author_user_id !== userId) {
       await notify(
@@ -1467,8 +1814,26 @@ export const addComment = createServerFn({ method: "POST" })
         "New comment",
         data.body.slice(0, 80),
         `/c/${post[0].community_id}/p/${data.postId}`,
+        { actorId: userId, targetType: "post", targetId: data.postId },
       );
     }
+    const watchers = await sql<{user_id:string}>`select user_id from post_personal_settings
+      where post_id=${data.postId} and following=true and muted=false and user_id<>${userId} and user_id<>${post[0].author_user_id}`;
+    for (const watcher of watchers) {
+      try { await requirePostAccess(sql, watcher.user_id, data.postId); }
+      catch { continue; }
+      await notify(sql,watcher.user_id,'comment','New comment in a followed thread',data.body.slice(0,80),
+        `/c/${post[0].community_id}/p/${data.postId}`,{actorId:userId,targetType:'post',targetId:data.postId});
+    }
+    await notifyMentions(sql, {
+      text: data.body,
+      actorId: userId,
+      communityId: post[0].community_id,
+      postId: data.postId,
+      snippet: data.body.trim().slice(0, 80),
+      membersOnly: (post[0] as { visibility?: string }).visibility === "members",
+      skip: [post[0].author_user_id],
+    });
     return { ok: true, held };
   });
 
@@ -1591,7 +1956,7 @@ export const checkIn = createServerFn({ method: "POST" })
     const changed = await sql<{
       streak: number;
       rep: number;
-    }>`update profiles set last_checkin_at=now(), streak=case when (last_checkin_at at time zone 'UTC')::date=(now() at time zone 'UTC')::date-1 then streak+1 else 1 end,rep=rep+10 where user_id=${userId} and (last_checkin_at is null or (last_checkin_at at time zone 'UTC')::date<(now() at time zone 'UTC')::date) returning streak,rep`;
+    }>`update profiles set last_checkin_at=now(), streak=case when (last_checkin_at at time zone 'UTC')::date=(now() at time zone 'UTC')::date-1 then streak+1 else 1 end,best_streak=greatest(best_streak,case when (last_checkin_at at time zone 'UTC')::date=(now() at time zone 'UTC')::date-1 then streak+1 else 1 end),rep=rep+10 where user_id=${userId} and (last_checkin_at is null or (last_checkin_at at time zone 'UTC')::date<(now() at time zone 'UTC')::date) returning streak,rep`;
     if (changed.length) {
       await sql`
         with award as (
@@ -1700,6 +2065,7 @@ export const tipMember = createServerFn({ method: "POST" })
       "You received a coin tip",
       `${amount} coins from a member`,
       `/wallet`,
+      { actorId: userId, targetType: "profile", targetId: userId },
     );
     return { ok: true };
   });
@@ -1745,33 +2111,59 @@ export const blockUser = createServerFn({ method: "POST" })
 
 export const fileReport = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(
-    (d: {
-      communityId?: string;
-      targetType: string;
-      targetId: string;
-      reason: string;
-      details?: string;
-    }) => d,
-  )
+  .validator((data: unknown) => fileReportSchema.parse(data))
   .handler(async ({ context, data }) => {
     const sql = await db();
     const { userId } = context as Authed;
     await guard(userId, "report");
-    if (!data.reason) throw new Error("Pick a reason.");
+    await requireMinAge(sql, userId);
+    let communityId: string | null = null;
+    let targetId = data.targetId;
+    if (data.targetType === "post") {
+      const post = await requirePostAccess(sql, userId, Number(targetId));
+      communityId = String(post.community_id);
+    } else if (data.targetType === "comment") {
+      const parts = targetId.split("/");
+      const comment = (await sql`select id,post_id,author_user_id,held from comments where id=${Number(parts.at(-1))}`)[0];
+      if (!comment || asBool(comment.held) || (parts.length === 2 && Number(parts[0]) !== Number(comment.post_id)))
+        throw new Error("This comment is unavailable.");
+      const post = await requirePostAccess(sql, userId, Number(comment.post_id));
+      if ((await blockedSet(sql, userId)).has(String(comment.author_user_id))) throw new Error("This comment is unavailable.");
+      communityId = String(post.community_id);
+      targetId = `${comment.post_id}/${comment.id}`;
+    } else if (data.targetType === "message") {
+      const message = (await sql`select room_id,author_user_id,held,deleted from messages where id=${Number(targetId)}`)[0];
+      if (!message || asBool(message.held) || asBool(message.deleted)) throw new Error("This message is unavailable.");
+      const room = await requireRoomAccess(sql, userId, Number(message.room_id));
+      if ((await blockedSet(sql, userId)).has(String(message.author_user_id))) throw new Error("This message is unavailable.");
+      communityId = room.community_id ? String(room.community_id) : null;
+    } else if (data.targetType === "community") {
+      await assertCommunityReadable(sql, userId, targetId);
+      communityId = targetId;
+    } else {
+      if (!(await sql`select 1 from profiles where user_id=${targetId}`).length || (await blockedSet(sql, userId)).has(targetId))
+        throw new Error("This profile is unavailable.");
+      if (data.communityId) {
+        await assertCommunityReadable(sql, userId, data.communityId);
+        const targetMember = await membershipOf(sql, targetId, data.communityId);
+        if (targetMember?.status !== "active") throw new Error("This person is not a member of that community.");
+        communityId = data.communityId;
+      }
+    }
+    if (data.communityId && data.communityId !== communityId) throw new Error("This report does not belong to that community.");
     const dup = await sql`
       select 1 from reports
-      where reporter_id = ${userId} and target_type = ${data.targetType} and target_id = ${data.targetId} and status = 'open'
+      where reporter_id = ${userId} and target_type = ${data.targetType} and target_id = ${targetId} and status = 'open'
     `;
     if (dup.length) throw new Error("You already reported this. A leader will review it.");
     await sql`
       insert into reports (reporter_id, community_id, target_type, target_id, reason, details)
-      values (${userId}, ${data.communityId ?? null}, ${data.targetType}, ${data.targetId}, ${data.reason}, ${data.details ?? ""})
+      values (${userId}, ${communityId}, ${data.targetType}, ${targetId}, ${data.reason}, ${data.details})
     `;
-    if (data.communityId) {
+    if (communityId) {
       const leads = await sql<{ user_id: string }>`
         select user_id from memberships
-        where community_id = ${data.communityId} and role in ('agent','leader') and status = 'active'
+        where community_id = ${communityId} and role in ('agent','leader') and status = 'active'
       `;
       for (const l of leads) {
         await notify(
@@ -1780,7 +2172,9 @@ export const fileReport = createServerFn({ method: "POST" })
           "report",
           "New report",
           data.reason,
-          `/c/${data.communityId}/mod`,
+          `/c/${communityId}/mod`,
+          // No actor: who reported something is never shown.
+          { targetType: "community", targetId: communityId },
         );
       }
     }
@@ -1800,8 +2194,9 @@ export const listRooms = createServerFn({ method: "GET" })
           (select created_at from messages m where m.room_id = r.id and m.held = false order by m.id desc limit 1) as last_at,
           (select count(*)::int from chat_members cmv where cmv.room_id = r.id and cmv.in_voice = true) as voice_count,
           cm.pinned, cm.muted,
-          (select count(*)::int from messages m where m.room_id = r.id and m.author_user_id <> $1 and m.held = false
-            and m.created_at > coalesce(cm.last_read_at, to_timestamp(0))) as unread,
+          case when exists (select 1 from message_requests mrq where mrq.room_id = r.id and mrq.user_id = $1 and mrq.status = 'pending') then 0
+          else (select count(*)::int from messages m where m.room_id = r.id and m.author_user_id <> $1 and m.held = false
+            and m.created_at > coalesce(cm.last_read_at, to_timestamp(0))) end as unread,
           case when r.kind = 'dm' then (
             select p.display_name from chat_members om
             join profiles p on p.user_id = om.user_id
@@ -1833,8 +2228,11 @@ export const listRooms = createServerFn({ method: "GET" })
           ) end as peer_user_id
        from chat_rooms r
        join chat_members cm on cm.room_id = r.id
-       where cm.user_id = $1 and (r.community_id is null or exists
+       where cm.user_id = $1 and cm.room_removed=false and (r.community_id is null or exists
          (select 1 from memberships mb where mb.community_id = r.community_id and mb.user_id = $1 and mb.status = 'active'))
+         and ${paidRoomAccessSql('$1','r')}
+         and (r.community_id is null or exists(select 1 from communities room_gate where room_gate.id=r.community_id and ${communityAccessSql('$1','room_gate')}))
+         and not exists (select 1 from message_requests mrd where mrd.room_id = r.id and mrd.user_id = $1 and mrd.status = 'declined')
        order by cm.pinned desc, last_at desc nulls last, r.id desc`,
       [userId],
     );
@@ -1878,9 +2276,12 @@ export const getRoom = createServerFn({ method: "GET" })
       left join chat_rooms r on r.id = cm.room_id
       left join memberships mb on mb.user_id = cm.user_id and mb.community_id = r.community_id
       left join profiles pr on pr.user_id = cm.user_id
-      where cm.room_id = ${data.roomId} and cm.in_voice = true
+      where cm.room_id = ${data.roomId} and cm.in_voice = true and cm.room_removed = false
+        and (r.community_id is null or mb.status = 'active')
     `;
-    await sql`update chat_members set last_read_at = now() where room_id = ${data.roomId} and user_id = ${userId}`;
+    await sql`update chat_members set last_read_at = now(),
+      last_read_id = greatest(last_read_id, coalesce((select max(id) from messages where room_id = ${data.roomId}), 0))
+      where room_id = ${data.roomId} and user_id = ${userId}`;
     const pref = (
       await sql`select pinned, muted from chat_members where room_id = ${data.roomId} and user_id = ${userId}`
     )[0];
@@ -1939,6 +2340,8 @@ export const inviteToRoom = createServerFn({ method: "POST" })
     )[0];
     if (!target) throw new Error("Member not found.");
     if (target.user_id === userId) throw new Error("You're already here.");
+    const { assertInviteAllowed } = await import('./identity-v9');
+    await assertInviteAllowed(sql,userId,target.user_id);
     await requireActiveMember(sql, target.user_id, String(room.community_id));
     if ((await blockedSet(sql, userId)).has(target.user_id))
       throw new Error("This member cannot be invited.");
@@ -1954,6 +2357,7 @@ export const inviteToRoom = createServerFn({ method: "POST" })
       "Private room invite",
       "You were invited to a room.",
       `/chats/${data.roomId}`,
+      { actorId: userId, targetType: "room", targetId: data.roomId },
     );
     return { ok: true };
   });
@@ -2027,6 +2431,7 @@ export const transferRoomHost = createServerFn({ method: "POST" })
       "You're the room host",
       "You can now manage this private room.",
       `/chats/${data.roomId}`,
+      { actorId: userId, targetType: "room", targetId: data.roomId },
     );
     return { ok: true };
   });
@@ -2163,6 +2568,13 @@ export const sendMessage = createServerFn({ method: "POST" })
     await requireMinAge(sql, userId);
     const room = await requireRoomAccess(sql, userId, data.roomId);
     if (room.community_id) await assertNotMuted(sql, userId, String(room.community_id));
+    if (['dm','group'].includes(String(room.kind))) {
+      const ageRow = (await sql`select age_eligible_at_18 from profiles where user_id = ${userId}`)[0];
+      if (!ageRow?.age_eligible_at_18 || new Date(String(ageRow.age_eligible_at_18)).getTime() > Date.now()) {
+        const count = Number((await sql`select count(*)::int as n from messages m join chat_rooms r on r.id = m.room_id where m.author_user_id = ${userId} and r.kind in ('dm','group') and m.created_at > now() - interval '24 hours'`)[0]?.n ?? 0);
+        if (count >= 100) throw new Error('Teen accounts can send up to 100 direct or group messages per day. Try again tomorrow.');
+      }
+    }
     const media = checkedChatMedia(data.media);
     const body = data.body.trim().slice(0, 2000);
     if (!body && !media) throw new Error("Write a message or attach media first.");
@@ -2177,8 +2589,8 @@ export const sendMessage = createServerFn({ method: "POST" })
       if (err) throw new Error(err);
     }
     const rows = await sql<{ id: number }>`
-      insert into messages (room_id, author_user_id, body, reply_to)
-      values (${data.roomId}, ${userId}, ${body}, ${data.replyTo ?? null})
+      insert into messages (room_id, author_user_id, body, reply_to, held)
+      values (${data.roomId}, ${userId}, ${body}, ${data.replyTo ?? null}, true)
       returning id
     `;
     if (media) {
@@ -2210,6 +2622,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       notify,
     );
     if (held) return { id: Number(rows[0]!.id), held };
+    await sql`update messages set held = false where id = ${rows[0]!.id}`;
     try {
       const room = (
         await sql<{
@@ -2217,10 +2630,16 @@ export const sendMessage = createServerFn({ method: "POST" })
           community_id: string | null;
         }>`select kind, community_id from chat_rooms where id = ${data.roomId}`
       )[0];
-      if (room && String(room.kind) === "dm") {
+      if (room && ['dm','group'].includes(String(room.kind))) {
+        // Replying to a message request accepts it.
+        await sql`update message_requests set status = 'accepted', decided_at = now()
+          where room_id = ${data.roomId} and user_id = ${userId} and status = 'pending'`;
+        // People who have not accepted this conversation (a request) get no notification and no push.
         const others = await sql<{
           user_id: string;
-        }>`select user_id from chat_members where room_id = ${data.roomId} and user_id <> ${userId} and muted = false`;
+        }>`select cm.user_id from chat_members cm
+           where cm.room_id = ${data.roomId} and cm.user_id <> ${userId} and cm.muted = false
+             and not exists (select 1 from message_requests mr where mr.room_id = cm.room_id and mr.user_id = cm.user_id and mr.status <> 'accepted')`;
         const me = (
           await sql<{
             display_name: string;
@@ -2237,6 +2656,7 @@ export const sendMessage = createServerFn({ method: "POST" })
               (media?.kind === "image" ? "Photo" : media?.kind === "video" ? "Video" : "Voice note")
             ).slice(0, 80),
             `/chats/${data.roomId}`,
+            { actorId: userId, targetType: "room", targetId: data.roomId },
           );
         }
       }
@@ -2254,12 +2674,20 @@ export const toggleVoice = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await db();
     const { userId } = context as Authed;
-    await requireRoomAccess(sql, userId, data.roomId);
+    const voiceRoom = await requireRoomAccess(sql, userId, data.roomId);
     const row = (
-      await sql`select in_voice from chat_members where room_id = ${data.roomId} and user_id = ${userId}`
+      await sql`select in_voice,stage_role,host_muted from chat_members where room_id = ${data.roomId} and user_id = ${userId}`
     )[0];
     if (!row) throw new Error("Join the room first.");
     const next = data.on == null ? !asBool(row.in_voice) : Boolean(data.on);
+    if (next) {
+      if (voiceRoom.scheduled_at && new Date(String(voiceRoom.scheduled_at)).getTime() > Date.now()) throw new Error('This room has not started yet.');
+      if (asBool(voiceRoom.locked) && voiceRoom.created_by !== userId) {
+        const cohost = (await sql`select 1 from room_cohosts where room_id=${data.roomId} and user_id=${userId}`).length > 0;
+        const membership = voiceRoom.community_id ? await membershipOf(sql,userId,String(voiceRoom.community_id)) : null;
+        if (!cohost && !(membership?.status === 'active' && canModerate(membership.role))) throw new Error('This room is locked.');
+      }
+    }
     await sql`update chat_members set in_voice = ${next} where room_id = ${data.roomId} and user_id = ${userId}`;
     return { inVoice: next };
   });
@@ -2273,6 +2701,7 @@ export const openDm = createServerFn({ method: "POST" })
     await guard(userId, "invite");
     await requireMinAge(sql, userId);
     if (userId === targetId) throw new Error("That’s you.");
+    await assertPeerContactAllowed(sql, userId, targetId);
     const blocked = await sql`
       select 1 from blocks
       where (blocker_id = ${userId} and blocked_id = ${targetId})
@@ -2309,6 +2738,26 @@ export const openDm = createServerFn({ method: "POST" })
       roomId = created[0]!.id;
       await sql`insert into chat_members (room_id, user_id) values (${roomId}, ${userId}) on conflict do nothing`;
       await sql`insert into chat_members (room_id, user_id) values (${roomId}, ${targetId}) on conflict do nothing`;
+      // A message from a stranger (someone they do not follow and share no community with) waits in their Requests.
+      const recipientFollowsSender =
+        (await sql`select 1 from profile_follows where follower_id = ${targetId} and followee_id = ${userId}`).length > 0;
+      const sharesCommunity =
+        (
+          await sql`
+            select 1 from memberships a join memberships b on a.community_id = b.community_id
+            where a.user_id = ${userId} and b.user_id = ${targetId} and a.status = 'active' and b.status = 'active' limit 1`
+        ).length > 0;
+      // Someone the recipient muted always waits in Requests too (quietly: see messageRequestFor).
+      const recipientMutedSender =
+        (await sql`select 1 from muted_people where user_id = ${targetId} and muted_user_id = ${userId}`).length > 0;
+      const request = messageRequestFor({ recipientFollowsSender, sharesCommunity, recipientMutedSender });
+      if (request.request)
+        await sql`insert into message_requests (room_id, user_id, sender_id, via_mute)
+          values (${roomId}, ${targetId}, ${userId}, ${request.viaMute}) on conflict do nothing`;
+    } else {
+      // Opening a conversation that is waiting in your own Requests accepts it.
+      await sql`update message_requests set status = 'accepted', decided_at = now()
+        where room_id = ${roomId} and user_id = ${userId} and status = 'pending'`;
     }
     return { roomId: Number(roomId) };
   });
@@ -2318,10 +2767,12 @@ export const listNotifications = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await db();
     const { userId } = context as Authed;
-    const rows = await sql`
-      select * from notifications where user_id = ${userId} order by id desc limit 50
-    `;
-    return rows.map(mapNote);
+    const rows = await sql.query(`select n.* from notifications n where n.user_id=$1 and (${notificationAccessSql('$1','n')}) order by n.id desc limit 50`,[userId]);
+    // Rows from before someone was muted are left out too.
+    const muted = await mutedSet(sql, userId);
+    return rows
+      .filter((r) => !(r.actor_id && muted.has(String(r.actor_id)) && muteSilences(String(r.kind))))
+      .map(mapNote);
   });
 
 export const markNotificationsRead = createServerFn({ method: "POST" })
@@ -2387,6 +2838,21 @@ export const updateSettings = createServerFn({ method: "POST" })
         notifyFollows: boolean;
         notifyChat: boolean;
         notifyWall: boolean;
+        pronouns: string;
+        location: string;
+        website: string;
+        headline: string;
+        /** Up to six keys from PROFILE_CATEGORY_OPTIONS. */
+        profileCategories: string[];
+        interests: string[];
+        privateAccount: boolean;
+        showReadReceipts: boolean;
+        /** 0-23, or null to switch quiet hours off. */
+        quietStart: number | null;
+        quietEnd: number | null;
+        notifyPrefs: Partial<NotifyPrefs>;
+        /** Time zone name, for example "America/Vancouver". */
+        timezone: string;
       }>,
     ) => d,
   )
@@ -2400,7 +2866,8 @@ export const updateSettings = createServerFn({ method: "POST" })
     const dmPrivacy = data.dmPrivacy ?? cur.dmPrivacy;
     const hideJoined = data.hideJoined ?? cur.hideJoined;
     const showOnline = data.showOnline ?? cur.showOnline;
-    const ageConfirmed = data.ageConfirmed ?? cur.ageConfirmed;
+    // Eligibility comes only from the birthday check; never trust a checkbox from either app.
+    const ageConfirmed = cur.ageConfirmed;
     const cover = data.cover != null && isAllowedCover(data.cover) ? data.cover : cur.cover;
     // Switching to a built-in banner (or none) replaces an uploaded wall cover, so its file is removed.
     if (data.cover != null && isAllowedCover(data.cover)) {
@@ -2425,6 +2892,58 @@ export const updateSettings = createServerFn({ method: "POST" })
     const notifyFollows = data.notifyFollows ?? cur.notifyFollows;
     const notifyChat = data.notifyChat ?? cur.notifyChat;
     const notifyWall = data.notifyWall ?? cur.notifyWall;
+    // ── Redesign fields (only what is sent changes) ──
+    const short = (value: string | undefined, current: string, max: number) =>
+      value === undefined ? current : String(value).replace(/\s+/g, " ").trim().slice(0, max);
+    const pronouns = short(data.pronouns, cur.pronouns, 24);
+    const location = short(data.location, cur.location, 40);
+    const headline = short(data.headline, cur.headline, 40);
+    const website = data.website === undefined ? cur.website : cleanWebsite(data.website);
+    const changedText = [
+      data.pronouns !== undefined ? pronouns : "",
+      data.location !== undefined ? location : "",
+      data.headline !== undefined ? headline : "",
+    ].filter(Boolean).join("\n");
+    if (changedText) {
+      // Profile text is public, like profile pictures: anything the safety check would hold is refused.
+      const err = scanText(changedText);
+      if (err) throw new Error(err);
+      const verdict = await checkContent({ text: changedText });
+      if (verdict.action === "hold") throw new Error("That can't be used on your profile. Please write something else.");
+    }
+    if (data.profileCategories !== undefined && (!Array.isArray(data.profileCategories) || data.profileCategories.length > 6))
+      throw new Error("Pick up to six profile categories.");
+    const profileCategories = data.profileCategories === undefined ? cur.profileCategories : cleanProfileCategories(data.profileCategories);
+    const interests = data.interests === undefined ? cur.interests : cleanInterests(data.interests);
+    const hour = (value: number | null | undefined, current: number | null) => {
+      if (value === undefined) return current;
+      if (value === null) return null;
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 0 || n > 23) throw new Error("Quiet hours use whole hours from 0 to 23.");
+      return n;
+    };
+    const quietStart = hour(data.quietStart, cur.quietStart);
+    const quietEnd = hour(data.quietEnd, cur.quietEnd);
+    const notifyPrefs = data.notifyPrefs === undefined ? cur.notifyPrefs : parseNotifyPrefs({ ...cur.notifyPrefs, ...data.notifyPrefs });
+    const timezone = data.timezone === undefined ? cur.timezone : String(data.timezone).trim().slice(0, 64);
+    if (!isValidTimezone(timezone)) throw new Error("Unknown time zone.");
+    const privateAccount = data.privateAccount ?? cur.privateAccount;
+    const showReadReceipts = data.showReadReceipts ?? cur.showReadReceipts;
+    await sql`
+      update profiles
+      set pronouns = ${pronouns}, location = ${location}, headline = ${headline}, website = ${website},
+          profile_categories = ${JSON.stringify(profileCategories)}, interests = ${JSON.stringify(interests)},
+          quiet_start = ${quietStart}, quiet_end = ${quietEnd}, notify_prefs = ${JSON.stringify(notifyPrefs)},
+          timezone = ${timezone}, private_account = ${Boolean(privateAccount)}, show_read_receipts = ${Boolean(showReadReceipts)}
+      where user_id = ${userId}
+    `;
+    // Making an account public again lets everyone who asked to follow in.
+    if (cur.privateAccount && !privateAccount) {
+      await sql`insert into profile_follows (follower_id, followee_id)
+        select follower_id, followee_id from follow_requests where followee_id = ${userId}
+        on conflict do nothing`;
+      await sql`delete from follow_requests where followee_id = ${userId}`;
+    }
     await sql`
       update profiles
       set display_name = ${displayName},
@@ -2495,6 +3014,8 @@ export const exportMyData = createServerFn({ method: "GET" })
     );
     const savedPosts =
       await sql`select post_id, created_at from favorites where user_id = ${userId}`;
+    const { exportV9PersonalData } = await import("./privacy-v9.server");
+    const v9 = await exportV9PersonalData(sql, userId);
     return {
       json: JSON.stringify({
         exportedAt: new Date().toISOString(),
@@ -2513,6 +3034,7 @@ export const exportMyData = createServerFn({ method: "GET" })
         sharedItems,
         postImages,
         savedPosts,
+        v9,
       }),
     };
   });
@@ -2527,21 +3049,55 @@ export const getPublicProfile = createServerFn({ method: "GET" })
       await sql`select * from profiles where handle = ${handle} or user_id = ${handle}`
     )[0];
     if (!row) throw new Error("No one by that name.");
-    const profile = mapProfile(row);
+    const isSelf = v.userId === row.user_id;
+    const profile = scrubProfile(mapProfile(row), isSelf);
     const blocked = v.userId
       ? (
           await sql`select 1 from blocks where blocker_id = ${v.userId} and blocked_id = ${profile.userId}`
         ).length > 0
       : false;
+    // Private accounts: people who do not follow them only see the header (name, picture, counts).
+    const followsThem = v.userId
+      ? (await sql`select 1 from profile_follows where follower_id = ${v.userId} and followee_id = ${profile.userId}`).length > 0
+      : false;
+    const requested = v.userId
+      ? (await sql`select 1 from follow_requests where follower_id = ${v.userId} and followee_id = ${profile.userId}`).length > 0
+      : false;
+    if (profile.privateAccount && !isSelf && !followsThem) {
+      const count = async (column: "follower_id" | "followee_id") =>
+        Number(
+          (
+            await sql.query<{ n: number }>(`select count(*)::int as n from profile_follows where ${column} = $1`, [profile.userId])
+          )[0]?.n ?? 0,
+        );
+      return {
+        profile,
+        joined: [] as { id: string; name: string; cover: string; category: string; nickname: string; role: string }[],
+        recent: [] as Post[],
+        pinnedWiki: [] as Post[],
+        blocked,
+        isSelf,
+        characters: [] as Character[],
+        titles: [] as MemberTitle[],
+        featuredTitle: null as MemberTitle | null,
+        achievements: [] as Achievement[],
+        showcase: [] as Achievement[],
+        stats: { reputation: profile.rep, following: await count("follower_id"), followers: await count("followee_id") },
+        viewerFollows: false,
+        wall: [] as WallPost[],
+        locked: true,
+        requested,
+      };
+    }
     const joined = profile.hideJoined
       ? []
       : (
-          await sql`
+          await sql.query(`
             select c.id, c.name, c.cover, c.category, m.nickname, m.role
             from memberships m join communities c on c.id = m.community_id
-            where m.user_id = ${profile.userId} and m.status = 'active' and c.visibility = 'public'
+            where m.user_id = $1 and m.status = 'active' and c.visibility = 'public' and (${communityMetadataAccessSql('$2','c')})
             order by m.joined_at desc
-          `
+          `,[profile.userId,v.userId??''])
         ).map((r) => ({
           id: String(r.id),
           name: String(r.name),
@@ -2555,8 +3111,9 @@ export const getPublicProfile = createServerFn({ method: "GET" })
          join communities com on com.id = p.community_id
          where p.author_user_id = $1 and com.visibility = 'public'
            and coalesce(p.hidden,false) = false and (p.expires_at is null or p.expires_at > now())
+           and ${visiblePosts("$2")}
          order by p.created_at desc limit 12`,
-      [profile.userId],
+      [profile.userId, v.userId ?? ""],
     );
     const recentIds = recentRows.map((r) => Number(r.id));
     const recentLikes = await likedSet(sql, v.userId, recentIds);
@@ -2578,8 +3135,9 @@ export const getPublicProfile = createServerFn({ method: "GET" })
          join wiki_profile_pins wp on wp.post_id = p.id
          where wp.user_id = $1 and p.type = 'wiki' and p.wiki_status = 'approved'
            and coalesce(p.hidden,false) = false and com.visibility = 'public'
+           and ${visiblePosts("$2")}
          order by wp.created_at desc limit 6`,
-      [profile.userId],
+      [profile.userId, v.userId ?? ""],
     );
     const pinnedWiki = pinRows
       .map((r) => mapPost(r, false))
@@ -2686,6 +3244,8 @@ export const getPublicProfile = createServerFn({ method: "GET" })
       stats: { reputation: profile.rep, following, followers },
       viewerFollows,
       wall,
+      locked: false,
+      requested,
     };
   });
 
@@ -2733,12 +3293,17 @@ export const createCommunity = createServerFn({ method: "POST" })
       id = `${slugify(name).slice(0, 24)}-${n}`;
     }
     const profile = mapProfile((await sql`select * from profiles where user_id = ${userId}`)[0]!);
+    if(data.ageGate>=16) {
+      const eligible=await sql`select 1 from profiles where user_id=${userId} and restricted_mode=false and
+        case when ${data.ageGate}>=18 then age_eligible_at_18 else age_eligible_at_16 end<=current_date`;
+      if(!eligible.length) throw new Error('You must meet the checked age requirement to create this community.');
+    }
     await sql`
       insert into communities (id, name, tagline, description, category, cover, hue, visibility, age_gate, rules, created_by, member_count)
       values (
         ${id}, ${name}, ${data.tagline.slice(0, 80)}, ${data.description.slice(0, 800)},
         ${data.category}, '/covers/hero.jpg', ${profile.avatarHue}, ${data.visibility},
-        ${18}, ${data.rules.slice(0, 2000)}, ${userId}, 1
+        ${data.ageGate === 18 ? 18 : data.ageGate === 16 ? 16 : 13}, ${data.rules.slice(0, 2000)}, ${userId}, 1
       )
     `;
     await sql`
@@ -2990,17 +3555,24 @@ export const getCommunityMedia = createServerFn({ method: "GET" })
 
 export const resolveReport = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { id: number; status: "resolved" | "dismissed"; slug: string }) => d)
+  .validator((d: { id: number; status: "resolved" | "dismissed"; slug: string }) => {
+    if (!Number.isSafeInteger(d?.id) || d.id < 1 || !["resolved", "dismissed"].includes(d?.status) || typeof d?.slug !== "string")
+      throw new Error("Choose a valid report and review decision.");
+    return d;
+  })
   .handler(async ({ context, data }) => {
     const sql = await db();
     const { userId } = context as Authed;
     const m = await membershipOf(sql, userId, data.slug);
     if (m?.status !== "active" || !canModerate(m?.role)) throw new Error("Leaders only.");
-    await sql`update reports set status = ${data.status} where id = ${data.id} and community_id = ${data.slug}`;
-    await sql`
+    const closed = await sql`with reviewed as (
+      update reports set status = ${data.status} where id = ${data.id} and community_id = ${data.slug}
+        and status = 'open' returning id
+    ), audited as (
       insert into audit_log (community_id, actor_id, action, detail)
-      values (${data.slug}, ${userId}, ${"report:" + data.status}, ${String(data.id)})
-    `;
+      select ${data.slug}, ${userId}, ${"report:" + data.status}, ${String(data.id)} from reviewed returning id
+    ) select id from reviewed`;
+    if (!closed.length) throw new Error("That report was already reviewed or no longer exists.");
     return { ok: true };
   });
 
@@ -3025,6 +3597,7 @@ export const reviewJoin = createServerFn({ method: "POST" })
         "You’re in",
         "A leader approved your request.",
         `/c/${data.slug}`,
+        { actorId: userId, targetType: "community", targetId: data.slug },
       );
     } else {
       await sql`delete from memberships where user_id = ${data.userId} and community_id = ${data.slug} and status = 'pending'`;
@@ -3105,8 +3678,10 @@ export const homeFeed = createServerFn({ method: "GET" })
          join communities com on com.id = p.community_id
          where p.featured = true and com.visibility = 'public' and coalesce(p.hidden,false) = false
            and (p.expires_at is null or p.expires_at > now())
+           and ${visiblePosts("$1")}
          order by p.created_at desc
          limit 12`,
+        [v.userId ?? ""],
       )
     ).map((r) => ({ ...mapPost(r, false), communityName: String(r.community_name) }));
     if (!v.userId) {
@@ -3126,7 +3701,7 @@ export const homeFeed = createServerFn({ method: "GET" })
     const ids = joined.map((c) => c.id);
     let latest: (Post & { communityName: string })[] = [];
     if (ids.length) {
-      const ph = ids.map((_, i) => `$${i + 1}`).join(",");
+      const ph = ids.map((_, i) => `$${i + 2}`).join(",");
       const raw = await sql.query(
         `select ${POST_SELECT}, com.name as community_name
          ${POST_JOIN}
@@ -3134,9 +3709,10 @@ export const homeFeed = createServerFn({ method: "GET" })
          where p.community_id in (${ph})
            and p.type <> 'wiki' and coalesce(p.hidden,false) = false
            and (p.expires_at is null or p.expires_at > now())
+           and ${visiblePosts("$1")}
          order by p.created_at desc
          limit 30`,
-        ids,
+        [v.userId, ...ids],
       );
       latest = raw.map((r) => ({ ...mapPost(r, false), communityName: String(r.community_name) }));
     }
@@ -3144,6 +3720,7 @@ export const homeFeed = createServerFn({ method: "GET" })
       await sql`select * from communities where visibility = 'public' order by member_count desc`
     ).map(mapCommunity);
     const blocked = await blockedSet(sql, v.userId);
+    const muted = await mutedSet(sql, v.userId);
     const banned = new Set(
       (
         await sql`select community_id from memberships where user_id = ${v.userId} and status = 'banned'`
@@ -3154,7 +3731,7 @@ export const homeFeed = createServerFn({ method: "GET" })
     const saved = await savedSet(sql, v.userId, allIds);
     const visible = (posts: typeof latest) =>
       posts
-        .filter((p) => !blocked.has(p.author.userId) && !banned.has(p.communityId))
+        .filter((p) => !blocked.has(p.author.userId) && !muted.has(p.author.userId) && !banned.has(p.communityId))
         .map((p) => ({ ...p, liked: liked.has(p.id), saved: saved.has(p.id) }));
     return {
       featured: visible(featured),
@@ -3179,9 +3756,9 @@ export const createRoom = createServerFn({ method: "POST" })
     await guard(userId, "post");
     await requireMinAge(sql, userId);
     const m = await requireActiveMember(sql, userId, data.slug);
-    if (data.kind !== "public" && !canLead(m.role)) {
-      throw new Error("Leaders open voice, screening, and private rooms.");
-    }
+    const { enforceCommunityPolicy } = await import('./community-v9');
+    if (data.kind !== 'public') await enforceCommunityPolicy(sql,userId,data.slug,'live');
+    if (data.kind === 'private' && !canLead(m.role)) throw new Error('Leaders open private community rooms.');
     const name = data.name.trim().slice(0, 40);
     if (name.length < 2) throw new Error("Name the room.");
     const created = await sql<{ id: number }>`
@@ -3299,7 +3876,8 @@ export const searchPeople = createServerFn({ method: "GET" })
     const rows = await sql`
       select handle, display_name, bio, avatar_hue, rep
       from profiles
-      where handle ilike ${like} or display_name ilike ${like}
+      where search_visible = true and (handle ilike ${like} or display_name ilike ${like})
+        and not exists (select 1 from identity_account_status s where s.user_id = profiles.user_id and (s.status = 'banned' or (s.status = 'suspended' and (s.until is null or s.until > now()))))
       order by rep desc
       limit 12
     `;
@@ -3347,7 +3925,7 @@ export const listShared = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     const community = await requireCommunity(sql, slug);
     const member = await membershipOf(sql, v.userId, slug);
-    if (!canRead(community, member)) throw new Error("This community is private.");
+    if (!(await canReadForViewer(sql, v.userId, community, member))) throw new Error("This community is private.");
     const rows = await sql`
       select s.*, coalesce(m.nickname, pr.display_name, 'Member') as author
       from shared_items s
@@ -3457,6 +4035,11 @@ export const deleteShared = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Follow or unfollow someone. Following a private account sends a request instead (they approve it in
+ * `followRequests` / `answerFollowRequest`); calling this again while it waits cancels the request.
+ * Returns `{ following, requested }`.
+ */
 export const toggleFollowProfile = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((targetId: string) => targetId)
@@ -3475,34 +4058,53 @@ export const toggleFollowProfile = createServerFn({ method: "POST" })
       await sql`select 1 from profile_follows where follower_id = ${userId} and followee_id = ${targetId}`;
     if (exists.length) {
       await sql`delete from profile_follows where follower_id = ${userId} and followee_id = ${targetId}`;
-      return { following: false };
+      return { following: false, requested: false };
     }
-    await sql`insert into profile_follows (follower_id, followee_id) values (${userId}, ${targetId})`;
+    const cancelled = await sql`delete from follow_requests where follower_id = ${userId} and followee_id = ${targetId} returning follower_id`;
+    if (cancelled.length) return { following: false, requested: false };
+    const target = (
+      await sql<{ handle: string; private_account: unknown }>`select handle, private_account from profiles where user_id = ${targetId}`
+    )[0];
+    if (!target) throw new Error("Profile not found");
     const me = (
       await sql<{
         display_name: string;
-      }>`select display_name from profiles where user_id = ${userId}`
+        handle: string;
+      }>`select display_name, handle from profiles where user_id = ${userId}`
     )[0];
+    if (asBool(target.private_account)) {
+      await sql`insert into follow_requests (follower_id, followee_id) values (${userId}, ${targetId}) on conflict do nothing`;
+      await notify(sql, targetId, "follow_request", "Follow request", `${me?.display_name ?? "Someone"} asked to follow you`, `/u/${target.handle}`, {
+        actorId: userId,
+        targetType: "profile",
+        targetId: userId,
+      });
+      return { following: false, requested: true };
+    }
+    await sql`insert into profile_follows (follower_id, followee_id) values (${userId}, ${targetId}) on conflict do nothing`;
     await notify(
       sql,
       targetId,
       "follow",
       "New follower",
       `${me?.display_name ?? "Someone"} followed you`,
-      `/u/${(await sql<{ handle: string }>`select handle from profiles where user_id = ${targetId}`)[0]?.handle ?? ""}`,
+      `/u/${me?.handle ?? target.handle}`,
+      { actorId: userId, targetType: "profile", targetId: userId },
     );
-    return { following: true };
+    return { following: true, requested: false };
   });
 
 export const listFollows = createServerFn({ method: "GET" })
   .middleware([optionalAuth])
   .validator((d: { handle: string; kind: "followers" | "following" }) => d)
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     const sql = await db();
     const profile = (
-      await sql<{ user_id: string }>`select user_id from profiles where handle = ${data.handle}`
+      await sql<{ user_id: string; hide_followers: boolean; hide_following: boolean; private_account:boolean }>`select user_id,hide_followers,hide_following,private_account from profiles where handle = ${data.handle}`
     )[0];
     if (!profile) return [];
+    const viewerId = (context as unknown as Viewer).userId;
+    if (profile.user_id !== viewerId && (asBool(profile.private_account) || asBool(data.kind === 'followers' ? profile.hide_followers : profile.hide_following))) return [];
     const rows =
       data.kind === "followers"
         ? await sql`
@@ -3609,6 +4211,7 @@ export const grantTitle = createServerFn({ method: "POST" })
       "New title",
       `You were given “${def.label}”.`,
       `/c/${data.slug}`,
+      { actorId: userId, targetType: "community", targetId: data.slug },
     );
     return { ok: true };
   });
@@ -3700,6 +4303,7 @@ export const addWallPost = createServerFn({ method: "POST" })
       "New wall note",
       data.body.slice(0, 80),
       `/u/${profile.handle}`,
+      { actorId: userId, targetType: "profile", targetId: profile.user_id },
     );
     return { ok: true, held };
   });
@@ -3761,6 +4365,7 @@ export const listFavorites = createServerFn({ method: "GET" })
        join communities com on com.id = p.community_id
        where f.user_id = $1 and coalesce(p.hidden,false) = false
          and (p.expires_at is null or p.expires_at > now())
+         and ${visiblePosts("$1")}
          and not exists (select 1 from blocks b where (b.blocker_id = $1 and b.blocked_id = p.author_user_id) or (b.blocked_id = $1 and b.blocker_id = p.author_user_id))
          and not exists (select 1 from memberships mm where mm.community_id = p.community_id and mm.user_id = $1 and mm.status = 'banned')
          and (com.visibility in ('public','unlisted') or exists (select 1 from memberships mm where mm.community_id = p.community_id and mm.user_id = $1 and mm.status = 'active'))
@@ -3791,6 +4396,8 @@ export const editPost = createServerFn({ method: "POST" })
     )[0];
     if (!post) throw new Error("Post not found");
     if (post.author_user_id !== userId) throw new Error("You can only edit your own post.");
+    const { enforceCommunityPolicy } = await import('./community-v9');
+    await enforceCommunityPolicy(sql,userId,data.slug,'post',`${data.title}\n${data.body}`);
     const err = scanText(`${data.title}\n${data.body}`);
     if (err) throw new Error(err);
     if (data.title.trim().length < 3) throw new Error("Give it a title.");
@@ -3799,6 +4406,8 @@ export const editPost = createServerFn({ method: "POST" })
       await sql`insert into wiki_revisions (post_id, editor_user_id, title, body)
         values (${data.postId}, ${userId}, ${post.title}, ${post.body})`;
     }
+    const wasHidden = asBool((await sql`select hidden from posts where id = ${data.postId}`)[0]?.hidden);
+    await sql`update posts set hidden = true where id = ${data.postId}`;
     await sql`
       update posts
       set title = ${data.title.trim().slice(0, 120)},
@@ -3813,6 +4422,7 @@ export const editPost = createServerFn({ method: "POST" })
       { targetType: "post", targetId: data.postId, authorId: userId, communityId: data.slug, text: `${data.title}\n${data.body}`, href: `/c/${data.slug}/p/${data.postId}` },
       notify,
     );
+    if (!held && !wasHidden) await sql`update posts set hidden = false where id = ${data.postId}`;
     return { ok: true, held };
   });
 
@@ -3879,12 +4489,18 @@ export const repost = createServerFn({ method: "POST" })
     await requireMinAge(sql, userId);
     await requirePostAccess(sql, userId, data.postId);
     await requireActiveMember(sql, userId, data.slug);
+    const sourceSettings = (await sql`select sharing_allowed from post_content_settings where post_id = ${data.postId}`)[0];
+    if (sourceSettings && !asBool(sourceSettings.sharing_allowed)) throw new Error('The author disabled sharing for this post.');
     const src = (
       await sql<{ id: number; title: string; body: string; community_id: string; type: string }>`
         select id, title, body, community_id, type from posts where id = ${data.postId}
       `
     )[0];
     if (!src) throw new Error("Post not found");
+    const paidSource = await sql`select 1 from billing_resource_requirements where
+      (resource_kind='post' and resource_id=${String(src.id)}) or
+      (resource_kind='community' and resource_id=${src.community_id} and ${src.community_id}<>${data.slug})`;
+    if(paidSource.length)throw new Error('Paid content can be shared as a link; copying it into a repost is disabled.');
     const sourceCommunity = await requireCommunity(sql, src.community_id);
     if (sourceCommunity.visibility !== "public" && data.slug !== src.community_id)
       throw new Error("Private community posts can only be shared inside their community.");
@@ -3946,7 +4562,7 @@ export const editMessage = createServerFn({ method: "POST" })
     if (asBool(row.deleted)) throw new Error("That message was removed.");
     if ((await sql`select 1 from message_media where message_id = ${data.messageId}`).length)
       throw new Error("Media messages cannot be edited. Delete and resend instead.");
-    await sql`update messages set body = ${body}, edited_at = now() where id = ${data.messageId}`;
+    await sql`update messages set body = ${body}, edited_at = now(), held=true where id = ${data.messageId}`;
     const room = (await sql<{ community_id: string | null }>`select community_id from chat_rooms where id = ${data.roomId}`)[0];
     const { held } = await reviewContent(
       sql,
@@ -3960,6 +4576,7 @@ export const editMessage = createServerFn({ method: "POST" })
       },
       notify,
     );
+    if(!held)await sql`update messages set held=false where id=${data.messageId}`;
     return { ok: true, held };
   });
 
@@ -4007,7 +4624,11 @@ export const sendBroadcast = createServerFn({ method: "POST" })
     `;
     for (const mem of members) {
       if (mem.user_id === userId) continue;
-      await notify(sql, mem.user_id, "broadcast", "Hall broadcast", body, `/c/${data.slug}`);
+      await notify(sql, mem.user_id, "broadcast", "Hall broadcast", body, `/c/${data.slug}`, {
+        actorId: userId,
+        targetType: "community",
+        targetId: data.slug,
+      });
     }
     await sql`
       insert into audit_log (community_id, actor_id, action, detail)
@@ -4091,6 +4712,7 @@ export const issueStrike = createServerFn({ method: "POST" })
       "Strike issued",
       data.reason.slice(0, 80),
       `/c/${data.slug}`,
+      { targetType: "community", targetId: data.slug },
     );
     if (n >= 3) {
       await sql`update memberships set status = 'banned' where user_id = ${data.userId} and community_id = ${data.slug}`;
@@ -4102,6 +4724,7 @@ export const issueStrike = createServerFn({ method: "POST" })
         "Removed after 3 strikes",
         data.slug,
         `/c/${data.slug}`,
+        { targetType: "community", targetId: data.slug },
       );
     }
     await sql`
@@ -4119,7 +4742,7 @@ export const weeklyRank = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     const community = await requireCommunity(sql, slug);
     const member = await membershipOf(sql, v.userId, slug);
-    if (!canRead(community, member)) throw new Error("This community is private.");
+    if (!(await canReadForViewer(sql, v.userId, community, member))) throw new Error("This community is private.");
     const rows = await sql.query(
       // Ranked by the same week score that is shown (3 per like received, 4 per post), then all-time rep.
       `select * from (
@@ -4165,11 +4788,11 @@ export const listEvents = createServerFn({ method: "GET" })
     const v = context as unknown as Viewer;
     const community = await requireCommunity(sql, slug);
     const member = await membershipOf(sql, v.userId, slug);
-    if (!canRead(community, member)) throw new Error("This community is private.");
+    if (!(await canReadForViewer(sql, v.userId, community, member))) throw new Error("This community is private.");
     const eventRows = await sql.query(
       `select e.*, ${EVENT_COUNTS}
        from events e
-       where e.community_id = $1
+       where e.community_id = $1 and ${paidResourceAccessSql('$2','event','e.id')}
        order by e.starts_at desc
        limit 30`,
       [slug, v.userId ?? ""],
@@ -4231,6 +4854,7 @@ export const rsvpEvent = createServerFn({ method: "POST" })
       await sql`select id from events where id = ${data.eventId} and community_id = ${data.slug}`
     )[0];
     if (!ev) throw new Error("Event not found.");
+    await (await import('./billing.server')).assertPaidResourceAccess(sql,userId,'event',data.eventId);
     const exists =
       await sql`select 1 from event_rsvps where event_id = ${data.eventId} and user_id = ${userId}`;
     if (exists.length) {
@@ -4238,6 +4862,7 @@ export const rsvpEvent = createServerFn({ method: "POST" })
       return { going: false };
     }
     await sql`insert into event_rsvps (event_id, user_id) values (${data.eventId}, ${userId})`;
+    lastReminderSweep.delete(userId); // a reminder for this event may be due straight away
     return { going: true };
   });
 
@@ -4265,6 +4890,7 @@ export const ringCall = createServerFn({ method: "POST" })
         me?.display_name ?? "Someone",
         "Incoming call",
         `/chats/${roomId}?call=1`,
+        { actorId: userId, targetType: "room", targetId: roomId },
       );
     }
     return { ok: true, name: label };
@@ -4275,13 +4901,13 @@ export const listIncomingCalls = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await db();
     const { userId } = context as Authed;
-    const rows = await sql`
+    const rows = await sql.query(`
       select id, title, body, href, created_at
-      from notifications
-      where user_id = ${userId} and kind = 'call' and read = false
+      from notifications n
+      where user_id = $1 and kind = 'call' and read = false and (${notificationAccessSql('$1','n')})
       order by id desc
       limit 8
-    `;
+    `,[userId]);
     const cutoff = Date.now() - 45_000;
     return rows
       .map((r) => ({
@@ -4342,6 +4968,14 @@ export const internals = {
   db,
   notify,
   canRead,
+  canReadForViewer,
+  assertCommunityReadable,
+  assertAccountAllowed,
+  communityMetadataAccessSql,
+  assertPeerContactAllowed,
+  communityAccessSql,
+  paidRoomAccessSql,
+  notificationAccessSql,
   membershipOf,
   requireCommunity,
   requireMinAge,
@@ -4351,8 +4985,17 @@ export const internals = {
   requireRoomAccess,
   assertNotMuted,
   blockedSet,
+  mutedSet,
   likedSet,
   savedSet,
   POST_SELECT,
   POST_JOIN,
+  visiblePosts,
+  canSeePostRow,
+  ensureEventReminders,
+  notifyMentions,
+  attachPeer,
+  syncAchievements,
+  achievementsFor,
+  addToOpenRooms,
 };

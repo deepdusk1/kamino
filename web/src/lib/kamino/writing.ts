@@ -8,8 +8,8 @@ const baseDraftSchema = z.object({
   warning: z.string().max(120),
   opts: z.array(z.string().max(200)).length(5),
   image: z.string().max(2800000),
-  /** More pictures for an image post (the cover is `image`). */
-  album: z.array(z.string().max(2800000)).max(5).optional(),
+  /** More pictures for an image post (the cover is `image`). Same limit as MAX_ALBUM_EXTRAS in albums.ts. */
+  album: z.array(z.string().max(2800000)).max(9).optional(),
   commentsOff: z.boolean(),
   announce: z.boolean(),
   questions: z
@@ -27,11 +27,11 @@ const baseDraftSchema = z.object({
   /** Whole-quiz time limit in seconds; empty or 0 means untimed. */
   timeLimitSec: z.number().int().min(0).max(3600).optional(),
   /** Short text shown with each scene of a story (the cover is scene 1, then the album). */
-  captions: z.array(z.string().max(140)).max(6).optional(),
+  captions: z.array(z.string().max(140)).max(10).optional(),
 });
-/** Everything in a draft (pictures included) may not exceed about 16 MB. */
+/** Everything in a draft (pictures included) may not exceed about 24 MB (a cover plus a full album fits). */
 export const draftContentSchema = baseDraftSchema.refine(
-  (draft) => JSON.stringify(draft).length <= 16_000_000,
+  (draft) => JSON.stringify(draft).length <= 24_000_000,
   {
     message: "This draft is too large. Use fewer or smaller pictures.",
   },

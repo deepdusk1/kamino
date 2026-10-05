@@ -68,7 +68,7 @@ export function IncomingCall() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex flex-col items-center justify-between bg-bg px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-16"
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-between bg-[radial-gradient(ellipse_at_top,var(--color-tint-violet),var(--color-bg)_70%)] bg-bg px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-16"
       role="dialog"
       aria-label="Incoming call"
     >
@@ -77,15 +77,15 @@ export function IncomingCall() {
           <Face name={incoming.name} hue={hue} size="call" />
         </span>
         <div className="text-center">
-          <p className="font-display text-3xl font-extrabold tracking-tight">{incoming.name}</p>
-          <p className="mt-1 text-sm font-bold text-ok">Incoming call</p>
+          <p className="text-3xl font-extrabold tracking-[-0.03em] text-ink">{incoming.name}</p>
+          <p className="mt-1 text-sm font-bold text-green-ink">Incoming call</p>
         </div>
       </div>
       <div className="flex w-full max-w-xs items-center justify-around pb-4">
         <button
           type="button"
           onClick={decline}
-          className="grid size-16 place-items-center rounded-full bg-danger text-fg"
+          className="k-focus grid size-16 place-items-center rounded-full bg-red-strong text-white shadow-lift transition-transform active:scale-95"
           aria-label="Decline"
         >
           <PhoneOff className="size-7" />
@@ -93,7 +93,7 @@ export function IncomingCall() {
         <button
           type="button"
           onClick={answer}
-          className="grid size-16 place-items-center rounded-full bg-ok text-bg"
+          className="k-focus grid size-16 place-items-center rounded-full bg-green-strong text-white shadow-lift transition-transform active:scale-95"
           aria-label="Answer"
         >
           <Phone className="size-7" />

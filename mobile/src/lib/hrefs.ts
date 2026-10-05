@@ -3,6 +3,15 @@
  * This turns them into screens of the phone app. Unknown links open the notification list.
  */
 export function appHrefFromServerHref(href: string): string {
+  if(href==='/') return '/';
+  if(href==='/support') return '/tools?tab=support';
+  if(href==='/creator') return '/tools?tab=creator';
+  if(href==='/discover-plus') return '/tools?tab=discovery';
+  if(href==='/safety' || href==='/admin/safety' || href==='/admin/reports') return '/safety';
+  const invite = /^\/invite\/([a-z0-9-]+)(?:[?#]|$)/i.exec(href);
+  if(invite) return `/invite/${invite[1]}`;
+  const tool = /^\/c\/([^/]+)\/(events|tools)$/.exec(href);
+  if(tool) return `/community/${tool[1]}/${tool[2]}`;
   const post = /^\/c\/([^/]+)\/p\/(\d+)$/.exec(href);
   if (post) return `/community/${post[1]}/post/${post[2]}`;
   const story = /^\/c\/([^/]+)\/roleplay\/(\d+)$/.exec(href);

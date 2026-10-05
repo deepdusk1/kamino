@@ -1,17 +1,21 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { api } from "@/api/endpoints";
 import type { PostPage } from "@/api/models";
 import { useAction } from "@/lib/errors";
 import { timeAgo } from "@/lib/format";
-import { space } from "@/theme";
-import { Button, Card, Chip, Field, Sheet, Txt } from "./ui";
+import { notify } from "@/components/community/platform";
+import { Pill } from "@/components/k";
+import { font, radius, space, useTheme } from "@/theme";
+import { Button, Card, Field, Sheet, Txt } from "./ui";
 
 const STATUS_LABEL = { draft: "Draft", pending: "Waiting for review", approved: "Approved", rejected: "Changes requested" } as const;
+const STATUS_TONE = { draft: "neutral", pending: "orange", approved: "green", rejected: "red" } as const;
 
 /** Everything specific to wiki pages: review, suggestions from other members, history, pinning. */
 export function WikiTools({ page, isAuthor, isModerator, isMember }: { page: PostPage; isAuthor: boolean; isModerator: boolean; isMember: boolean }) {
+  const theme = useTheme();
   const queryClient = useQueryClient();
   const { post } = page;
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -32,14 +36,14 @@ export function WikiTools({ page, isAuthor, isModerator, isMember }: { page: Pos
     setReviewNote("");
     await refresh();
   });
-  const [copy, copying] = useAction(async () => { await api.copyWiki(post.id); Alert.alert("Copied", "A copy is in your drafts for this community."); });
+  const [copy, copying] = useAction(async () => { await api.copyWiki(post.id); notify("Copied", "A copy is in your drafts for this community."); });
   const [pin, pinning] = useAction(async () => { await api.pinWiki(post.id); await refresh(); });
   const [suggest, suggesting] = useAction(async () => {
     await api.proposeWikiEdit({ postId: post.id, title, body, note: note.trim() || undefined });
     setSuggestOpen(false);
     setNote("");
     await proposals.refetch();
-    Alert.alert("Suggestion sent", "The page's author or a moderator will review it.");
+    notify("Suggestion sent", "The page's author or a moderator will review it.");
   });
   const [decide, deciding] = useAction(async (proposalId: number, decision: "accepted" | "rejected") => {
     await api.resolveWikiProposal(proposalId, decision);
@@ -54,13 +58,14 @@ export function WikiTools({ page, isAuthor, isModerator, isMember }: { page: Pos
   const open = (proposals.data?.proposals ?? []).filter((p) => p.status === "open");
 
   return (
-    <View style={{ gap: space.md }}>
+    <View style={{ gap: space.md, backgroundColor: theme.surface, borderRadius: radius.card, borderWidth: 1, borderColor: theme.border, padding: 14 }}>
       <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap", alignItems: "center" }}>
-        <Chip label={STATUS_LABEL[post.wikiStatus]} tone={post.wikiStatus === "approved" ? "ok" : post.wikiStatus === "rejected" ? "danger" : "default"} />
-        {post.payload.category ? <Chip label={post.payload.category} /> : null}
+        <Pill label="Wiki" icon="book" tone="green" variant="solid" />
+        <Pill label={STATUS_LABEL[post.wikiStatus]} tone={STATUS_TONE[post.wikiStatus]} />
+        {post.payload.category ? <Pill label={post.payload.category} icon="folder-open-outline" tone="violet" /> : null}
       </View>
-      {post.wikiReviewNote ? <Txt variant="small" tone="muted">Reviewer note: {post.wikiReviewNote}</Txt> : null}
-      {contributors.data?.length ? <Txt variant="caption" tone="subtle">Contributors: {contributors.data.map((c) => c.name).join(", ")}</Txt> : null}
+      {post.wikiReviewNote ? <Txt style={{ fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: theme.muted }}>Reviewer note: {post.wikiReviewNote}</Txt> : null}
+      {contributors.data?.length ? <Txt style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: theme.subtle }}>✍️ Contributors: {contributors.data.map((c) => c.name).join(", ")}</Txt> : null}
 
       {isAuthor && (post.wikiStatus === "draft" || post.wikiStatus === "rejected") ? (
         <Button label="Submit for review" onPress={() => void submitForReview()} busy={submitting} />
@@ -88,7 +93,7 @@ export function WikiTools({ page, isAuthor, isModerator, isMember }: { page: Pos
 
       {proposals.data && proposals.data.proposals.length ? (
         <View style={{ gap: space.sm }}>
-          <Txt variant="label" tone="subtle">{proposals.data.canReview ? "Suggested edits" : "Your suggestions"}</Txt>
+          <Txt style={{ fontFamily: font.heavy, fontSize: 14, color: theme.ink }}>{proposals.data.canReview ? "Suggested edits" : "Your suggestions"}</Txt>
           {proposals.data.proposals.map((p) => (
             <Card key={p.id}>
               <Txt variant="small" tone="muted">{p.proposer} · {timeAgo(p.createdAt)} · {p.status}</Txt>

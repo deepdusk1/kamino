@@ -10,28 +10,47 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin-analytics'
+import { Route as CaptchaRouteImport } from './routes/captcha'
 import { Route as ChatsRouteImport } from './routes/chats'
+import { Route as ContentStudioRouteImport } from './routes/content-studio'
+import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
+import { Route as DiscoverPlusRouteImport } from './routes/discover-plus'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as InboxToolsRouteImport } from './routes/inbox-tools'
+import { Route as KitRouteImport } from './routes/kit'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MarketplaceRouteImport } from './routes/marketplace'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PrivacyDashboardRouteImport } from './routes/privacy-dashboard'
+import { Route as ProfileStoriesRouteImport } from './routes/profile-stories'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SafetyRouteImport } from './routes/safety'
 import { Route as SavedRouteImport } from './routes/saved'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as WalletRouteImport } from './routes/wallet'
+import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as ApiRtcRouteImport } from './routes/api/rtc'
 import { Route as CSlugRouteImport } from './routes/c/$slug'
 import { Route as ChatsIndexRouteImport } from './routes/chats/index'
 import { Route as ChatsRoomIdRouteImport } from './routes/chats/$roomId'
+import { Route as InviteCodeRouteImport } from './routes/invite/$code'
 import { Route as UHandleRouteImport } from './routes/u/$handle'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiV1JobsRouteImport } from './routes/api/v1/jobs'
 import { Route as CSlugIndexRouteImport } from './routes/c/$slug/index'
 import { Route as CSlugChatsRouteImport } from './routes/c/$slug/chats'
 import { Route as CSlugEventsRouteImport } from './routes/c/$slug/events'
@@ -39,7 +58,13 @@ import { Route as CSlugFilesRouteImport } from './routes/c/$slug/files'
 import { Route as CSlugMembersRouteImport } from './routes/c/$slug/members'
 import { Route as CSlugModRouteImport } from './routes/c/$slug/mod'
 import { Route as CSlugRankRouteImport } from './routes/c/$slug/rank'
+import { Route as CSlugToolsRouteImport } from './routes/c/$slug/tools'
 import { Route as CSlugWikiRouteImport } from './routes/c/$slug/wiki'
+import { Route as ApiV1AuthMobileCallbackRouteImport } from './routes/api/v1/auth/mobile-callback'
+import { Route as ApiV1AuthMobileStartRouteImport } from './routes/api/v1/auth/mobile-start'
+import { Route as ApiV1BillingStripeWebhookRouteImport } from './routes/api/v1/billing/stripe-webhook'
+import { Route as ApiV1ContentMediaMediaIdRouteImport } from './routes/api/v1/content-media/$mediaId'
+import { Route as ApiV1ProfileStoryMediaStoryIdRouteImport } from './routes/api/v1/profile-story-media/$storyId'
 import { Route as ApiV1RpcNameRouteImport } from './routes/api/v1/rpc/$name'
 import { Route as CSlugPPostIdRouteImport } from './routes/c/$slug/p/$postId'
 import { Route as CSlugRoleplayIndexRouteImport } from './routes/c/$slug/roleplay/index'
@@ -55,14 +80,44 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/admin-analytics',
+  path: '/admin-analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CaptchaRoute = CaptchaRouteImport.update({
+  id: '/captcha',
+  path: '/captcha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ChatsRoute = ChatsRouteImport.update({
   id: '/chats',
   path: '/chats',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContentStudioRoute = ContentStudioRouteImport.update({
+  id: '/content-studio',
+  path: '/content-studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreatorRoute = CreatorRouteImport.update({
+  id: '/creator',
+  path: '/creator',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DeleteAccountRoute = DeleteAccountRouteImport.update({
   id: '/delete-account',
   path: '/delete-account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DiscoverPlusRoute = DiscoverPlusRouteImport.update({
+  id: '/discover-plus',
+  path: '/discover-plus',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExploreRoute = ExploreRouteImport.update({
@@ -75,9 +130,24 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InboxToolsRoute = InboxToolsRouteImport.update({
+  id: '/inbox-tools',
+  path: '/inbox-tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KitRoute = KitRouteImport.update({
+  id: '/kit',
+  path: '/kit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketplaceRoute = MarketplaceRouteImport.update({
+  id: '/marketplace',
+  path: '/marketplace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MeRoute = MeRouteImport.update({
@@ -95,9 +165,24 @@ const NotificationsRoute = NotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyDashboardRoute = PrivacyDashboardRouteImport.update({
+  id: '/privacy-dashboard',
+  path: '/privacy-dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileStoriesRoute = ProfileStoriesRouteImport.update({
+  id: '/profile-stories',
+  path: '/profile-stories',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -115,9 +200,19 @@ const SavedRoute = SavedRouteImport.update({
   path: '/saved',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -125,15 +220,30 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TutorialRoute = TutorialRouteImport.update({
+  id: '/tutorial',
+  path: '/tutorial',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WalletRoute = WalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminSafetyRoute = AdminSafetyRouteImport.update({
-  id: '/admin/safety',
-  path: '/admin/safety',
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminReportsRoute = AdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSafetyRoute = AdminSafetyRouteImport.update({
+  id: '/safety',
+  path: '/safety',
+  getParentRoute: () => AdminRoute,
 } as any)
 const ApiRtcRoute = ApiRtcRouteImport.update({
   id: '/api/rtc',
@@ -155,6 +265,11 @@ const ChatsRoomIdRoute = ChatsRoomIdRouteImport.update({
   path: '/$roomId',
   getParentRoute: () => ChatsRoute,
 } as any)
+const InviteCodeRoute = InviteCodeRouteImport.update({
+  id: '/invite/$code',
+  path: '/invite/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UHandleRoute = UHandleRouteImport.update({
   id: '/u/$handle',
   path: '/u/$handle',
@@ -163,6 +278,11 @@ const UHandleRoute = UHandleRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1JobsRoute = ApiV1JobsRouteImport.update({
+  id: '/api/v1/jobs',
+  path: '/api/v1/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CSlugIndexRoute = CSlugIndexRouteImport.update({
@@ -200,11 +320,44 @@ const CSlugRankRoute = CSlugRankRouteImport.update({
   path: '/rank',
   getParentRoute: () => CSlugRoute,
 } as any)
+const CSlugToolsRoute = CSlugToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
+  getParentRoute: () => CSlugRoute,
+} as any)
 const CSlugWikiRoute = CSlugWikiRouteImport.update({
   id: '/wiki',
   path: '/wiki',
   getParentRoute: () => CSlugRoute,
 } as any)
+const ApiV1AuthMobileCallbackRoute = ApiV1AuthMobileCallbackRouteImport.update({
+  id: '/api/v1/auth/mobile-callback',
+  path: '/api/v1/auth/mobile-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AuthMobileStartRoute = ApiV1AuthMobileStartRouteImport.update({
+  id: '/api/v1/auth/mobile-start',
+  path: '/api/v1/auth/mobile-start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1BillingStripeWebhookRoute =
+  ApiV1BillingStripeWebhookRouteImport.update({
+    id: '/api/v1/billing/stripe-webhook',
+    path: '/api/v1/billing/stripe-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1ContentMediaMediaIdRoute =
+  ApiV1ContentMediaMediaIdRouteImport.update({
+    id: '/api/v1/content-media/$mediaId',
+    path: '/api/v1/content-media/$mediaId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1ProfileStoryMediaStoryIdRoute =
+  ApiV1ProfileStoryMediaStoryIdRouteImport.update({
+    id: '/api/v1/profile-story-media/$storyId',
+    path: '/api/v1/profile-story-media/$storyId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1RpcNameRoute = ApiV1RpcNameRouteImport.update({
   id: '/api/v1/rpc/$name',
   path: '/api/v1/rpc/$name',
@@ -256,36 +409,61 @@ const ApiV1MediaPostPostIdPositionRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/admin-analytics': typeof AdminAnalyticsRoute
+  '/captcha': typeof CaptchaRoute
   '/chats': typeof ChatsRouteWithChildren
+  '/content-studio': typeof ContentStudioRoute
+  '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/discover-plus': typeof DiscoverPlusRoute
   '/explore': typeof ExploreRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/inbox-tools': typeof InboxToolsRoute
+  '/kit': typeof KitRoute
   '/login': typeof LoginRoute
+  '/marketplace': typeof MarketplaceRoute
   '/me': typeof MeRoute
   '/new': typeof NewRoute
   '/notifications': typeof NotificationsRoute
+  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/privacy-dashboard': typeof PrivacyDashboardRoute
+  '/profile-stories': typeof ProfileStoriesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
+  '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/tutorial': typeof TutorialRoute
   '/wallet': typeof WalletRoute
+  '/welcome': typeof WelcomeRoute
+  '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
+  '/invite/$code': typeof InviteCodeRoute
   '/u/$handle': typeof UHandleRoute
   '/chats/': typeof ChatsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/v1/jobs': typeof ApiV1JobsRoute
   '/c/$slug/chats': typeof CSlugChatsRoute
   '/c/$slug/events': typeof CSlugEventsRoute
   '/c/$slug/files': typeof CSlugFilesRoute
   '/c/$slug/members': typeof CSlugMembersRoute
   '/c/$slug/mod': typeof CSlugModRoute
   '/c/$slug/rank': typeof CSlugRankRoute
+  '/c/$slug/tools': typeof CSlugToolsRoute
   '/c/$slug/wiki': typeof CSlugWikiRoute
   '/c/$slug/': typeof CSlugIndexRoute
+  '/api/v1/auth/mobile-callback': typeof ApiV1AuthMobileCallbackRoute
+  '/api/v1/auth/mobile-start': typeof ApiV1AuthMobileStartRoute
+  '/api/v1/billing/stripe-webhook': typeof ApiV1BillingStripeWebhookRoute
+  '/api/v1/content-media/$mediaId': typeof ApiV1ContentMediaMediaIdRoute
+  '/api/v1/profile-story-media/$storyId': typeof ApiV1ProfileStoryMediaStoryIdRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
   '/c/$slug/roleplay/$sceneId': typeof CSlugRoleplaySceneIdRoute
@@ -298,34 +476,59 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/admin-analytics': typeof AdminAnalyticsRoute
+  '/captcha': typeof CaptchaRoute
+  '/content-studio': typeof ContentStudioRoute
+  '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/discover-plus': typeof DiscoverPlusRoute
   '/explore': typeof ExploreRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/inbox-tools': typeof InboxToolsRoute
+  '/kit': typeof KitRoute
   '/login': typeof LoginRoute
+  '/marketplace': typeof MarketplaceRoute
   '/me': typeof MeRoute
   '/new': typeof NewRoute
   '/notifications': typeof NotificationsRoute
+  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/privacy-dashboard': typeof PrivacyDashboardRoute
+  '/profile-stories': typeof ProfileStoriesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
+  '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/tutorial': typeof TutorialRoute
   '/wallet': typeof WalletRoute
+  '/welcome': typeof WelcomeRoute
+  '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/chats/$roomId': typeof ChatsRoomIdRoute
+  '/invite/$code': typeof InviteCodeRoute
   '/u/$handle': typeof UHandleRoute
   '/chats': typeof ChatsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/v1/jobs': typeof ApiV1JobsRoute
   '/c/$slug/chats': typeof CSlugChatsRoute
   '/c/$slug/events': typeof CSlugEventsRoute
   '/c/$slug/files': typeof CSlugFilesRoute
   '/c/$slug/members': typeof CSlugMembersRoute
   '/c/$slug/mod': typeof CSlugModRoute
   '/c/$slug/rank': typeof CSlugRankRoute
+  '/c/$slug/tools': typeof CSlugToolsRoute
   '/c/$slug/wiki': typeof CSlugWikiRoute
   '/c/$slug': typeof CSlugIndexRoute
+  '/api/v1/auth/mobile-callback': typeof ApiV1AuthMobileCallbackRoute
+  '/api/v1/auth/mobile-start': typeof ApiV1AuthMobileStartRoute
+  '/api/v1/billing/stripe-webhook': typeof ApiV1BillingStripeWebhookRoute
+  '/api/v1/content-media/$mediaId': typeof ApiV1ContentMediaMediaIdRoute
+  '/api/v1/profile-story-media/$storyId': typeof ApiV1ProfileStoryMediaStoryIdRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
   '/c/$slug/roleplay/$sceneId': typeof CSlugRoleplaySceneIdRoute
@@ -339,36 +542,61 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/admin-analytics': typeof AdminAnalyticsRoute
+  '/captcha': typeof CaptchaRoute
   '/chats': typeof ChatsRouteWithChildren
+  '/content-studio': typeof ContentStudioRoute
+  '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/discover-plus': typeof DiscoverPlusRoute
   '/explore': typeof ExploreRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/inbox-tools': typeof InboxToolsRoute
+  '/kit': typeof KitRoute
   '/login': typeof LoginRoute
+  '/marketplace': typeof MarketplaceRoute
   '/me': typeof MeRoute
   '/new': typeof NewRoute
   '/notifications': typeof NotificationsRoute
+  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/privacy-dashboard': typeof PrivacyDashboardRoute
+  '/profile-stories': typeof ProfileStoriesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
+  '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/tutorial': typeof TutorialRoute
   '/wallet': typeof WalletRoute
+  '/welcome': typeof WelcomeRoute
+  '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
+  '/invite/$code': typeof InviteCodeRoute
   '/u/$handle': typeof UHandleRoute
   '/chats/': typeof ChatsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/v1/jobs': typeof ApiV1JobsRoute
   '/c/$slug/chats': typeof CSlugChatsRoute
   '/c/$slug/events': typeof CSlugEventsRoute
   '/c/$slug/files': typeof CSlugFilesRoute
   '/c/$slug/members': typeof CSlugMembersRoute
   '/c/$slug/mod': typeof CSlugModRoute
   '/c/$slug/rank': typeof CSlugRankRoute
+  '/c/$slug/tools': typeof CSlugToolsRoute
   '/c/$slug/wiki': typeof CSlugWikiRoute
   '/c/$slug/': typeof CSlugIndexRoute
+  '/api/v1/auth/mobile-callback': typeof ApiV1AuthMobileCallbackRoute
+  '/api/v1/auth/mobile-start': typeof ApiV1AuthMobileStartRoute
+  '/api/v1/billing/stripe-webhook': typeof ApiV1BillingStripeWebhookRoute
+  '/api/v1/content-media/$mediaId': typeof ApiV1ContentMediaMediaIdRoute
+  '/api/v1/profile-story-media/$storyId': typeof ApiV1ProfileStoryMediaStoryIdRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
   '/c/$slug/roleplay/$sceneId': typeof CSlugRoleplaySceneIdRoute
@@ -383,36 +611,61 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
+    | '/admin-analytics'
+    | '/captcha'
     | '/chats'
+    | '/content-studio'
+    | '/creator'
     | '/delete-account'
+    | '/discover-plus'
     | '/explore'
     | '/forgot-password'
+    | '/inbox-tools'
+    | '/kit'
     | '/login'
+    | '/marketplace'
     | '/me'
     | '/new'
     | '/notifications'
+    | '/onboarding'
     | '/privacy'
+    | '/privacy-dashboard'
+    | '/profile-stories'
     | '/reset-password'
     | '/safety'
     | '/saved'
+    | '/security'
     | '/settings'
+    | '/support'
     | '/terms'
+    | '/tutorial'
     | '/wallet'
+    | '/welcome'
+    | '/admin/reports'
     | '/admin/safety'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
+    | '/invite/$code'
     | '/u/$handle'
     | '/chats/'
     | '/api/auth/$'
+    | '/api/v1/jobs'
     | '/c/$slug/chats'
     | '/c/$slug/events'
     | '/c/$slug/files'
     | '/c/$slug/members'
     | '/c/$slug/mod'
     | '/c/$slug/rank'
+    | '/c/$slug/tools'
     | '/c/$slug/wiki'
     | '/c/$slug/'
+    | '/api/v1/auth/mobile-callback'
+    | '/api/v1/auth/mobile-start'
+    | '/api/v1/billing/stripe-webhook'
+    | '/api/v1/content-media/$mediaId'
+    | '/api/v1/profile-story-media/$storyId'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
     | '/c/$slug/roleplay/$sceneId'
@@ -425,34 +678,59 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
+    | '/admin-analytics'
+    | '/captcha'
+    | '/content-studio'
+    | '/creator'
     | '/delete-account'
+    | '/discover-plus'
     | '/explore'
     | '/forgot-password'
+    | '/inbox-tools'
+    | '/kit'
     | '/login'
+    | '/marketplace'
     | '/me'
     | '/new'
     | '/notifications'
+    | '/onboarding'
     | '/privacy'
+    | '/privacy-dashboard'
+    | '/profile-stories'
     | '/reset-password'
     | '/safety'
     | '/saved'
+    | '/security'
     | '/settings'
+    | '/support'
     | '/terms'
+    | '/tutorial'
     | '/wallet'
+    | '/welcome'
+    | '/admin/reports'
     | '/admin/safety'
     | '/api/rtc'
     | '/chats/$roomId'
+    | '/invite/$code'
     | '/u/$handle'
     | '/chats'
     | '/api/auth/$'
+    | '/api/v1/jobs'
     | '/c/$slug/chats'
     | '/c/$slug/events'
     | '/c/$slug/files'
     | '/c/$slug/members'
     | '/c/$slug/mod'
     | '/c/$slug/rank'
+    | '/c/$slug/tools'
     | '/c/$slug/wiki'
     | '/c/$slug'
+    | '/api/v1/auth/mobile-callback'
+    | '/api/v1/auth/mobile-start'
+    | '/api/v1/billing/stripe-webhook'
+    | '/api/v1/content-media/$mediaId'
+    | '/api/v1/profile-story-media/$storyId'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
     | '/c/$slug/roleplay/$sceneId'
@@ -465,36 +743,61 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/admin'
+    | '/admin-analytics'
+    | '/captcha'
     | '/chats'
+    | '/content-studio'
+    | '/creator'
     | '/delete-account'
+    | '/discover-plus'
     | '/explore'
     | '/forgot-password'
+    | '/inbox-tools'
+    | '/kit'
     | '/login'
+    | '/marketplace'
     | '/me'
     | '/new'
     | '/notifications'
+    | '/onboarding'
     | '/privacy'
+    | '/privacy-dashboard'
+    | '/profile-stories'
     | '/reset-password'
     | '/safety'
     | '/saved'
+    | '/security'
     | '/settings'
+    | '/support'
     | '/terms'
+    | '/tutorial'
     | '/wallet'
+    | '/welcome'
+    | '/admin/reports'
     | '/admin/safety'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
+    | '/invite/$code'
     | '/u/$handle'
     | '/chats/'
     | '/api/auth/$'
+    | '/api/v1/jobs'
     | '/c/$slug/chats'
     | '/c/$slug/events'
     | '/c/$slug/files'
     | '/c/$slug/members'
     | '/c/$slug/mod'
     | '/c/$slug/rank'
+    | '/c/$slug/tools'
     | '/c/$slug/wiki'
     | '/c/$slug/'
+    | '/api/v1/auth/mobile-callback'
+    | '/api/v1/auth/mobile-start'
+    | '/api/v1/billing/stripe-webhook'
+    | '/api/v1/content-media/$mediaId'
+    | '/api/v1/profile-story-media/$storyId'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
     | '/c/$slug/roleplay/$sceneId'
@@ -508,26 +811,48 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  CaptchaRoute: typeof CaptchaRoute
   ChatsRoute: typeof ChatsRouteWithChildren
+  ContentStudioRoute: typeof ContentStudioRoute
+  CreatorRoute: typeof CreatorRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
+  DiscoverPlusRoute: typeof DiscoverPlusRoute
   ExploreRoute: typeof ExploreRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  InboxToolsRoute: typeof InboxToolsRoute
+  KitRoute: typeof KitRoute
   LoginRoute: typeof LoginRoute
+  MarketplaceRoute: typeof MarketplaceRoute
   MeRoute: typeof MeRoute
   NewRoute: typeof NewRoute
   NotificationsRoute: typeof NotificationsRoute
+  OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
+  PrivacyDashboardRoute: typeof PrivacyDashboardRoute
+  ProfileStoriesRoute: typeof ProfileStoriesRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SafetyRoute: typeof SafetyRoute
   SavedRoute: typeof SavedRoute
+  SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRoute
+  SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  TutorialRoute: typeof TutorialRoute
   WalletRoute: typeof WalletRoute
-  AdminSafetyRoute: typeof AdminSafetyRoute
+  WelcomeRoute: typeof WelcomeRoute
   ApiRtcRoute: typeof ApiRtcRoute
   CSlugRoute: typeof CSlugRouteWithChildren
+  InviteCodeRoute: typeof InviteCodeRoute
   UHandleRoute: typeof UHandleRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiV1JobsRoute: typeof ApiV1JobsRoute
+  ApiV1AuthMobileCallbackRoute: typeof ApiV1AuthMobileCallbackRoute
+  ApiV1AuthMobileStartRoute: typeof ApiV1AuthMobileStartRoute
+  ApiV1BillingStripeWebhookRoute: typeof ApiV1BillingStripeWebhookRoute
+  ApiV1ContentMediaMediaIdRoute: typeof ApiV1ContentMediaMediaIdRoute
+  ApiV1ProfileStoryMediaStoryIdRoute: typeof ApiV1ProfileStoryMediaStoryIdRoute
   ApiV1RpcNameRoute: typeof ApiV1RpcNameRoute
   ApiV1MediaAvatarUserIdRoute: typeof ApiV1MediaAvatarUserIdRoute
   ApiV1MediaCoverUserIdRoute: typeof ApiV1MediaCoverUserIdRoute
@@ -545,6 +870,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-analytics': {
+      id: '/admin-analytics'
+      path: '/admin-analytics'
+      fullPath: '/admin-analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/captcha': {
+      id: '/captcha'
+      path: '/captcha'
+      fullPath: '/captcha'
+      preLoaderRoute: typeof CaptchaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/chats': {
       id: '/chats'
       path: '/chats'
@@ -552,11 +898,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/content-studio': {
+      id: '/content-studio'
+      path: '/content-studio'
+      fullPath: '/content-studio'
+      preLoaderRoute: typeof ContentStudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/creator': {
+      id: '/creator'
+      path: '/creator'
+      fullPath: '/creator'
+      preLoaderRoute: typeof CreatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/delete-account': {
       id: '/delete-account'
       path: '/delete-account'
       fullPath: '/delete-account'
       preLoaderRoute: typeof DeleteAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/discover-plus': {
+      id: '/discover-plus'
+      path: '/discover-plus'
+      fullPath: '/discover-plus'
+      preLoaderRoute: typeof DiscoverPlusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/explore': {
@@ -573,11 +940,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inbox-tools': {
+      id: '/inbox-tools'
+      path: '/inbox-tools'
+      fullPath: '/inbox-tools'
+      preLoaderRoute: typeof InboxToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kit': {
+      id: '/kit'
+      path: '/kit'
+      fullPath: '/kit'
+      preLoaderRoute: typeof KitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/marketplace': {
+      id: '/marketplace'
+      path: '/marketplace'
+      fullPath: '/marketplace'
+      preLoaderRoute: typeof MarketplaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/me': {
@@ -601,11 +989,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy-dashboard': {
+      id: '/privacy-dashboard'
+      path: '/privacy-dashboard'
+      fullPath: '/privacy-dashboard'
+      preLoaderRoute: typeof PrivacyDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile-stories': {
+      id: '/profile-stories'
+      path: '/profile-stories'
+      fullPath: '/profile-stories'
+      preLoaderRoute: typeof ProfileStoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -629,11 +1038,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SavedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -643,6 +1066,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tutorial': {
+      id: '/tutorial'
+      path: '/tutorial'
+      fullPath: '/tutorial'
+      preLoaderRoute: typeof TutorialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wallet': {
       id: '/wallet'
       path: '/wallet'
@@ -650,12 +1080,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WalletRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/reports': {
+      id: '/admin/reports'
+      path: '/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AdminReportsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/safety': {
       id: '/admin/safety'
-      path: '/admin/safety'
+      path: '/safety'
       fullPath: '/admin/safety'
       preLoaderRoute: typeof AdminSafetyRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/api/rtc': {
       id: '/api/rtc'
@@ -685,6 +1129,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatsRoomIdRouteImport
       parentRoute: typeof ChatsRoute
     }
+    '/invite/$code': {
+      id: '/invite/$code'
+      path: '/invite/$code'
+      fullPath: '/invite/$code'
+      preLoaderRoute: typeof InviteCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/u/$handle': {
       id: '/u/$handle'
       path: '/u/$handle'
@@ -697,6 +1148,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/jobs': {
+      id: '/api/v1/jobs'
+      path: '/api/v1/jobs'
+      fullPath: '/api/v1/jobs'
+      preLoaderRoute: typeof ApiV1JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/c/$slug/': {
@@ -748,12 +1206,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CSlugRankRouteImport
       parentRoute: typeof CSlugRoute
     }
+    '/c/$slug/tools': {
+      id: '/c/$slug/tools'
+      path: '/tools'
+      fullPath: '/c/$slug/tools'
+      preLoaderRoute: typeof CSlugToolsRouteImport
+      parentRoute: typeof CSlugRoute
+    }
     '/c/$slug/wiki': {
       id: '/c/$slug/wiki'
       path: '/wiki'
       fullPath: '/c/$slug/wiki'
       preLoaderRoute: typeof CSlugWikiRouteImport
       parentRoute: typeof CSlugRoute
+    }
+    '/api/v1/auth/mobile-callback': {
+      id: '/api/v1/auth/mobile-callback'
+      path: '/api/v1/auth/mobile-callback'
+      fullPath: '/api/v1/auth/mobile-callback'
+      preLoaderRoute: typeof ApiV1AuthMobileCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/auth/mobile-start': {
+      id: '/api/v1/auth/mobile-start'
+      path: '/api/v1/auth/mobile-start'
+      fullPath: '/api/v1/auth/mobile-start'
+      preLoaderRoute: typeof ApiV1AuthMobileStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/billing/stripe-webhook': {
+      id: '/api/v1/billing/stripe-webhook'
+      path: '/api/v1/billing/stripe-webhook'
+      fullPath: '/api/v1/billing/stripe-webhook'
+      preLoaderRoute: typeof ApiV1BillingStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/content-media/$mediaId': {
+      id: '/api/v1/content-media/$mediaId'
+      path: '/api/v1/content-media/$mediaId'
+      fullPath: '/api/v1/content-media/$mediaId'
+      preLoaderRoute: typeof ApiV1ContentMediaMediaIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/profile-story-media/$storyId': {
+      id: '/api/v1/profile-story-media/$storyId'
+      path: '/api/v1/profile-story-media/$storyId'
+      fullPath: '/api/v1/profile-story-media/$storyId'
+      preLoaderRoute: typeof ApiV1ProfileStoryMediaStoryIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/v1/rpc/$name': {
       id: '/api/v1/rpc/$name'
@@ -821,6 +1321,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminReportsRoute: typeof AdminReportsRoute
+  AdminSafetyRoute: typeof AdminSafetyRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminReportsRoute: AdminReportsRoute,
+  AdminSafetyRoute: AdminSafetyRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 interface ChatsRouteChildren {
   ChatsRoomIdRoute: typeof ChatsRoomIdRoute
   ChatsIndexRoute: typeof ChatsIndexRoute
@@ -840,6 +1352,7 @@ interface CSlugRouteChildren {
   CSlugMembersRoute: typeof CSlugMembersRoute
   CSlugModRoute: typeof CSlugModRoute
   CSlugRankRoute: typeof CSlugRankRoute
+  CSlugToolsRoute: typeof CSlugToolsRoute
   CSlugWikiRoute: typeof CSlugWikiRoute
   CSlugIndexRoute: typeof CSlugIndexRoute
   CSlugPPostIdRoute: typeof CSlugPPostIdRoute
@@ -854,6 +1367,7 @@ const CSlugRouteChildren: CSlugRouteChildren = {
   CSlugMembersRoute: CSlugMembersRoute,
   CSlugModRoute: CSlugModRoute,
   CSlugRankRoute: CSlugRankRoute,
+  CSlugToolsRoute: CSlugToolsRoute,
   CSlugWikiRoute: CSlugWikiRoute,
   CSlugIndexRoute: CSlugIndexRoute,
   CSlugPPostIdRoute: CSlugPPostIdRoute,
@@ -865,26 +1379,48 @@ const CSlugRouteWithChildren = CSlugRoute._addFileChildren(CSlugRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
+  CaptchaRoute: CaptchaRoute,
   ChatsRoute: ChatsRouteWithChildren,
+  ContentStudioRoute: ContentStudioRoute,
+  CreatorRoute: CreatorRoute,
   DeleteAccountRoute: DeleteAccountRoute,
+  DiscoverPlusRoute: DiscoverPlusRoute,
   ExploreRoute: ExploreRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  InboxToolsRoute: InboxToolsRoute,
+  KitRoute: KitRoute,
   LoginRoute: LoginRoute,
+  MarketplaceRoute: MarketplaceRoute,
   MeRoute: MeRoute,
   NewRoute: NewRoute,
   NotificationsRoute: NotificationsRoute,
+  OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
+  PrivacyDashboardRoute: PrivacyDashboardRoute,
+  ProfileStoriesRoute: ProfileStoriesRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SafetyRoute: SafetyRoute,
   SavedRoute: SavedRoute,
+  SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRoute,
+  SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  TutorialRoute: TutorialRoute,
   WalletRoute: WalletRoute,
-  AdminSafetyRoute: AdminSafetyRoute,
+  WelcomeRoute: WelcomeRoute,
   ApiRtcRoute: ApiRtcRoute,
   CSlugRoute: CSlugRouteWithChildren,
+  InviteCodeRoute: InviteCodeRoute,
   UHandleRoute: UHandleRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiV1JobsRoute: ApiV1JobsRoute,
+  ApiV1AuthMobileCallbackRoute: ApiV1AuthMobileCallbackRoute,
+  ApiV1AuthMobileStartRoute: ApiV1AuthMobileStartRoute,
+  ApiV1BillingStripeWebhookRoute: ApiV1BillingStripeWebhookRoute,
+  ApiV1ContentMediaMediaIdRoute: ApiV1ContentMediaMediaIdRoute,
+  ApiV1ProfileStoryMediaStoryIdRoute: ApiV1ProfileStoryMediaStoryIdRoute,
   ApiV1RpcNameRoute: ApiV1RpcNameRoute,
   ApiV1MediaAvatarUserIdRoute: ApiV1MediaAvatarUserIdRoute,
   ApiV1MediaCoverUserIdRoute: ApiV1MediaCoverUserIdRoute,

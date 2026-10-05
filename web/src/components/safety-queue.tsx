@@ -68,7 +68,7 @@ export function SafetyQueue({ slug }: { slug?: string }) {
       <p className="mt-1 text-sm text-muted">
         Kamino's safety check{" "}
         {status.data?.moderation
-          ? "(built-in rules and the free AI check)"
+          ? "(built-in rules and the configured AI safety check)"
           : "(built-in rules; the AI check is not set up)"}{" "}
         pauses likely illegal or dangerous content here. Nothing is banned automatically: you
         decide. Held items are hidden until you restore them.

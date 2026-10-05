@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { PressableScale, Segmented, Sheet, Txt } from "@/components/ui";
 import { STICKER_PACKS } from "@/lib/stickers";
-import { space, useTheme } from "@/theme";
+import { radius, space, useTheme } from "@/theme";
 
 /** A sheet of free sticker packs. Tapping a sticker sends it straight away. */
 export function StickerPicker({ visible, onClose, onPick }: { visible: boolean; onClose: () => void; onPick: (id: string) => void }) {
@@ -20,7 +20,7 @@ export function StickerPicker({ visible, onClose, onPick }: { visible: boolean; 
             onPress={() => onPick(sticker.id)}
             accessibilityLabel={`Send ${sticker.label} sticker`}
             scaleTo={0.85}
-            style={{ width: 72, height: 72, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: theme.tint, borderWidth: 1, borderColor: theme.hairline }}
+            style={{ width: 72, height: 72, borderRadius: radius.tile, alignItems: "center", justifyContent: "center", backgroundColor: theme.surfaceAlt, borderWidth: 1, borderColor: theme.border }}
           >
             <Txt style={{ fontSize: 38, lineHeight: 46 }}>{sticker.emoji}</Txt>
           </PressableScale>

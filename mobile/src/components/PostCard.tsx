@@ -1,104 +1,118 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
-import { imageSource } from "@/api/client";
-import type { Post, PostType } from "@/api/types";
-import { compactCount, plainPreview, timeAgo } from "@/lib/format";
+import { View } from "react-native";
+import type { Post } from "@/api/types";
+import { cleanTag, postTypeMeta, tagLabel } from "@/components/community/helpers";
+import { serverImage } from "@/components/community/media";
+import { shareLink } from "@/components/community/platform";
+import { CountPill, HashtagChips, Picture, Pill, PersonAvatar, VerifiedTick, personFromChip, type IconName } from "@/components/k";
+import { compactNumber, plainPreview, timeAgo } from "@/lib/format";
 import { usePostActions } from "@/lib/usePostActions";
-import { font, radius, space, useTheme } from "@/theme";
+import { font, radius, shadow, useTheme } from "@/theme";
 import { LikeButton } from "./LikeButton";
-import { Avatar, Card, Chip, PressableScale, Txt } from "./ui";
-
-const TYPE_ICON: Record<PostType, keyof typeof Ionicons.glyphMap> = {
-  blog: "document-text-outline",
-  image: "image-outline",
-  poll: "stats-chart-outline",
-  quiz: "help-circle-outline",
-  wiki: "book-outline",
-  story: "time-outline",
-  question: "chatbubble-ellipses-outline",
-  link: "link-outline",
-};
-
-const TYPE_LABEL: Record<PostType, string> = {
-  blog: "Blog", image: "Image", poll: "Poll", quiz: "Quiz", wiki: "Wiki", story: "Story", question: "Question", link: "Link",
-};
+import { Appear, PressableScale, Txt } from "./ui";
 
 type Props = {
   post: Post & { communityName?: string };
+  /** Show which community the post is from (feeds that mix communities). */
   showCommunity?: boolean;
   /** Position in a feed: cards float in one after another. */
   index?: number;
 };
 
+/**
+ * A post in a feed (Home, Saved, Search, Profile…): author row with the post type, title, a short preview, the
+ * picture (with "+4" when there are more), a few hashtags, and like / comment / share / save.
+ */
 export function PostCard({ post, showCommunity, index }: Props) {
   const theme = useTheme();
   const { liked, likeCount, saved, toggleLike, toggleSave } = usePostActions(post);
   const [revealed, setRevealed] = useState(!post.contentWarning);
   const open = () => router.push(`/community/${post.communityId}/post/${post.id}`);
+  const meta = postTypeMeta(post.type);
+  const extraPictures = post.payload.albumCount ?? 0;
+  const preview = post.body ? plainPreview(post.body) : "";
 
-  return (
-    <Card onPress={open} accessibilityLabel={`Open post: ${post.title}`} index={index}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-        <PressableScale onPress={() => router.push(`/profile/${post.author.handle}`)} accessibilityLabel={`Open ${post.author.nickname}'s profile`} scaleTo={0.9}>
-          <Avatar name={post.author.nickname} hue={post.author.hue} size={38} userId={post.author.userId} version={post.author.avatarV} />
+  const card = (
+    <PressableScale
+      onPress={open}
+      accessibilityLabel={`Open post: ${post.title}, by ${post.author.nickname}`}
+      scaleTo={0.985}
+      style={[{ backgroundColor: theme.surface, borderRadius: radius.card, borderWidth: 1, borderColor: theme.border, padding: 12, gap: 8 }, shadow.card]}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <PressableScale onPress={() => router.push(`/profile/${post.author.handle}`)} accessibilityLabel={`Open ${post.author.nickname}'s profile`} scaleTo={0.9} hitSlop={4}>
+          <PersonAvatar person={personFromChip(post.author)} size={38} />
         </PressableScale>
         <View style={{ flex: 1 }}>
-          <Txt variant="small" numberOfLines={1} style={{ fontFamily: font.bold }}>{post.author.nickname}</Txt>
-          <Txt variant="caption" tone="subtle" numberOfLines={1}>
-            {showCommunity && post.communityName ? `${post.communityName} · ` : ""}{timeAgo(post.createdAt)}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <Txt numberOfLines={1} style={{ fontFamily: font.heavy, fontSize: 14, lineHeight: 18, color: theme.ink, flexShrink: 1 }}>{post.author.nickname}</Txt>
+            {post.authorVerified ? <VerifiedTick size={13} /> : null}
+          </View>
+          <Txt numberOfLines={1} style={{ fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: theme.muted }}>
+            {showCommunity && post.communityName ? (
+              <Txt style={{ fontFamily: font.semibold, fontSize: 12, color: theme.accent }}>{`${post.communityName} · `}</Txt>
+            ) : null}
+            {post.scheduled && post.publishAt ? `Scheduled for ${new Date(post.publishAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : timeAgo(post.createdAt)}
           </Txt>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: theme.tint, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4 }} accessibilityLabel={TYPE_LABEL[post.type]}>
-          <Ionicons name={TYPE_ICON[post.type]} size={13} color={theme.accent} />
-          <Txt variant="caption" tone="accent">{TYPE_LABEL[post.type]}</Txt>
-        </View>
+        <Pill label={meta.label} tone={meta.tone} icon={meta.icon as IconName} />
       </View>
 
-      {post.announcement || post.featured || post.pinned ? (
-        <View style={{ flexDirection: "row", gap: space.xs }}>
-          {post.announcement ? <Chip label="Announcement" /> : null}
-          {post.pinned ? <Chip label="Pinned" /> : null}
-          {post.featured ? <Chip label="Featured" tone="ok" /> : null}
+      {post.pinned || post.featured || post.announcement || post.visibility === "members" || post.originalPostId ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {post.pinned ? <Pill label="Pinned" icon="star" tone="red" variant="solid" /> : null}
+          {post.announcement ? <Pill label="Announcement" emoji="📣" tone="blue" /> : null}
+          {post.featured ? <Pill label="Featured" emoji="⭐" tone="orange" /> : null}
+          {post.visibility === "members" ? <Pill label="Members only" icon="lock-closed" tone="neutral" /> : null}
+          {post.originalPostId ? <Pill label="Repost" icon="repeat" tone="green" /> : null}
         </View>
       ) : null}
 
-      <Txt variant="heading">{post.title}</Txt>
+      <Txt numberOfLines={2} style={{ fontFamily: font.heavy, fontSize: 15.5, lineHeight: 21, color: theme.ink }}>{post.title}</Txt>
 
       {!revealed ? (
-        <Pressable onPress={() => setRevealed(true)} accessibilityRole="button" accessibilityLabel="Show content" style={{ backgroundColor: theme.tint, borderRadius: radius.md, padding: space.lg, gap: 4, flexDirection: "row", alignItems: "center" }}>
-          <Ionicons name="eye-off-outline" size={20} color={theme.accent} style={{ marginRight: space.sm }} />
+        <PressableScale onPress={() => setRevealed(true)} accessibilityLabel={`Content warning: ${post.contentWarning}. Show content`} scaleTo={0.98} style={{ backgroundColor: theme.tints.violet, borderRadius: radius.tile, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Ionicons name="eye-off-outline" size={20} color={theme.toneText.violet} />
           <View style={{ flex: 1 }}>
-            <Txt variant="small" tone="accent">Content warning: {post.contentWarning}</Txt>
-            <Txt variant="caption" tone="muted">Tap to show</Txt>
+            <Txt style={{ fontFamily: font.bold, fontSize: 13, lineHeight: 17, color: theme.toneText.violet }}>Content warning: {post.contentWarning}</Txt>
+            <Txt style={{ fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: theme.muted }}>Tap to show</Txt>
           </View>
-        </Pressable>
+        </PressableScale>
       ) : (
         <>
-          {post.body ? <Txt tone="muted" numberOfLines={3}>{plainPreview(post.body)}</Txt> : null}
+          {preview ? <Txt numberOfLines={2} style={{ fontFamily: font.regular, fontSize: 13.5, lineHeight: 19, color: theme.muted }}>{preview}</Txt> : null}
           {post.cover ? (
-            <Image source={imageSource(post.cover)} style={{ height: 200, borderRadius: radius.md, backgroundColor: theme.elevated }} contentFit="cover" accessibilityLabel="Post image" transition={220} />
+            <Picture source={serverImage(post.cover)} hue={post.author.hue} icon="image-outline" radius={radius.tile} style={{ width: "100%", aspectRatio: 1.75 }}>
+              {extraPictures ? <CountPill value={`+${extraPictures}`} icon="images" style={{ position: "absolute", right: 8, top: 8, height: 20, paddingHorizontal: 7 }} /> : null}
+            </Picture>
           ) : null}
         </>
       )}
 
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.lg, paddingTop: space.xs }}>
-        <LikeButton liked={liked} count={compactCount(likeCount)} onPress={() => void toggleLike()} />
-        <Action icon="chatbubble-outline" color={theme.muted} label={compactCount(post.commentCount)} onPress={open} a11y="Comments" />
+      {post.hashtags.length ? (
+        <HashtagChips tags={post.hashtags.slice(0, 3).map(tagLabel)} onPress={(t) => router.push({ pathname: "/explore", params: { q: `#${cleanTag(t)}` } })} />
+      ) : null}
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 18, paddingTop: 2 }}>
+        <LikeButton liked={liked} count={compactNumber(likeCount)} onPress={() => void toggleLike()} size={20} />
+        <Action icon="chatbubble-outline" label={compactNumber(post.commentCount)} onPress={open} a11y={`${post.commentCount} comments`} />
+        <Action icon="arrow-redo-outline" onPress={() => void shareLink(post.title, `/c/${post.communityId}/p/${post.id}`)} a11y="Share" />
         <View style={{ flex: 1 }} />
-        <Action icon={saved ? "bookmark" : "bookmark-outline"} color={saved ? theme.accent : theme.muted} onPress={toggleSave} a11y={saved ? "Remove from saved" : "Save"} />
+        <Action icon={saved ? "bookmark" : "bookmark-outline"} color={saved ? theme.accent : undefined} onPress={() => void toggleSave()} a11y={saved ? "Remove from saved" : "Save"} />
       </View>
-    </Card>
+    </PressableScale>
   );
+  return index === undefined ? card : <Appear index={index}>{card}</Appear>;
 }
 
-function Action({ icon, color, label, onPress, a11y }: { icon: keyof typeof Ionicons.glyphMap; color: string; label?: string; onPress: () => void; a11y: string }) {
+function Action({ icon, color, label, onPress, a11y }: { icon: IconName; color?: string; label?: string; onPress: () => void; a11y: string }) {
+  const theme = useTheme();
   return (
-    <PressableScale onPress={onPress} hitSlop={10} accessibilityLabel={a11y} scaleTo={0.85} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <Ionicons name={icon} size={22} color={color} />
-      {label ? <Txt variant="small" tone="muted">{label}</Txt> : null}
+    <PressableScale onPress={onPress} hitSlop={12} accessibilityLabel={a11y} scaleTo={0.85} style={{ flexDirection: "row", alignItems: "center", gap: 5, minHeight: 28 }}>
+      <Ionicons name={icon} size={20} color={color ?? theme.muted} />
+      {label ? <Txt style={{ fontFamily: font.semibold, fontSize: 13, lineHeight: 17, color: theme.text }}>{label}</Txt> : null}
     </PressableScale>
   );
 }

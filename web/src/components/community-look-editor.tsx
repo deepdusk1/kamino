@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { GradientButton, hueGradient } from "@/components/k";
+import { fieldClass } from "@/components/community/sheet";
 import { communityColors } from "@/lib/kamino/theme";
 import { PROFILE_COVERS } from "@/lib/kamino/titles";
 import { getCommunityPage, updateCommunityLook } from "@/lib/kamino/server";
@@ -106,110 +107,103 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
     }
   }
 
+  const label = "block space-y-1.5 text-[13.5px] font-bold text-ink";
   return (
-    <section className="glass-card rounded-2xl p-4" aria-labelledby="look-title">
-      <h2 id="look-title" className="font-display text-lg font-semibold">
-        Community look
-      </h2>
-      <p className="mb-3 text-sm text-muted">
-        Name, words, colour, banner and icon. Every option is free. Uploaded pictures are shown
-        publicly on listings.
-      </p>
+    <section id="look" className="k-card scroll-mt-24 space-y-4 rounded-card p-4 lg:p-5" aria-labelledby="look-title">
+      <div>
+        <h2 id="look-title" className="flex items-center gap-2 text-[18px] font-extrabold text-ink">
+          <span aria-hidden>🎨</span> Community look
+        </h2>
+        <p className="mt-0.5 text-[13.5px] text-muted">
+          Name, words, colour, banner and icon. Every option is free. Uploaded pictures are shown publicly on
+          listings.
+        </p>
+      </div>
 
-      <div className="relative mb-4 overflow-hidden rounded-2xl" aria-label="Preview">
-        {shownCover ? (
-          <img src={shownCover} alt="" className="h-28 w-full object-cover" />
-        ) : (
-          <div className="h-28" />
-        )}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `linear-gradient(120deg, ${colors.from}, ${colors.to})`,
-            opacity: colors.tint,
-          }}
-        />
-        <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/60 to-transparent p-3 text-white">
-          {shownIcon ? (
-            <img
-              src={shownIcon}
-              alt=""
-              className="size-10 rounded-full object-cover outline outline-2 outline-white"
-            />
-          ) : null}
-          <div className="min-w-0">
-            <p className="truncate font-display font-semibold">{name || "Name"}</p>
-            <p className="truncate text-xs opacity-90">{tagline}</p>
+      {/* Live preview in the same shape as the community page header. */}
+      <div aria-label="Preview" className="overflow-hidden rounded-card border border-border bg-surface">
+        <div className="relative h-24 bg-surface-alt">
+          {shownCover ? <img src={shownCover} alt="" className="size-full object-cover" /> : null}
+          <div
+            className="absolute inset-0"
+            style={{ background: `linear-gradient(120deg, ${colors.from}, ${colors.to})`, opacity: colors.tint }}
+          />
+        </div>
+        <div className="flex items-start gap-3 px-3 pb-3">
+          <span className="-mt-7 grid size-16 shrink-0 place-items-center overflow-hidden rounded-[18px] border-4 border-surface bg-surface shadow-card">
+            {shownIcon ? (
+              <img src={shownIcon} alt="" className="size-full rounded-[14px] object-cover" />
+            ) : (
+              <span
+                className="grid size-full place-items-center rounded-[14px] text-[22px] font-extrabold text-white"
+                style={{ background: hueGradient(hue) }}
+              >
+                {(name || "K").charAt(0).toUpperCase()}
+              </span>
+            )}
+          </span>
+          <div className="min-w-0 flex-1 pt-1.5">
+            <p className="truncate text-[16px] font-extrabold text-ink">{name || "Name"}</p>
+            <p className="truncate text-[12.5px] text-muted">{tagline}</p>
+            <p className="mt-1 text-[12.5px] font-bold" style={{ color: colors.accent }}>
+              Links and tabs use this colour
+            </p>
           </div>
-          <span
-            className="ml-auto rounded-full px-3 py-1 text-xs font-bold"
-            style={{ background: colors.accent, color: colors.accentFg }}
-          >
+          <span className="mt-2 inline-flex h-8 shrink-0 items-center rounded-full bg-grad-primary px-4 text-[13px] font-bold text-white">
             Join
           </span>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <label className="block text-sm">
-          Name
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={40}
-            className="mt-1 h-11 w-full rounded-lg bg-elevated px-3"
-          />
+      <div className="space-y-3.5">
+        <label className={label}>
+          <span>Name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} className={fieldClass} />
         </label>
-        <label className="block text-sm">
-          Tagline
-          <input
-            value={tagline}
-            onChange={(e) => setTagline(e.target.value)}
-            maxLength={120}
-            className="mt-1 h-11 w-full rounded-lg bg-elevated px-3"
-          />
+        <label className={label}>
+          <span>Tagline</span>
+          <input value={tagline} onChange={(e) => setTagline(e.target.value)} maxLength={120} className={fieldClass} />
         </label>
-        <label className="block text-sm">
-          About
+        <label className={label}>
+          <span>About</span>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={1000}
             rows={3}
-            className="mt-1 w-full rounded-lg bg-elevated px-3 py-2"
+            className={fieldClass}
           />
         </label>
-        <label className="block text-sm">
-          Rules
-          <textarea
-            value={rules}
-            onChange={(e) => setRules(e.target.value)}
-            maxLength={2000}
-            rows={4}
-            className="mt-1 w-full rounded-lg bg-elevated px-3 py-2"
-          />
+        <label className={label}>
+          <span>Rules</span>
+          <textarea value={rules} onChange={(e) => setRules(e.target.value)} maxLength={2000} rows={4} className={fieldClass} />
         </label>
-        <label className="block text-sm">
-          Colour
+        <label className={label}>
+          <span className="flex items-center gap-2">
+            Colour
+            <span className="inline-block size-4 rounded-full" style={{ background: colors.accent }} aria-hidden />
+          </span>
           <input
             type="range"
             min={0}
             max={360}
             value={hue}
             onChange={(e) => setHue(Number(e.target.value))}
-            className="mt-2 w-full"
+            className="k-focus h-11 w-full accent-[var(--color-violet)]"
             aria-label="Community colour"
           />
         </label>
         <fieldset>
-          <legend className="text-sm">Colour style</legend>
+          <legend className="text-[13.5px] font-bold text-ink">Colour style</legend>
           <div className="mt-2 flex flex-wrap gap-2">
             {THEME_STYLES.map((s) => (
               <label
                 key={s}
                 className={cn(
-                  "flex h-10 cursor-pointer items-center gap-2 rounded-full bg-elevated px-4 text-sm",
-                  style === s && "outline outline-2 outline-accent",
+                  "k-hit flex h-9 cursor-pointer items-center rounded-full border-[1.5px] px-4 text-[13px] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-violet",
+                  style === s
+                    ? "border-violet bg-tint-violet font-bold text-violet-ink"
+                    : "border-border bg-surface font-semibold text-ink",
                 )}
               >
                 <input
@@ -226,10 +220,10 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
           </div>
         </fieldset>
         <fieldset>
-          <legend className="text-sm">Banner</legend>
+          <legend className="text-[13.5px] font-bold text-ink">Banner</legend>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {PROFILE_COVERS.map((b) => (
-              <label key={b.id} className="block cursor-pointer">
+              <label key={b.id} className="block cursor-pointer rounded-tile has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-violet">
                 <input
                   type="radio"
                   name="banner"
@@ -244,19 +238,19 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
                   src={b.src}
                   alt={b.label}
                   className={cn(
-                    "h-14 w-full rounded-lg object-cover",
-                    !coverUpload && cover === b.src && "outline outline-2 outline-accent",
+                    "h-14 w-full rounded-tile border-2 object-cover",
+                    !coverUpload && cover === b.src ? "border-violet" : "border-transparent",
                   )}
                 />
               </label>
             ))}
           </div>
-          <label className="mt-3 block text-sm">
-            Or upload your own (PNG, JPEG or WebP, up to 1.5 MB)
+          <label className="mt-3 block space-y-1 text-[13px] text-muted">
+            <span>Or upload your own (PNG, JPEG or WebP, up to 1.5 MB)</span>
             <input
               type="file"
               accept={PICTURE_TYPES.join(",")}
-              className="mt-1 w-full text-xs"
+              className="k-focus w-full text-[13px] file:mr-3 file:h-9 file:rounded-full file:border-0 file:bg-tint-violet file:px-4 file:font-bold file:text-violet-ink"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
@@ -266,16 +260,12 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
           </label>
         </fieldset>
         <div>
-          <p className="text-sm">Icon</p>
+          <p className="text-[13.5px] font-bold text-ink">Icon</p>
           <div className="mt-2 flex items-center gap-3">
             {shownIcon ? (
-              <img
-                src={shownIcon}
-                alt="Community icon"
-                className="size-14 rounded-full object-cover"
-              />
+              <img src={shownIcon} alt="Community icon" className="size-14 rounded-[16px] object-cover" />
             ) : (
-              <span className="grid size-14 place-items-center rounded-full bg-elevated text-xs text-subtle">
+              <span className="grid size-14 place-items-center rounded-[16px] bg-surface-alt text-[12px] text-subtle">
                 None
               </span>
             )}
@@ -283,7 +273,7 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
               aria-label="Upload an icon"
               type="file"
               accept={PICTURE_TYPES.join(",")}
-              className="w-full text-xs"
+              className="k-focus w-full min-w-0 text-[13px] file:mr-3 file:h-9 file:rounded-full file:border-0 file:bg-tint-violet file:px-4 file:font-bold file:text-violet-ink"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
@@ -293,7 +283,7 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
             {shownIcon ? (
               <button
                 type="button"
-                className="text-xs text-danger"
+                className="k-focus k-hit shrink-0 rounded-full px-2 text-[13px] font-bold text-danger"
                 onClick={() => setIconUpload(null)}
               >
                 Remove
@@ -303,13 +293,13 @@ function Editor({ slug, community: c }: { slug: string; community: Community }) 
         </div>
       </div>
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-danger">
+        <p role="alert" className="text-[13.5px] text-danger">
           {error}
         </p>
       ) : null}
-      <Button className="mt-4" disabled={busy} onClick={() => void save()}>
+      <GradientButton size="md" disabled={busy} onClick={() => void save()}>
         {busy ? "Saving…" : "Save look"}
-      </Button>
+      </GradientButton>
     </section>
   );
 }

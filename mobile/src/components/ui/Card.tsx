@@ -1,7 +1,6 @@
-import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { glowShadow, radius, space, useTheme } from "@/theme";
+import { View, type StyleProp, type ViewStyle } from "react-native";
+import { radius, shadow, space, useTheme } from "@/theme";
 import { Appear, PressableScale } from "./Motion";
 
 type Props = {
@@ -12,51 +11,33 @@ type Props = {
   accessibilityLabel?: string;
   /** Position in a list: the card floats in, slightly after the one above it. */
   index?: number;
+  /** Inner padding (default 16). Pass 0 for cards with an edge-to-edge picture. */
+  padding?: number;
 };
 
 /**
- * A frosted-glass card. The aurora behind it glows through; a bright top edge and a soft coloured
- * shadow make it look like a pane of glass. Tappable (with a springy press) when `onPress` is given.
- *
- * Cards are drawn without a live blur on purpose: long lists of blurred cards drain the battery.
+ * A white card: radius 18, a 1px hairline and a very soft shadow (spec: `0 4px 16px rgba(20,17,43,0.06)`).
+ * Tappable (with a springy press) when `onPress` is given.
  */
-export function Card({ children, onPress, onLongPress, style, accessibilityLabel, index }: Props) {
+export function Card({ children, onPress, onLongPress, style, accessibilityLabel, index, padding = space.lg }: Props) {
   const theme = useTheme();
   const surface: ViewStyle = {
-    backgroundColor: theme.glass,
-    borderRadius: radius.lg,
+    backgroundColor: theme.surface,
+    borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: theme.hairline,
-    padding: space.lg,
+    borderColor: theme.border,
+    padding,
     gap: space.sm,
-    ...glowShadow(theme.glow),
-    // Android draws elevation shadows *through* see-through views (a grey smudge), so skip it there.
-    ...(Platform.OS === "android" ? { elevation: 0 } : null),
+    ...shadow.card,
   };
-  const shine = (
-    <LinearGradient
-      colors={[theme.glassEdge, "rgba(255,255,255,0)"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={[styles.shine, { opacity: theme.dark ? 0.35 : 0.55 }]}
-    />
-  );
 
   const body = onPress ? (
     <PressableScale onPress={onPress} onLongPress={onLongPress} accessibilityLabel={accessibilityLabel} style={[surface, style]} scaleTo={0.98}>
-      {shine}
       {children}
     </PressableScale>
   ) : (
-    <View style={[surface, style]}>
-      {shine}
-      {children}
-    </View>
+    <View style={[surface, style]}>{children}</View>
   );
 
   return index === undefined ? body : <Appear index={index}>{body}</Appear>;
 }
-
-const styles = StyleSheet.create({
-  shine: { position: "absolute", left: 0, right: 0, top: 0, height: 36, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, pointerEvents: "none" },
-});

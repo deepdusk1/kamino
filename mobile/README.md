@@ -21,15 +21,19 @@ animated polls, streaks and loading states. Light and dark mode follow the phone
 respects the phone's **Reduce Motion** setting, and the text colours were checked for WCAG AA contrast
 on both the background and the glass.
 
-**What is deliberately not in the app:** coins, ads, paid stickers or any in-app currency. Those
-are against Kamino's house rules, so the phone app never shows them.
+**Release 9:** content/story tools, group chats/files, community roles/policies/quests, expanded events,
+privacy/security/tutorial/contact matching, discovery, creator analytics and administration share the web server.
+Offer and access management exists, but mobile purchase buttons stay disabled. Stripe web checkout is test-only;
+App Store/Google Play billing and creator payouts remain unfinished. See `../RELEASE-9.md` and `../web/BILLING.md`.
 
 ---
 
 ## 1. Try it on your own phone in about 10 minutes
 
-You need: [Node.js 24](https://nodejs.org), the free **Expo Go** app from the App Store or Google
-Play, and your phone on the **same Wi-Fi** as your computer.
+You need Node.js, an installed Kamino development build, and your phone on the **same Wi-Fi** as your computer.
+`expo-dev-client` is included. Build a development client using your Expo account with
+`npx eas-cli build --profile development --platform android` (or `ios`), or compile locally with
+`npx expo run:android` / `npx expo run:ios` when the appropriate native toolchain is installed.
 
 **Easiest way:** in the folder *above* this one, double-click `Start-Kamino.cmd` (Windows) or run
 `./start.sh` (Mac/Linux). It installs everything, starts the server and this app, and shows a QR code.
@@ -45,10 +49,10 @@ npm run dev     # leave open; listens on port 8080
 # window 2: the phone app
 cd mobile
 npm install     # first time only
-npx expo start
+npx expo start --dev-client
 ```
 
-A QR code appears. Scan it with the iPhone Camera app (iOS) or from inside Expo Go (Android).
+A QR code appears. Open it with your installed Kamino development client.
 The app finds your computer by itself; you do not need to type any address.
 
 > **It says "Network request failed" or can't reach the server?**
@@ -58,11 +62,9 @@ The app finds your computer by itself; you do not need to type any address.
 >    `EXPO_PUBLIC_API_URL=http://192.168.1.20:8080` (use your computer's own address), then run
 >    `npx expo start --clear`.
 
-**Good to know:** in Expo Go, push notifications work on iPhone but not on Android (Google removed
-that from Expo Go). To test push on Android you need a "development build" — see step 3.
-**Live calls also need a development or store build**, because the calling library is native code
-that Expo Go does not contain. In Expo Go everything else works, and the call screen simply says
-that calls are not in this build.
+**Good to know:** this app uses native calling, contact and sharing plugins. Use a fresh development
+or store build. Expo Go is insufficient. Bundle export verifies JavaScript compilation; it does not
+prove device permissions, push delivery, microphone routing or two-phone calling.
 
 ---
 

@@ -1,3 +1,4 @@
+import {fixtureAuthFetch} from "./fixture-auth.mjs";
 /**
  * Integration test for the mobile API bridge and the community tools added for
  * the native apps. Talks to a RUNNING dev server over plain HTTP, exactly like
@@ -46,7 +47,7 @@ async function signUp(label, { confirmAge = true, bootstrapFirst = true } = {}) 
   // Production servers rate-limit sign-ups (HTTP 429); wait as long as the server asks, then retry.
   let res;
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    res = await fetch(`${base}/api/auth/sign-up/email`, {
+    res = await fixtureAuthFetch(`${base}/api/auth/sign-up/email`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: process.env.TEST_AUTH_ORIGIN ?? base },
       body: JSON.stringify({
@@ -395,7 +396,7 @@ assert.equal((await albumRes.arrayBuffer()).byteLength, Buffer.from(PIXEL.split(
 assert.equal((await fetch(`${base}/api/v1/media/post/${album.id}/0`)).status, 200, "position 0 is the cover picture");
 assert.equal((await fetch(`${base}/api/v1/media/post/${album.id}/-1`)).status, 400);
 assert.match(await refused(stylist.token, "createPost", { slug: hall.id, type: "blog", title: "Not an image", body: "x", album: [PIXEL] }), /Only image posts/);
-assert.match(await refused(stylist.token, "createPost", { slug: hall.id, type: "image", title: "Six extras", body: "x", cover: PIXEL, album: Array(6).fill(PIXEL) }), /at most/);
+assert.match(await refused(stylist.token, "createPost", { slug: hall.id, type: "image", title: "Ten extras", body: "x", cover: PIXEL, album: Array(10).fill(PIXEL) }), /10 pictures at most/);
 assert.match(await refused(stylist.token, "createPost", { slug: hall.id, type: "image", title: "No cover", body: "x", album: [PIXEL] }), /cover/i);
 assert.match(await refused(stylist.token, "createPost", { slug: hall.id, type: "image", title: "Bad file", body: "x", cover: PIXEL, album: ["data:text/html;base64,PGI+"] }), /PNG, JPEG/);
 const secret = await ok(stylist.token, "createCommunity", { name: `Private Album ${Date.now()}`, tagline: "QA", description: "Private", category: "Art", visibility: "private", ageGate: 13, rules: "Be kind." });

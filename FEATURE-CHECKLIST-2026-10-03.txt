@@ -1,0 +1,130 @@
+Kamino feature checklist
+Oct 3, 2026 · @Deep
+Of 490 features, 211 are done (43%), 120 are half done (24%) and 159 are left (32%). The count is higher than your list's line count because combined lines are split: "Email, Google, Apple and phone sign-in", for example, counts as four.
+Done means it works for members today. Half means part of it exists, or it works in only one app (phone or website); the brackets say what's missing. Left means it isn't built yet. Each item was checked in the code, not just against a screen.
+These seven look finished but don't fully work. They're the first fixes:
+1. Banned members can't be unbanned.
+2. There's no screen to see who you muted.
+3. The weekly digest switch does nothing.
+4. Event reminders only appear when someone opens the app.
+5. Community invite, report-a-community and verify-a-community have no buttons.
+6. The Explore language filter can't be used because every community is English.
+7. Some moderator tools work in only one app.
+Sign-up, Home and Explore
+Explore is nearly complete; sign-in methods and smart search are the weak spots.
+Account & onboarding — 9 done · 2 half · 5 left
+Done: Email sign-in, profile photo and cover, age check (13+, plus 16+/18+ communities), pick your interests, starter communities, suggested creators, pronouns, location, private/public profile.
+Half: Google sign-in (website only, switched off by default) · Username + display name (name yes; the @username is made automatically and can't be chosen).
+Left: Apple sign-in, phone-number sign-in, language choice, import contacts, new-user tutorial.
+Home — 6 done · 5 half · 3 left
+Done: For You feed, Following feed, Communities feed, recommended communities, recommended creators, daily streak.
+Half: Trending topics (on Explore, not Home) · Upcoming events (only the next one) · Live rooms now (on the Chats tab, not Home) · Saved shortcut (from profile and header, not Home) · Feed controls (interest chips only).
+Left: Trending posts, continue conversations, recently visited communities.
+Explore & discovery — 17 done · 1 half · 2 left
+Done: One search for everything, plus search for people, communities, posts, topics, hashtags, live rooms and events; category browsing; trending, fast-growing and new communities; suggestions from your interests; community filters; member-count filter; safe search; trending hashtags.
+Half: Language filter (works, but every community is set to English and nobody can change it).
+Left: Local communities, editorial/featured collections (Explore banners are 3 fixed cards).
+Search intelligence — 3 done · 3 half · 7 left
+Done: Typo tolerance (communities, people, tags), search history, recent searches.
+Half: Autocomplete (results update as you type; no suggestion dropdown) · Suggested searches (trending tags only) · Similar interests (matches by interests, no "people like you").
+Left: Trending searches, related communities, related posts, related creators, "people like you also joined", More / Less / Not interested buttons, reset personalization.
+Communities and moderator tools
+Communities are strong; the moderator dashboard has no analytics and a few controls that don't work yet.
+Communities — 27 done · 12 half · 4 left
+Done: Create community, public and private communities, name and logo, custom cover, description, rules, topics/categories, community tags, colours/theme, member list, online members, member roles, Leader, announcements, pinned posts, featured posts, community feed, community chat, voice rooms, events, media gallery, polls, wiki, links/shared files, member leaderboard, join requests.
+Half: Invite-only (private + invite codes, but anyone can still ask to join) · Co-leader (shows, but nobody can appoint one) · Moderator (only the phone can promote someone) · Creator/expert roles (site-wide badge only) · Custom roles (coloured titles, no powers, website only) · Discussion boards (one feed, no sub-boards) · Q&A (question posts, no best answer) · Calendar (list only) · Statistics (member and online counts only) · Invite links (codes people type, not clickable links) · Community verification (badge exists, no button) · Member milestones (personal achievements, not set by the community).
+Left: Trusted member role, FAQs, community achievements, community level/rank.
+Moderator dashboard — 5 done · 6 half · 8 left
+Done: Member management, reports queue, approval queue, rules editing, announcements (broadcast).
+Half: Moderator roles (one role, phone only) · Removed content (website safety queue only) · AutoMod (built-in rules, leaders can't change them) · Chat permissions (per room; timed mutes phone only) · Live-room permissions (host/co-host; can't limit who starts a room) · Activity log (website only).
+Left: Ban list and unban (banned people can't be reached, so nobody can be unbanned), keyword filters, post permissions, community analytics, growth analytics, active-user numbers, top content, member retention.
+Posts, Stories and Create
+Picture posts and the Create screen are complete; video, audio, GIFs and reply threads are missing.
+Posts & content — 19 done · 9 half · 8 left
+Done: Text, image and gallery posts (up to 10 pictures), link posts, polls, questions, stories, reposts, drafts, scheduled posts, hashtags, mentions, location tag, community tags, content warnings, comments, share, save/bookmark, report.
+Half: Long-form articles (8,000 characters, no pictures inside) · Fan art (just a tag) · Quote reposts (server supports it, no button) · Spoiler tags (content-warning blur only) · NSFW/age labels (community age gate, no per-post flag) · Like/react (like only, no emoji reactions) · Copy link (no menu item) · Hide (moderators only) · Edit history (shows "edited", keeps no history).
+Left: Video posts, short-form video, GIFs, audio posts, threaded replies, mute a post, follow a thread, post analytics.
+Stories — 3 done · 1 half · 8 left
+Done: Photo stories, community stories, 24-hour expiry.
+Half: Mentions (@name in the caption only, no sticker).
+Left: Video stories, text-only stories, music, stickers, question stickers, poll stickers, creator/profile stories, highlights on profiles.
+Create center — 11 done · 4 half · 1 left
+Done: Centre + button, create post, story, community, live room, event and poll, save draft, schedule, pick community, pick tags.
+Half: Start Q&A (question post only, no live Q&A) · Upload media (pictures only) · Audience (public or members-only) · Comment permissions (on/off only).
+Left: Sharing permissions.
+Profiles, Social and Privacy
+Profiles are mostly complete; account security (two-step login, device list) is the main gap.
+Profiles — 17 done · 7 half · 4 left
+Done: Avatar, cover image, bio, display name, pronouns, joined communities, posts, followers, following, online dot, status message, creator badge, verified tick, achievement badges, profile categories, streaks, privacy controls.
+Half: Username (made automatically, can't be chosen) · Website/social links (one link only) · Interests (saved, not shown on the profile) · Custom theme (cover, avatar frame and chat bubble; no profile colour) · Featured posts (pinned wiki pages and showcase only) · Reputation (level shows on the website only) · Community roles (titles only).
+Left: Media tab, saved highlights, mutual friends, portfolio section.
+Social graph — 5 done · 3 half · 4 left
+Done: Follow people, follow (join) communities, friends (people who follow each other), block, see who is online.
+Half: Mute (works, but there's no screen to see who you muted) · Friend requests (follow requests for private accounts only) · Suggested friends (creators by interest only).
+Left: Mutual connections, restrict, close friends, favourite people.
+Privacy — 6 done · 2 half · 6 left
+Done: Public/private account, who can message me, online-status switch, read-receipt switch, download my data, delete account.
+Half: Hide followers/following (only by going private) · Comment controls (on/off per post).
+Left: Mention controls, who can invite you, search visibility, privacy dashboard, signed-in devices list, two-factor login.
+Messaging, Live rooms and Notifications
+Chat is strong; live rooms are real voice calls without stage roles, and five notification types never fire.
+Direct messaging — 18 done · 6 half · 3 left
+Done: 1-to-1 chats, community chats, text, pictures, videos, voice messages, stickers, reactions, replies, edit, delete, search a conversation, typing indicator, read receipts, voice calls, video calls, message requests, spam filtering. Calls need a store or development build of the phone app (not Expo Go) and haven't been tried between two real phones yet.
+Half: GIFs (upload only, no picker, may lose animation) · Share posts, Share profiles, Share communities (as a link through the share sheet, no in-chat card) · Online/last active (green dot only, no "last seen") · Block/report from chat (report yes, block only from the profile).
+Left: Group chats people start themselves, sending files, pinning messages.
+Live rooms — 6 done · 10 half · 9 left
+Done: Voice rooms (real audio, works best with a handful of people), casual hangouts, community-only rooms, live text chat, room topics, live participant count.
+Half: Music, Gaming, Study rooms (topic labels on the same room; the website also has watch parties) · Public rooms (you must join the community first) · Private rooms (leaders only; the website has no call controls there) · Hosts and Co-hosts (powers only in private rooms) · Reactions (chat reactions only) · Moderator controls (community-wide only, nothing inside a call) · Invite users (private rooms only).
+Left: Stage rooms, speaker role, listener role, raise hand, scheduled rooms, recordings, remove a speaker, mute someone else, lock a room.
+Notifications — 11 done · 3 half · 5 left
+Done: Likes, comments, mentions, new followers, moderator notices, direct messages, live room alerts, community announcements, achievements, notification settings, quiet hours.
+Half: Friend requests (follow requests only) · Community invites (works on the server, no button) · Event reminders (only appear when the person opens the app).
+Left: Comment replies, group messages, new posts from people you follow, streak reminders, weekly digest (the switch saves but nothing is sent).
+Events and Gamification
+Events are the barest area: title, text, time and RSVP only. Gamification covers the basics but none of the quest or season features.
+Events — 5 done · 3 half · 11 left
+Done: Create event, community events, description, date and time, RSVP.
+Half: Going/interested (Going only) · Reminders (only when the app is opened) · Event posts (challenge entries only).
+Left: Online events (link), in-person events (location), creator events (only leaders can create), event image, attendee list, event chat, event live room, add to calendar, repeating events, tickets, edit/cancel/delete an event.
+Gamification — 7 done · 6 half · 7 left
+Done: Daily streak, community check-ins, XP (called "rep"), achievement badges (75, tiered), creator badges, challenges, leaderboards.
+Half: Levels, Profile levels, Community levels (calculated, but only the website shows level numbers) · Trusted member (an achievement name only) · Milestones (achievement tiers) · Collectible badges (no sets or limited badges).
+Left: Helpful member badge, kindness badge, community star, quests, weekly missions, seasonal events, cosmetic rewards.
+Creators, Money and AI
+These three are mostly left. Paid features are off by your choice. The only real AI today is the role-play storyteller and the safety check.
+Creator system — 4 done · 3 half · 11 left
+Done: Creator profile, verification (you grant it as site owner), content scheduling, creator discovery.
+Half: Engagement stats (public like and comment counts only) · Portfolio (profile showcase only) · Tipping (Coins from check-ins, website only, no real money).
+Left: Creator analytics, follower analytics, post analytics, audience demographics, creator subscriptions, exclusive posts, subscriber-only chats, subscriber badges, paid communities, digital products, brand collaboration tools.
+Money — 2 done · 3 half · 11 left
+Done: Free core app, no pay-to-win reputation.
+Half: Cosmetic themes, Extra customization (all exist, all free) · Tips (Coins, website only).
+Left: Kamino+ premium, animated avatars, premium badges, higher upload limits, creator subscriptions, community subscriptions, digital gifts, event tickets, community boosts, marketplace, advertising.
+AI features — 3 done · 7 half · 10 left
+Done: AI moderation help, harassment detection, toxicity detection (all through your OpenAI safety key).
+Half: Community recommendations, feed ranking, behaviour-based suggestions (fixed formulas, not AI) · Spam detection, scam detection (rate limits and fixed link patterns) · Tag suggestions (word rules, not AI) · Recommendation settings (edit interests only).
+Left: AI search, plain-English discovery ("find people who like manga and drawing"), post/topic summaries, translation, caption help, community-description helper, duplicate-content detection, community health insights, onboarding assistant, "find my people" matching.
+Safety and Admin
+Everyday reporting and banning work. Platform-wide controls (suspensions, captcha, email check) and the admin back-office are mostly left.
+Moderation & safety — 11 done · 12 half · 8 left
+Done: Report a user, post or message; block; mute; community rules; moderator queue; picture safety check (through your OpenAI key); rate limits; warnings (strikes); community ban.
+Half: Automated spam detection, Link filters (fixed lists) · New-account limits (13+ check only) · Moderator audit log (website only) · Timed mute (phone only) · Appeals (phone only) · Safety center (website only) · Teen safety (under-13s removed and 16+ communities blocked, but teens tick their own age box) · Age-appropriate suggestions (safe-search filter only) · Sensitive-content controls (authors add warnings; no viewer setting) · Community safety rating (13+/16+ only) · Grooming detection (a few phrase rules only).
+Left: Report a community (server only, no button), restricted mode, keyword filters, anti-bot captcha, email confirmation at sign-up, platform-wide suspension, platform-wide ban, DM limits for minors.
+Admin back-office — 1 done · 4 half · 15 left
+Done: Content review (site-wide safety queue).
+Half: User management (verify/creator badges only) · Reports dashboard, Trust & safety dashboard (the safety queue, website only) · Appeals (handled per community).
+Left: Community management, analytics, user growth, retention, daily/monthly active users, community growth, creator performance, abuse numbers, push campaigns, choosing featured communities, choosing featured creators, editing the interest/category lists, A/B testing, feature switches, customer-support tools.
+Accessibility, Platforms and What makes Kamino different
+Kamino runs on iPhone, Android and the web. Three of the twelve "different" ideas exist today.
+Accessibility — 5 done · 3 half · 3 left
+Done: Dark mode and light mode (follow the phone or computer setting), screen-reader labels, reduce animations, keyboard use on the website.
+Half: Text size (phone follows the system size, no in-app setting) · Alt text (written automatically, people can't write their own) · Colour-blind-safe signs (the online dot is colour only).
+Left: High-contrast mode, video captions, translation/language setting.
+Cross-platform — 7 done · 1 half · 1 left
+Done: iPhone, Android, website, messages in sync, notifications in sync, drafts saved online, signed in on several devices at once.
+Half: Tablet layout (the phone layout, wider).
+Left: Desktop app.
+What makes Kamino different — 3 done · 4 half · 5 left
+Done: Community Spaces (posts, chat, voice and events in one place), reputation per community, both a ranked feed and a newest-first feed.
+Half: Community quests (challenges only) · Community portfolios (wiki, files and featured posts) · Portable identity (achievements follow you; reputation stays per community) · Leader tools (lots of customisation, no analytics).
+Left: Find My People matching, micro-communities of 10–50 people, smart introductions, visual interest graph, AI concierge ("where should I post this?").

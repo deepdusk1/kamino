@@ -23,7 +23,7 @@ export function StoryViewer({ scenes, captions = [] }: Props) {
     <section
       aria-label={`Story, scene ${index + 1} of ${scenes.length}`}
       tabIndex={0}
-      className="relative mb-5 overflow-hidden rounded-2xl bg-black outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="relative overflow-hidden rounded-[18px] bg-[#0f0b2a] shadow-card outline-none focus-visible:ring-2 focus-visible:ring-violet lg:rounded-card"
       onKeyDown={(e) => {
         if (e.key === "ArrowRight") go(1);
         if (e.key === "ArrowLeft") go(-1);
@@ -33,7 +33,7 @@ export function StoryViewer({ scenes, captions = [] }: Props) {
         key={index}
         src={scenes[index]}
         alt={caption || `Scene ${index + 1}`}
-        className="mx-auto max-h-[70vh] w-full object-contain"
+        className="mx-auto max-h-[70vh] min-h-[220px] w-full object-contain"
       />
       {scenes.length > 1 && (
         <>
@@ -50,23 +50,27 @@ export function StoryViewer({ scenes, captions = [] }: Props) {
             aria-label="Previous scene"
             disabled={index === 0}
             onClick={() => go(-1)}
-            className="absolute inset-y-0 left-0 grid w-1/4 place-items-center text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:hidden"
+            className="absolute inset-y-0 left-0 grid w-1/4 place-items-center text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:hidden [@media(hover:none)]:opacity-80"
           >
-            <ChevronLeft className="size-8 drop-shadow" />
+            <span className="grid size-11 place-items-center rounded-full bg-[#14112b80] backdrop-blur-sm">
+              <ChevronLeft className="size-6" aria-hidden />
+            </span>
           </button>
           <button
             type="button"
             aria-label="Next scene"
             disabled={index === last}
             onClick={() => go(1)}
-            className="absolute inset-y-0 right-0 grid w-1/4 place-items-center text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:hidden"
+            className="absolute inset-y-0 right-0 grid w-1/4 place-items-center text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:hidden [@media(hover:none)]:opacity-80"
           >
-            <ChevronRight className="size-8 drop-shadow" />
+            <span className="grid size-11 place-items-center rounded-full bg-[#14112b80] backdrop-blur-sm">
+              <ChevronRight className="size-6" aria-hidden />
+            </span>
           </button>
         </>
       )}
       {caption ? (
-        <p className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 text-sm text-white">
+        <p className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-10 pb-3.5 text-[14px] leading-5 font-semibold text-white">
           {caption}
         </p>
       ) : null}

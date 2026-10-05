@@ -6,7 +6,7 @@ Reviewed September 29, 2026 against the code in this package, not against an old
 
 Status words: **Built** (works, tested here) · **Built differently** (same purpose, different design on purpose) · **Excluded** (against Kamino's house rules) · **Yours to provide** (needs accounts, staff or hardware that code cannot supply).
 
-House rules: no ads, no coins or in-app currency, no paywalled stickers, no notification spam, ages 13+, low maintenance, humans decide moderation.
+House rules (updated in the 2026 redesign): the core app stays free, no pay-to-win, no notification spam, ages 13+, low maintenance, humans decide moderation. Optional paid extras may come later; none are built yet.
 
 ## Corrections to the earlier review
 
@@ -65,9 +65,9 @@ The earlier review was written from a web-only build. These claims are now wrong
 | | Leaderboards | Built |
 | | Events, RSVPs, challenges with judging | Built |
 | | Notifications and push (you choose which) | Built; push delivery needs a first real-phone test |
-| Economy | Coins, coin purchases, tipping | **Excluded** by house rules (an older Coins wallet remains on the website only; see below) |
-| | Rewarded ads / offer walls | **Excluded** |
-| | Paid fan clubs / VIP tiers | **Excluded** |
+| Economy | Coins, coin purchases, tipping | **Not built yet** (allowed under the updated house rules; an older earned-coins wallet with tipping exists on the website) |
+| | Rewarded ads / offer walls | **Not built** (ads are allowed later only if carefully limited) |
+| | Paid fan clubs / VIP tiers | **Not built yet** (a Kamino+ plan or creator subscriptions may come later) |
 | | Amino+ style subscription, paid cosmetics or stickers | **Excluded** |
 | Moderation | Reports, hide/remove, strikes, timed mutes, bans | Built |
 | | Automatic safety checks (illegal trades, exploitation, threats) on posts, comments, chat, DMs, walls, stories and pictures, with a review queue | Built: free built-in rules always; free AI check when the key is set; held items wait for a person, no automatic bans. **Not tested against the real AI service** |
@@ -90,7 +90,7 @@ The earlier review was written from a web-only build. These claims are now wrong
 2. **Accounts and money for hosting and stores** (Render, Expo, Apple US$99/year, Google US$25 once).
 3. **People.** Appoint leaders and curators. Kamino gives them every tool but does not replace them.
 4. **A lawyer's look** at the Privacy Policy and Terms, which are drafts, not legal advice.
-5. **A decision on the old website Coins wallet.** It predates the "no coins" rule, is not in the phone app, and contradicts the house rule. Removing it is a small job once you decide.
+5. **Paid features, when you want them.** The house rules now allow them. Selling anything digital inside the phone apps must use Apple's and Google's in-app purchases (they take a cut), which is its own project. The website's older earned-coins wallet can stay as it is until then.
 
 ## Not done in this release
 

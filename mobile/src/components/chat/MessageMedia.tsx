@@ -5,27 +5,29 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { Pressable, View } from "react-native";
 import { authHeaders, messageMediaUrl } from "@/api/client";
 import { Txt } from "@/components/ui";
-import { radius, space, useTheme } from "@/theme";
+import { space, useTheme } from "@/theme";
 
-type Props = { roomId: number; messageId: number; kind: "image" | "audio" | "video" };
+type Props = { roomId: number; messageId: number; kind: "image" | "audio" | "video"; /** On a coloured (gradient) bubble: draw the voice-note controls in white. */ onColor?: boolean };
 
 /**
  * A photo, voice note or clip inside a chat bubble. Attachments are protected, so every request
  * carries the signed-in person's token.
  */
-export function MessageMedia({ roomId, messageId, kind }: Props) {
+export function MessageMedia({ roomId, messageId, kind, onColor }: Props) {
   const source = { uri: messageMediaUrl(roomId, messageId), headers: authHeaders() };
   if (kind === "image") {
-    return <Image source={source} style={{ width: 220, height: 220, borderRadius: radius.md }} contentFit="cover" accessibilityLabel="Photo" transition={120} />;
+    return <Image source={source} style={{ width: 210, height: 210, borderRadius: 14 }} contentFit="cover" accessibilityLabel="Photo" transition={120} />;
   }
   if (kind === "video") return <ClipPlayer source={source} />;
-  return <VoiceNote source={source} />;
+  return <VoiceNote source={source} onColor={onColor} />;
 }
 
 type Source = { uri: string; headers: Record<string, string> };
 
-function VoiceNote({ source }: { source: Source }) {
+function VoiceNote({ source, onColor }: { source: Source; onColor?: boolean }) {
   const theme = useTheme();
+  const fg = onColor ? "#FFFFFF" : theme.accent;
+  const track = onColor ? "rgba(255,255,255,0.35)" : theme.border;
   const player = useAudioPlayer(source);
   const status = useAudioPlayerStatus(player);
 
@@ -39,11 +41,11 @@ function VoiceNote({ source }: { source: Source }) {
 
   return (
     <Pressable onPress={toggle} accessibilityRole="button" accessibilityLabel={status.playing ? "Pause voice message" : "Play voice message"} style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minWidth: 150 }}>
-      <Ionicons name={status.playing ? "pause-circle" : "play-circle"} size={36} color={theme.accent} />
-      <View style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: theme.border }}>
-        <View style={{ width: `${status.duration ? Math.min(100, (status.currentTime / status.duration) * 100) : 0}%`, height: 4, borderRadius: 2, backgroundColor: theme.accent }} />
+      <Ionicons name={status.playing ? "pause-circle" : "play-circle"} size={36} color={fg} />
+      <View style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: track }}>
+        <View style={{ width: `${status.duration ? Math.min(100, (status.currentTime / status.duration) * 100) : 0}%`, height: 4, borderRadius: 2, backgroundColor: fg }} />
       </View>
-      <Txt variant="caption" tone="muted">{formatSeconds(shown)}</Txt>
+      <Txt variant="caption" style={{ color: onColor ? "rgba(255,255,255,0.9)" : theme.muted }}>{formatSeconds(shown)}</Txt>
     </Pressable>
   );
 }
@@ -52,7 +54,7 @@ function ClipPlayer({ source }: { source: Source }) {
   const player = useVideoPlayer(source, (p) => {
     p.loop = false;
   });
-  return <VideoView player={player} style={{ width: 240, height: 180, borderRadius: radius.md, backgroundColor: "#000" }} nativeControls contentFit="contain" accessibilityLabel="Video" />;
+  return <VideoView player={player} style={{ width: 240, height: 180, borderRadius: 14, backgroundColor: "#000" }} nativeControls contentFit="contain" accessibilityLabel="Video" />;
 }
 
 export function formatSeconds(total: number): string {

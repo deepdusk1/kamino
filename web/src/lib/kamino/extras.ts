@@ -17,7 +17,7 @@ import type { Community, Post } from "./types";
 import { deleteMedia, loadMedia, storeMedia } from "./media-store.server";
 
 type Authed = { userId: string };
-const { db, notify, ensureProfile, membershipOf, requireActiveMember, requirePostAccess, blockedSet, likedSet, savedSet, POST_SELECT, POST_JOIN } = internals;
+const { db, notify, ensureProfile, membershipOf, requireActiveMember, requirePostAccess, blockedSet, mutedSet, likedSet, savedSet, POST_SELECT, POST_JOIN } = internals;
 
 const MAX_MUTE_HOURS = 24 * 30;
 
@@ -84,7 +84,10 @@ export const issueMute = createServerFn({ method: "POST" })
       insert into audit_log (community_id, actor_id, action, detail)
       values (${data.slug}, ${userId}, 'mute', ${`${data.userId}:${hours}h`})
     `;
-    await notify(sql, data.userId, "mute", "You were muted", reason.slice(0, 80), `/c/${data.slug}`);
+    await notify(sql, data.userId, "mute", "You were muted", reason.slice(0, 80), `/c/${data.slug}`, {
+      targetType: "community",
+      targetId: data.slug,
+    });
     return { until };
   });
 
@@ -170,7 +173,11 @@ export const fileAppeal = createServerFn({ method: "POST" })
       select user_id from memberships
       where community_id = ${data.slug} and status = 'active' and role in ('leader','agent')`;
     for (const l of leaders)
-      await notify(sql, l.user_id, "appeal", "New appeal", message.slice(0, 80), `/c/${data.slug}/mod`);
+      await notify(sql, l.user_id, "appeal", "New appeal", message.slice(0, 80), `/c/${data.slug}/mod`, {
+        actorId: userId,
+        targetType: "community",
+        targetId: data.slug,
+      });
     return { ok: true };
   });
 
@@ -252,6 +259,7 @@ export const resolveAppeal = createServerFn({ method: "POST" })
       data.decision === "overturned" ? "Appeal accepted" : "Appeal reviewed",
       (note || (data.decision === "overturned" ? "The leaders reversed the decision." : "The leaders kept the decision.")).slice(0, 80),
       `/c/${data.slug}`,
+      { targetType: "community", targetId: data.slug },
     );
     return { ok: true };
   });
@@ -312,7 +320,7 @@ export const proposeWikiEdit = createServerFn({ method: "POST" })
     await sql`insert into wiki_proposals (post_id, proposer_user_id, title, body, note)
       values (${data.postId}, ${userId}, ${title}, ${body}, ${(data.note ?? "").trim().slice(0, 300)})`;
     await notify(sql, String(post.author_user_id), "wiki", "Edit suggested", title.slice(0, 80),
-      `/c/${post.community_id}/p/${data.postId}`);
+      `/c/${post.community_id}/p/${data.postId}`, { actorId: userId, targetType: "post", targetId: data.postId });
     return { ok: true };
   });
 
@@ -381,7 +389,7 @@ export const resolveWikiProposal = createServerFn({ method: "POST" })
       where id = ${data.proposalId}`;
     await notify(sql, proposal.proposer_user_id, "wiki",
       data.decision === "accepted" ? "Your wiki edit was accepted" : "Your wiki edit was declined",
-      proposal.title.slice(0, 80), `/c/${post.community_id}/p/${post.id}`);
+      proposal.title.slice(0, 80), `/c/${post.community_id}/p/${post.id}`, { actorId: userId, targetType: "post", targetId: Number(post.id) });
     return { ok: true };
   });
 
@@ -407,7 +415,7 @@ export const listFeeds = createServerFn({ method: "GET" })
     const sql = await db();
     const community = await internals.requireCommunity(sql, slug);
     const member = await membershipOf(sql, (context as unknown as Viewer).userId, slug);
-    const readable = community.visibility !== "private" ? member?.status !== "banned" : member?.status === "active";
+    const readable = await internals.canReadForViewer(sql, (context as unknown as Viewer).userId, community, member);
     if (!readable) return [];
     const rows = await sql<{ id: number; url: string; title: string }>`
       select id, url, title from community_feeds where community_id = ${slug} order by id`;
@@ -466,46 +474,14 @@ export const readFeeds = createServerFn({ method: "GET" })
 
 // ───────────────────────────── Account deletion ───────────────────────────
 
-/** Columns whose rows belong to the person and are removed with their account. */
-const OWNED_COLUMNS = [
-  "user_id", "author_user_id", "follower_id", "followee_id", "blocker_id", "blocked_id",
-  "reporter_id", "editor_user_id", "profile_user_id", "proposer_user_id", "to_user_id",
-];
-/** Tables that keep (pseudonymous) records for community accountability. */
-const KEEP_TABLES = new Set(["audit_log", "communities", "title_defs", "appeals", "strikes", "member_mutes", "safety_flags"]);
-
-/** Removes a person and everything they own (used by "Delete my account" and the under-age check). */
+/** Rows commit atomically; external object cleanup is durable and runs only after that commit. */
 async function eraseAccount(sql: Awaited<ReturnType<typeof db>>, userId: string) {
-  await sql`update communities set member_count = greatest(member_count - 1, 0)
-    where id in (select community_id from memberships where user_id = ${userId} and status = 'active')`;
-
-  // Files kept in object storage are removed along with the person's rows.
-  await deleteMedia([
-    ...(await sql<{ v: string }>`select pi.data_url as v from post_images pi join posts p on p.id = pi.post_id where p.author_user_id = ${userId}`).map((r) => r.v),
-    ...(await sql<{ v: string }>`select cover as v from posts where author_user_id = ${userId}`).map((r) => r.v),
-    ...(await sql<{ v: string }>`select mm.data_url as v from message_media mm join messages m on m.id = mm.message_id where m.author_user_id = ${userId}`).map((r) => r.v),
-    ...(await sql<{ v: string }>`select data_url as v from profile_avatars where user_id = ${userId}`).map((r) => r.v),
-    ...(await sql<{ v: string }>`select data_url as v from profile_covers where user_id = ${userId}`).map((r) => r.v),
-  ]);
-  await sql`delete from post_images where post_id in (select id from posts where author_user_id = ${userId})`;
-  const columns = await sql<{ table_name: string; column_name: string }>`
-    select table_name, column_name from information_schema.columns
-    where table_schema = 'public' and column_name = any(${OWNED_COLUMNS})`;
-  const targets = columns.filter((c) => !KEEP_TABLES.has(c.table_name) && c.table_name !== "profiles");
-  // Two passes: the second clears rows that were blocked by a foreign key on the first.
-  for (let pass = 0; pass < 2; pass++) {
-    for (const { table_name, column_name } of targets) {
-      try {
-        await sql.query(`delete from "${table_name}" where "${column_name}" = $1`, [userId]);
-      } catch (error) {
-        if (pass === 1) console.warn(`[delete-account] ${table_name}.${column_name}:`, error);
-      }
-    }
-  }
-  await sql`update coin_ledger set from_user_id = null where from_user_id = ${userId}`.catch(() => undefined);
-  await sql`delete from profiles where user_id = ${userId}`;
-  // Sessions and linked accounts are removed by the foreign key on the auth user.
-  await sql`delete from "user" where id = ${userId}`;
+  const { eraseAccountAtomically } = await import("./privacy-v9.server");
+  await eraseAccountAtomically(sql, userId);
+  const { processMediaDeletionQueue } = await import("./media-deletion.server");
+  // Start a bounded drain after commit without delaying account removal on a provider timeout.
+  // The durable queue and scheduled jobs also cover runtimes that stop this background attempt.
+  void processMediaDeletionQueue(sql, { limit: 4 }).catch(error => console.warn("[delete-account] queued media cleanup:", error));
 }
 
 export const deleteMyAccount = createServerFn({ method: "POST" })
@@ -520,9 +496,9 @@ export const deleteMyAccount = createServerFn({ method: "POST" })
   });
 
 /**
- * The 18+ age check. The apps ask for a birthday when someone creates an account and send it here
+ * The 13+ age check. The apps ask for a birthday when someone creates an account and send it here
  * right after sign-up. We compare it with today's date and keep only the answer ("confirmed at ...").
- * Someone under 18 has their new account erased straight away, so nothing about them is kept.
+ * Someone under 13 has their new account erased straight away, so nothing about them is kept.
  */
 export const confirmMinimumAge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -533,7 +509,7 @@ export const confirmMinimumAge = createServerFn({ method: "POST" })
     // The first call after sign-up creates the member profile, so use the name they signed up with.
     const account = (await sql<{ name: string | null; email: string | null }>`select name, email from "user" where id = ${userId}`)[0];
     await ensureProfile(sql, { userId, email: account?.email ?? null, name: account?.name ?? null });
-    const already = (await sql`select min_age_confirmed_at from profiles where user_id = ${userId}`)[0]?.min_age_confirmed_at;
+    const already = (await sql`select age_checked_at from profiles where user_id = ${userId}`)[0]?.age_checked_at;
     if (already) return { ok: true as const }; // one check per account; never lets an existing member erase themselves by accident
     const result = checkBirthDate(Number(data.year), Number(data.month), Number(data.day));
     if (!result.ok) throw new Error("That is not a real date. Check the day, month and year.");
@@ -541,10 +517,13 @@ export const confirmMinimumAge = createServerFn({ method: "POST" })
       await eraseAccount(sql, userId);
       return { ok: false as const, reason: "under-age" as const };
     }
-    // Everyone passing the gate is 18+, so they are automatically marked old enough for age-gated communities.
+    // Keep eligibility dates rather than birthday. Only this server check can set them.
+    const eligible16 = new Date(Date.UTC(data.year + 16, data.month - 1, data.day)).toISOString().slice(0, 10);
+    const eligible18 = new Date(Date.UTC(data.year + 18, data.month - 1, data.day)).toISOString().slice(0, 10);
     await sql`update profiles
       set min_age_confirmed_at = coalesce(min_age_confirmed_at, now()),
-          age_confirmed = age_confirmed or ${result.age >= ADULT_AGE}
+          age_checked_at = now(), age_eligible_at_16 = ${eligible16}, age_eligible_at_18 = ${eligible18},
+          age_confirmed = ${result.age >= ADULT_AGE}
       where user_id = ${userId}`;
     return { ok: true as const };
   });
@@ -567,10 +546,13 @@ export const setAvatar = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { dataUrl: string }) => d)
   .handler(async ({ context, data }) => {
-    if (!AVATAR_DATA_URL.test(data.dataUrl)) throw new Error("Choose a JPEG, PNG or WebP picture.");
-    if (data.dataUrl.length > AVATAR_MAX_CHARS) throw new Error("That picture is too large. Try a smaller one.");
     const sql = await db();
     const { userId } = context as Authed;
+    const {hasPremium}=await import('./premium.server');const premium=await hasPremium(sql,userId),animated=data.dataUrl.startsWith('data:image/gif;');
+    if(animated&&!premium)throw new Error('Animated avatars require active Kamino+ access.');
+    if(!animated&&!AVATAR_DATA_URL.test(data.dataUrl))throw new Error('Choose a JPEG, PNG or WebP picture.');
+    if(data.dataUrl.length>(animated?2_666_700:AVATAR_MAX_CHARS))throw new Error('That avatar is too large. Use a picture under 220 KB, or a premium GIF under 2 MB.');
+    const {checkedContentMedia}=await import('./content-rules');checkedContentMedia(animated?'gif':'image',data.dataUrl,premium);
     await guard(userId, "upload");
     await refuseUnsafePicture(data.dataUrl);
     const stored = await storeMedia("avatar", data.dataUrl);
@@ -724,11 +706,14 @@ export const searchAll = createServerFn({ method: "GET" })
          and (p.expires_at is null or p.expires_at > now())
          and (p.type <> 'wiki' or p.wiki_status = 'approved')
          and p.type <> 'story'
+         and ${internals.visiblePosts("$1")}
        order by p.like_count desc, p.created_at desc
        limit 40`,
       [v.userId ?? "", isTag ? `%"${term}"%` : like],
     );
-    const visible = postRows.filter((r) => !blocked.includes(String(r.author_user_id))).slice(0, 25);
+    // Posts by people you muted are left out (the people search below still finds them, so you can unmute).
+    const muted = await mutedSet(sql, v.userId);
+    const visible = postRows.filter((r) => !blocked.includes(String(r.author_user_id)) && !muted.has(String(r.author_user_id))).slice(0, 25);
     const ids = visible.map((r) => Number(r.id));
     const liked = await likedSet(sql, v.userId, ids);
     const saved = await savedSet(sql, v.userId, ids);

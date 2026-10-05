@@ -40,6 +40,7 @@ export type Notify = (
   title: string,
   body: string,
   href: string,
+  extra?: { actorId?: string | null; targetType?: string; targetId?: string | number; thumb?: string; push?: boolean },
 ) => Promise<void>;
 
 /** Site owners, from the comma-separated `KAMINO_ADMIN_EMAILS` setting. */
@@ -52,17 +53,19 @@ export function adminEmails(env: Record<string, string | undefined> = process.en
 
 export async function isSiteAdmin(sql: Sql, userId: string): Promise<boolean> {
   const emails = adminEmails();
-  if (!emails.length) return false;
+  const ids = (process.env.KAMINO_ADMIN_USER_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
   const row = (
-    await sql<{ email: string | null }>`select email from "user" where id = ${userId}`
+    await sql<{ email: string | null; emailVerified: boolean }>`select email, "emailVerified" from "user" where id = ${userId}`
   )[0];
-  return Boolean(row?.email && emails.includes(row.email.toLowerCase()));
+  if (!row?.emailVerified) return false;
+  const granted = (await sql`select 1 from identity_admin_grants where user_id = ${userId}`).length > 0;
+  return Boolean(ids.includes(userId) || granted || (row.email && emails.includes(row.email.toLowerCase())));
 }
 
 async function adminUserIds(sql: Sql): Promise<string[]> {
   const emails = adminEmails();
-  if (!emails.length) return [];
-  const rows = await sql<{ id: string }>`select id from "user" where lower(email) = any(${emails})`;
+  const ids = (process.env.KAMINO_ADMIN_USER_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
+  const rows = await sql<{ id: string }>`select id from "user" where "emailVerified" = true and (lower(email) = any(${emails}) or id = any(${ids}) or exists (select 1 from identity_admin_grants g where g.user_id = "user".id))`;
   return rows.map((r) => r.id);
 }
 
@@ -217,7 +220,7 @@ export async function reviewContent(
   for (const id of reviewers) {
     const href =
       input.communityId && !admins.includes(id) ? `/c/${input.communityId}/mod` : "/admin/safety";
-    await notify(sql, id, "safety", title, what, href);
+    await notify(sql, id, "safety", title, what, href, input.communityId ? { targetType: "community", targetId: input.communityId } : {});
   }
 
   // The AI storyteller is not a person to notify.
@@ -230,6 +233,7 @@ export async function reviewContent(
       `Your ${noun} is waiting for a moderator`,
       "Kamino's safety check paused it. A person will look at it soon and either put it back or remove it.",
       input.href,
+      input.targetType === "post" ? { targetType: "post", targetId: input.targetId } : {},
     );
   if (verdict.selfHarm && authorIsPerson)
     await notify(

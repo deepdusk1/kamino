@@ -37,6 +37,9 @@ function failure(err: unknown): Response {
 async function handle({ request, params }: { request: Request; params: { name: string } }) {
   const fn = mobileApi[params.name];
   if (!fn) return json({ error: { message: `Unknown function "${params.name}"`, status: 404 } }, 404);
+  if (request.method === "GET" && fn.method !== "GET") {
+    return json({ error: { message: "This action requires POST.", status: 405 } }, 405);
+  }
 
   let data: unknown = undefined;
   try {

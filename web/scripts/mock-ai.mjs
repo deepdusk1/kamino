@@ -12,9 +12,15 @@ import { createServer } from "node:http";
 export const MOCK_AI = { moderationKey: "test-moderation-key", chatKey: "test-chat-key" };
 
 export function startMockAi(port) {
-  const log = { moderation: [], chat: [], refused: [] };
+  const log = { moderation: [], chat: [], chatOk: 0, refused: [] };
   const unsafeImages = new Set();
   let chatStatus = 200;
+  /** Status per model, e.g. { "openai/gpt-oss-20b": 429 } for a model that has used up its free day. */
+  const modelStatus = new Map();
+  /** Thinking models: an answer is empty when the token allowance is below this (the bug seen with the real service). */
+  let thinkingCost = 0;
+  /** Replies handed out first-in-first-out before the built-in ones (used to script a nice demo story). */
+  const queuedReplies = [];
   const server = createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -57,10 +63,21 @@ export function startMockAi(port) {
         return send(401, { error: { message: "bad key" } });
       }
       log.chat.push(body);
-      if (chatStatus !== 200) return send(chatStatus, { error: { message: "busy" } });
+      const status = modelStatus.get(body.model) ?? chatStatus;
+      if (status !== 200) {
+        res.writeHead(status, { "content-type": "application/json", ...(status === 429 ? { "retry-after": "2" } : {}) });
+        return res.end(JSON.stringify({ error: { message: "busy" } }));
+      }
+      // Reasoning models spend max_tokens on hidden thinking first; asking for less thinking leaves room for the answer.
+      const thinks = /gpt-oss/.test(String(body.model));
+      const needed = thinks ? (body.reasoning_effort === "low" ? thinkingCost : Math.max(thinkingCost, 2000)) : 0;
+      if (thinks && Number(body.max_tokens ?? 0) < needed)
+        return send(200, { id: "chat-test", model: body.model, choices: [{ index: 0, finish_reason: "length", message: { role: "assistant", content: "" } }] });
       const user = String(body.messages?.find((m) => m.role === "user")?.content ?? "");
       let content;
-      if (user.includes("Reply with JSON only")) {
+      if (queuedReplies.length && !user.includes("Reply with JSON only")) {
+        content = queuedReplies.shift();
+      } else if (user.includes("Reply with JSON only")) {
         content =
           '<think>planning</think>```json\n{"title":"The Ship That Made It","premise":"The iceberg is seen in time, and everyone sails on to New York.","characters":[{"name":"Rose","description":"A restless traveller"},{"name":"Jack","description":"An artist with no ticket"},{"name":"Captain","description":"Proud and tired"}],"opening":"Fog curls over the deck as the lookout shouts."}\n```';
       } else if (user.includes("Write a satisfying ending")) {
@@ -70,7 +87,8 @@ export function startMockAi(port) {
       } else {
         content = "Narrator: The wind rises and the ship creaks as the next moment begins.";
       }
-      return send(200, { id: "chat-test", model: body.model, choices: [{ index: 0, message: { role: "assistant", content } }] });
+      log.chatOk += 1;
+      return send(200, { id: "chat-test", model: body.model, choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }] });
     }
     send(404, { error: { message: "not found" } });
   });
@@ -79,6 +97,9 @@ export function startMockAi(port) {
     log,
     markUnsafeImage: (dataUrl) => unsafeImages.add(dataUrl),
     setChatStatus: (status) => (chatStatus = status),
+    setModelStatus: (model, status) => (status === 200 ? modelStatus.delete(model) : modelStatus.set(model, status)),
+    setThinkingCost: (tokens) => (thinkingCost = tokens),
+    queueChatReply: (text) => queuedReplies.push(text),
     close: () => server.close(),
   };
 }

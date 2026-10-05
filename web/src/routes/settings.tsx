@@ -1,304 +1,841 @@
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import {
+  Ban,
+  Bell,
+  CalendarDays,
+  ChevronRight,
+  CloudDownload,
+  Download,
+  FileText,
+  Grid3x3,
+  Heart,
+  Info,
+  Lock,
+  Mail,
+  MessageCircleMore,
+  Minus,
+  Moon,
+  Palette,
+  Plus,
+  Shield,
+  Sparkles,
+  Upload,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
+import { DesktopInstallCard } from "@/components/pwa";
+import { PROFILE_FRAMES } from "@/components/avatar-frame";
+import { Sheet, fieldClass } from "@/components/community/sheet";
+import { SUPPORT_EMAIL } from "@/components/legal-page";
+import { Avatar, GradientButton, ScreenTitle, TONE_STYLE, type Tone } from "@/components/k";
+import { hourLabel, normalizeWebsite, toggleLimited } from "@/components/profile/helpers";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
+import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { blockUser, exportMyData, getMe, updateSettings } from "@/lib/kamino/server";
+import { BUBBLE_STYLE_LABELS } from "@/lib/kamino/cosmetics";
 import { deleteMyAccount } from "@/lib/kamino/extras";
 import { importMyData } from "@/lib/kamino/library";
-import { signOut } from "@/lib/auth/client";
+import { blockUser, exportMyData, getMe, updateSettings } from "@/lib/kamino/server";
 import { PROFILE_COVERS } from "@/lib/kamino/titles";
-import { BUBBLE_STYLES, MOOD_PRESETS } from "@/lib/kamino/types";
-import { PROFILE_FRAMES } from "@/components/avatar-frame";
-import { BUBBLE_STYLE_LABELS } from "@/lib/kamino/cosmetics";
+import {
+  BUBBLE_STYLES,
+  INTEREST_OPTIONS,
+  MOOD_PRESETS,
+  PROFILE_CATEGORY_OPTIONS,
+  type NotifyPrefs,
+  type Profile,
+} from "@/lib/kamino/types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
-export const Route = createFileRoute("/settings")({ component: Settings });
+export const Route = createFileRoute("/settings")({ component: SettingsRoute });
 
-function Settings() {
+type Me = Awaited<ReturnType<typeof getMe>>;
+type Patch = Parameters<typeof updateSettings>[0]["data"];
+type FineToggle = "notifyLikes" | "notifyComments" | "notifyFollows" | "notifyChat" | "notifyWall";
+
+const MAX_CATEGORIES = 6;
+
+/** The older, finer switches (still used by the server for each kind of activity). */
+const FINE_TUNE: { key: FineToggle; label: string }[] = [
+  { key: "notifyLikes", label: "Likes on my posts" },
+  { key: "notifyComments", label: "Comments and replies" },
+  { key: "notifyFollows", label: "New followers" },
+  { key: "notifyChat", label: "Chat messages" },
+  { key: "notifyWall", label: "Wall notes" },
+];
+
+/** Alerts by notification category (the in-app list always fills). */
+const CATEGORIES: { key: keyof NotifyPrefs; label: string; hint: string; icon: ReactNode; tone: Tone }[] = [
+  { key: "social", label: "Social", hint: "Likes, comments, mentions, follows", icon: <Heart />, tone: "pink" },
+  { key: "community", label: "Community", hint: "Invites, announcements, achievements", icon: <Users />, tone: "blue" },
+  { key: "events", label: "Events & live", hint: "Event reminders, live rooms, calls", icon: <CalendarDays />, tone: "orange" },
+  { key: "messages", label: "Messages", hint: "New chat messages", icon: <MessageCircleMore />, tone: "violet" },
+];
+
+const DM_OPTIONS = [
+  { value: "everyone", label: "Everyone" },
+  { value: "members", label: "People I share a community with" },
+  { value: "none", label: "No one" },
+] as const;
+
+const HUES = [0, 25, 50, 140, 175, 210, 250, 290, 330];
+
+/** The browser's time zone, e.g. "America/Vancouver" (quiet hours use it). */
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+  } catch {
+    return "";
+  }
+}
+
+const fail = (e: unknown, fallback = "Couldn't save that") => toast.error(e instanceof Error ? e.message : fallback);
+
+function SettingsRoute() {
   const { user, isPending } = useCurrentUserState();
-  const q = useQuery({ queryKey: ["me"], queryFn: () => getMe(), enabled: !!user });
-  const [msg, setMsg] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState("");
-  if (isPending) return <AppShell title="Safety"><div className="h-24" /></AppShell>;
-  if (!user) return <RedirectToSignIn />;
-  const p = q.data?.profile;
+  if (!isPending && !user) return <RedirectToSignIn />;
+  return <Settings enabled={!!user} email={user?.primaryEmail ?? user?.displayName ?? ""} />;
+}
+
+/**
+ * Settings: your profile (name, headline, pronouns, bio, location, website, profile categories, interests and
+ * look), privacy, notifications (by category, quiet hours, digest), blocked people, your data, help and legal,
+ * sign out and delete account. Switches save straight away; the profile card saves with its button.
+ * Mirrors the phone app's Edit profile + Settings screens.
+ */
+function Settings({ enabled, email }: { enabled: boolean; email: string }) {
+  const queryClient = useQueryClient();
+  const me = useQuery({ queryKey: ["me"], queryFn: () => getMe(), enabled });
+  const sentZone = useRef(false);
+
+  const save = async (patch: Patch) => {
+    // Show the change straight away; the server copy comes back with the refresh.
+    queryClient.setQueryData<Me>(["me"], (prev) =>
+      prev
+        ? {
+            ...prev,
+            profile: {
+              ...prev.profile,
+              ...(patch as Partial<Profile>),
+              notifyPrefs: { ...prev.profile.notifyPrefs, ...(patch.notifyPrefs ?? {}) },
+            },
+          }
+        : prev,
+    );
+    try {
+      await updateSettings({ data: patch });
+    } catch (e) {
+      fail(e);
+    }
+    await queryClient.invalidateQueries({ queryKey: ["me"] });
+    void queryClient.invalidateQueries({ queryKey: ["profileOverview"] });
+    void queryClient.invalidateQueries({ queryKey: ["shell"] });
+  };
+
+  // Tell the server the browser's time zone once, so quiet hours follow local time.
+  const profile = me.data?.profile;
+  useEffect(() => {
+    if (!profile || sentZone.current) return;
+    sentZone.current = true;
+    const zone = browserTimeZone();
+    if (zone && zone !== profile.timezone) updateSettings({ data: { timezone: zone } }).catch(() => undefined);
+  }, [profile]);
+
+  // Jump to #profile / #privacy once the cards are on screen.
+  useEffect(() => {
+    if (!profile || typeof window === "undefined" || !window.location.hash) return;
+    document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [profile]);
 
   return (
-    <AppShell title="Safety & account">
-      <div className="space-y-8 px-4 py-5">
-        <section className="rounded-2xl bg-surface p-5 shadow-border">
-          <h2 className="font-display text-lg font-semibold">Account</h2>
-          <p className="mt-1 text-sm text-muted">{user.primaryEmail ?? user.displayName}</p>
-          <div className="mt-3">
-            <UserButton />
-          </div>
-        </section>
-
-        {p && (
-          <form
-            className="space-y-3 rounded-2xl bg-surface p-5 shadow-border"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              void updateSettings({
-                data: {
-                  displayName: String(fd.get("displayName")),
-                  bio: String(fd.get("bio")),
-                  dmPrivacy: String(fd.get("dmPrivacy")),
-                  hideJoined: fd.get("hideJoined") === "on",
-                  showOnline: fd.get("showOnline") === "on",
-                  ageConfirmed: fd.get("ageConfirmed") === "on",
-                  cover: String(fd.get("cover") || p.cover || ""),
-                  mood: String(fd.get("mood") || ""),
-                  status: String(fd.get("status") || ""),
-                  frame: String(fd.get("frame") || p.frame),
-                  bubbleHue: Number(fd.get("bubbleHue") || p.bubbleHue),
-                  bubbleStyle: String(fd.get("bubbleStyle") || p.bubbleStyle),
-                  notifyLikes: fd.get("notifyLikes") === "on",
-                  notifyComments: fd.get("notifyComments") === "on",
-                  notifyFollows: fd.get("notifyFollows") === "on",
-                  notifyChat: fd.get("notifyChat") === "on",
-                  notifyWall: fd.get("notifyWall") === "on",
-                },
-              }).then(() => {
-                setMsg("Saved.");
-                void q.refetch();
-              });
-            }}
-          >
-            <h2 className="font-display text-lg font-semibold">Profile & privacy</h2>
-            <label className="block text-sm">
-              Display name
-              <input name="displayName" defaultValue={p.displayName} className="mt-1 h-11 w-full rounded-lg bg-elevated px-3" />
-            </label>
-            <label className="block text-sm">
-              Bio
-              <textarea name="bio" defaultValue={p.bio} rows={3} className="mt-1 w-full rounded-lg bg-elevated px-3 py-2" />
-            </label>
-            <label className="block text-sm">
-              Mood
-              <input name="mood" defaultValue={p.mood} list="moods" placeholder="watching, drawing…" className="mt-1 h-11 w-full rounded-lg bg-elevated px-3" />
-              <datalist id="moods">
-                {MOOD_PRESETS.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            </label>
-            <label className="block text-sm">
-              Status
-              <input name="status" defaultValue={p.status} placeholder="A one-line status" className="mt-1 h-11 w-full rounded-lg bg-elevated px-3" />
-            </label>
-            <fieldset>
-              <legend className="text-sm">Avatar frame</legend>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {PROFILE_FRAMES.map((f) => (
-                  <label key={f.id} className="flex h-11 items-center gap-2 rounded-lg bg-elevated px-3 text-sm">
-                    <input type="radio" name="frame" value={f.id} defaultChecked={p.frame === f.id} />
-                    {f.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <label className="block text-sm">
-              Chat bubble hue
-              <input type="range" name="bubbleHue" min={0} max={360} defaultValue={p.bubbleHue} className="mt-2 w-full" />
-            </label>
-            <fieldset>
-              <legend className="text-sm">Chat bubble style</legend>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {BUBBLE_STYLES.map((style) => (
-                  <label key={style} className="flex h-11 items-center gap-2 rounded-lg bg-elevated px-3 text-sm">
-                    <input type="radio" name="bubbleStyle" value={style} defaultChecked={p.bubbleStyle === style} />
-                    {BUBBLE_STYLE_LABELS[style]}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend className="text-sm">Profile cover</legend>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {PROFILE_COVERS.map((c) => (
-                  <label key={c.id} className="block cursor-pointer">
-                    <input type="radio" name="cover" value={c.src} defaultChecked={p.cover === c.src} className="sr-only" />
-                    <img
-                      src={c.src}
-                      alt={c.label}
-                      className={cn("h-14 w-full rounded-lg object-cover", p.cover === c.src && "outline outline-2 outline-accent")}
-                    />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <label className="block text-sm">
-              Who can DM you
-              <select name="dmPrivacy" defaultValue={p.dmPrivacy} className="mt-1 h-11 w-full rounded-lg bg-elevated px-3">
-                <option value="everyone">Everyone</option>
-                <option value="members">People who share a community</option>
-                <option value="none">No one</option>
-              </select>
-            </label>
-            <label className="flex h-11 items-center gap-2 text-sm">
-              <input type="checkbox" name="hideJoined" defaultChecked={p.hideJoined} />
-              Hide joined communities on my public profile
-            </label>
-            <label className="flex h-11 items-center gap-2 text-sm">
-              <input type="checkbox" name="showOnline" defaultChecked={p.showOnline} />
-              Show online status in voice rooms
-            </label>
-            <fieldset className="space-y-1">
-              <legend className="text-sm font-bold">Notifications</legend>
-              <label className="flex h-10 items-center gap-2 text-sm">
-                <input type="checkbox" name="notifyLikes" defaultChecked={p.notifyLikes} /> Likes
-              </label>
-              <label className="flex h-10 items-center gap-2 text-sm">
-                <input type="checkbox" name="notifyComments" defaultChecked={p.notifyComments} /> Comments
-              </label>
-              <label className="flex h-10 items-center gap-2 text-sm">
-                <input type="checkbox" name="notifyFollows" defaultChecked={p.notifyFollows} /> Follows
-              </label>
-              <label className="flex h-10 items-center gap-2 text-sm">
-                <input type="checkbox" name="notifyChat" defaultChecked={p.notifyChat} /> Chat
-              </label>
-              <label className="flex h-10 items-center gap-2 text-sm">
-                <input type="checkbox" name="notifyWall" defaultChecked={p.notifyWall} /> Wall notes
-              </label>
-            </fieldset>
-            {msg ? <p className="text-sm text-ok">{msg}</p> : null}
-            <Button type="submit">Save</Button>
-          </form>
-        )}
-
-        <section className="rounded-2xl bg-surface p-5 shadow-border">
-          <h2 className="font-display text-lg font-semibold">Blocked</h2>
-          <ul className="mt-3 space-y-2">
-            {(q.data?.blocked ?? []).map((b) => (
-              <li key={b.blocked_id} className="flex items-center justify-between text-sm">
-                <span>
-                  {b.display_name} · @{b.handle}
-                </span>
-                <Button size="sm" variant="secondary" onClick={() => void blockUser({ data: b.blocked_id }).then(() => q.refetch())}>
-                  Unblock
-                </Button>
-              </li>
+    <AppShell>
+      <div className="space-y-3 px-4 lg:mx-auto lg:max-w-[760px] lg:space-y-4 lg:px-0 lg:pt-2">
+        <ScreenTitle title="Settings" subtitle="Your profile, privacy, notifications and account." />
+        <DesktopInstallCard />
+        <div className="flex flex-wrap gap-3 py-2"><Link to="/privacy-dashboard" className="k-focus font-bold text-violet">Privacy dashboard and muted people</Link><Link to="/security" className="k-focus font-bold text-violet">Account security and devices</Link><Link to="/tutorial" className="k-focus font-bold text-violet">Welcome tour</Link></div>
+        <div className="flex flex-wrap gap-3 py-2"><Link to="/discover-plus" className="k-focus font-bold text-violet">Discovery tools</Link><Link to="/creator" className="k-focus font-bold text-violet">Creator studio</Link><Link to="/marketplace" className="k-focus font-bold text-violet">Marketplace</Link><Link to="/support" className="k-focus font-bold text-violet">Contact support</Link></div>
+        {me.isPending ? (
+          <div className="space-y-3" aria-busy="true" aria-label="Loading settings">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-40 animate-pulse rounded-card bg-surface-alt" />
             ))}
-          </ul>
-          {(q.data?.blocked ?? []).length === 0 && <p className="mt-2 text-sm text-muted">No one blocked.</p>}
-        </section>
-
-        <section className="rounded-2xl bg-surface p-5 shadow-border">
-          <h2 className="font-display text-lg font-semibold">Your archive</h2>
-          <p className="mt-1 text-sm text-muted">
-            Take your writing with you. Download your full posts, wiki pages, quiz questions, drafts,
-            characters, comments, your own chat messages, wall posts, and shared links as a JSON archive.
-            Linked media stays linked; externally hosted files are not downloaded into the archive.
-          </p>
-          <Button
-            className="mt-3"
-            variant="secondary"
-            disabled={exporting}
-            onClick={async () => {
-              setExporting(true);
-              try { const payload = await exportMyData();
-                const blob = new Blob([payload.json], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "kamino-export.json";
-                a.click();
-                window.setTimeout(() => URL.revokeObjectURL(url),1000);
-              } catch(e) {toast.error(e instanceof Error ? e.message : "Could not export your data");}
-              finally {setExporting(false);}
-            }}
-          >
-            {exporting ? "Preparing your archive…" : "Export my data"}
-          </Button>
-          <div className="mt-4 border-t border-border pt-4">
-            <h3 className="text-sm font-bold">Bring your archive back</h3>
-            <p className="mt-1 text-sm text-muted">
-              Choose a file you exported before. Your posts and drafts come back as private drafts in the
-              communities you are in, so nothing is published without you. Importing the same file twice is safe.
-            </p>
-            <input
-              aria-label="Choose an archive file to import"
-              type="file"
-              accept="application/json,.json"
-              disabled={importing}
-              className="mt-3 w-full text-xs"
-              onChange={async (e) => {
-                const input = e.target;
-                const file = input.files?.[0];
-                input.value = "";
-                if (!file) return;
-                if (file.size > 20 * 1024 * 1024) {
-                  toast.error("That file is too large to import.");
-                  return;
-                }
-                setImporting(true);
-                try {
-                  const result = await importMyData({ data: { json: await file.text() } });
-                  toast.success(`Imported ${result.imported} draft${result.imported === 1 ? "" : "s"}${result.skipped ? `, skipped ${result.skipped}` : ""}.`);
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Could not import that file");
-                } finally {
-                  setImporting(false);
-                }
-              }}
-            />
           </div>
-        </section>
-
-        <section className="rounded-2xl bg-surface p-5 shadow-border">
-          <h2 className="font-display text-lg font-semibold">Delete account</h2>
-          <p className="mt-1 text-sm text-muted">
-            This permanently removes your profile, posts, comments, messages and follows. It cannot
-            be undone. Download your archive first if you want a copy. Type DELETE to confirm.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <input
-              aria-label="Type DELETE to confirm"
-              className="rounded-xl bg-bg px-3 py-2 text-sm shadow-border"
-              value={confirmDelete}
-              onChange={(e) => setConfirmDelete(e.target.value)}
-              placeholder="DELETE"
-            />
-            <Button
-              variant="secondary"
-              disabled={confirmDelete !== "DELETE"}
-              onClick={async () => {
-                try {
-                  await deleteMyAccount({ data: { confirm: confirmDelete } });
-                  await signOut("/");
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Could not delete your account");
-                }
-              }}
-            >
-              Delete my account
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-2xl bg-surface p-5 text-sm text-muted shadow-border">
-          <h2 className="font-display text-lg font-semibold text-fg">House laws</h2>
-          <ul className="mt-3 list-disc space-y-1 pl-4">
-            <li>18+ only. Every member is an adult.</li>
-            <li>No harassment, hate, sexual content involving minors, or scams.</li>
-            <li>Reports go to human leaders. No mystery auto-bans.</li>
-            <li>Each community has its own persona. Don’t dox the person behind it.</li>
-            <li>Private rooms stay private. Screenshots of reports are a ban.</li>
-          </ul>
-          <p className="mt-3">
-            <a className="underline" href="/privacy">Privacy policy</a> ·{" "}
-            <a className="underline" href="/terms">Terms of use</a>
-          </p>
-        </section>
+        ) : me.isError || !me.data ? (
+          <Card title="Couldn't load your settings" icon={<Info />} tone="pink">
+            <p className="text-[13.5px] text-muted">{me.error?.message ?? "Please try again."}</p>
+            <GradientButton size="sm" onClick={() => void me.refetch()}>
+              Try again
+            </GradientButton>
+          </Card>
+        ) : (
+          <SettingsCards me={me.data} save={save} email={email} />
+        )}
       </div>
     </AppShell>
+  );
+}
+
+function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Promise<void>; email: string }) {
+  const queryClient = useQueryClient();
+  const p = me.profile;
+  // Older accounts may miss some keys; anything missing counts as on (digest as off).
+  const prefs: NotifyPrefs = {
+    ...{ social: true, community: true, events: true, messages: true, digest: false },
+    ...(p.notifyPrefs as Partial<NotifyPrefs>),
+  };
+  const quietOn = p.quietStart !== null && p.quietEnd !== null;
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+
+  async function exportData() {
+    setExporting(true);
+    try {
+      const payload = await exportMyData();
+      const blob = new Blob([payload.json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "kamino-export.json";
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      fail(e, "Could not export your data");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) return void toast.error("That file is too large to import.");
+    setImporting(true);
+    try {
+      const result = await importMyData({ data: { json: await file.text() } });
+      toast.success(
+        `${result.imported} draft${result.imported === 1 ? "" : "s"} added${result.skipped ? `, ${result.skipped} skipped` : ""}. Nothing was published.`,
+      );
+    } catch (e) {
+      fail(e, "Could not import that file");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function deleteAccount() {
+    setDeleting(true);
+    try {
+      await deleteMyAccount({ data: { confirm: confirmText.trim() } });
+      await signOut("/");
+    } catch (e) {
+      fail(e, "Could not delete your account");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <>
+      <ProfileForm profile={p} onSaved={() => queryClient.invalidateQueries()} />
+
+      <Card id="privacy" title="Privacy" icon={<Lock />} tone="violet">
+        <SwitchRow
+          label="Private account"
+          hint="Only people you approve can follow you and see your posts, badges and communities."
+          value={p.privateAccount}
+          onChange={(privateAccount) => void save({ privateAccount })}
+        />
+        <SwitchRow
+          label="Show when I'm online"
+          hint="A green dot on your picture while you use Kamino."
+          value={p.showOnline}
+          onChange={(showOnline) => void save({ showOnline })}
+        />
+        <SwitchRow
+          label="Read receipts"
+          hint="Let people see when you've read their messages. Turning it off hides theirs from you too."
+          value={p.showReadReceipts}
+          onChange={(showReadReceipts) => void save({ showReadReceipts })}
+        />
+        <SwitchRow
+          label="Hide the communities I've joined"
+          value={p.hideJoined}
+          onChange={(hideJoined) => void save({ hideJoined })}
+        />
+        <fieldset className="space-y-1.5">
+          <legend className="mb-1.5 text-[14px] font-bold text-ink">Who can message me</legend>
+          {DM_OPTIONS.map((o) => {
+            const selected = p.dmPrivacy === o.value;
+            return (
+              <label
+                key={o.value}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-tile border px-3 text-[13.5px] focus-within:ring-2 focus-within:ring-violet",
+                  selected ? "border-violet bg-tint-violet font-bold text-violet-ink" : "border-border bg-surface font-semibold text-ink",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="dmPrivacy"
+                  value={o.value}
+                  checked={selected}
+                  onChange={() => void save({ dmPrivacy: o.value })}
+                  className="size-4 accent-[var(--color-violet)]"
+                />
+                {o.label}
+              </label>
+            );
+          })}
+        </fieldset>
+      </Card>
+
+      <Card
+        id="notifications"
+        title="Notifications"
+        icon={<Bell />}
+        tone="orange"
+        hint="Kamino only tells you about real activity. No reminders or promotions. These switches control alerts on your devices; your notification list always fills."
+      >
+        {CATEGORIES.map((c) => (
+          <SwitchRow
+            key={c.key}
+            label={c.label}
+            hint={c.hint}
+            icon={c.icon}
+            tone={c.tone}
+            value={prefs[c.key]}
+            onChange={(value) => void save({ notifyPrefs: { [c.key]: value } })}
+          />
+        ))}
+        <SwitchRow
+          label="Weekly digest"
+          hint="A short summary of what you missed."
+          icon={<Mail />}
+          tone="green"
+          value={prefs.digest}
+          onChange={(digest) => void save({ notifyPrefs: { digest } })}
+        />
+        <hr className="border-border" />
+        <SwitchRow
+          label="Quiet hours"
+          hint="No alerts during these hours (your local time)."
+          icon={<Moon />}
+          tone="violet"
+          value={quietOn}
+          onChange={(on) => void save(on ? { quietStart: 22, quietEnd: 7 } : { quietStart: null, quietEnd: null })}
+        />
+        {quietOn ? (
+          <div className="space-y-2 pl-[46px]">
+            <HourStepper label="From" hour={p.quietStart!} onChange={(quietStart) => void save({ quietStart })} />
+            <HourStepper label="Until" hour={p.quietEnd!} onChange={(quietEnd) => void save({ quietEnd })} />
+            <p className="text-[12px] text-subtle">Time zone: {p.timezone || browserTimeZone() || "UTC"}</p>
+          </div>
+        ) : null}
+        <hr className="border-border" />
+        <p className="text-[14px] font-bold text-ink">Fine-tune</p>
+        {FINE_TUNE.map((n) => (
+          <SwitchRow key={n.key} label={n.label} value={p[n.key]} onChange={(value) => void save({ [n.key]: value })} />
+        ))}
+      </Card>
+
+      <Card title="Blocked people" icon={<Ban />} tone="pink">
+        {me.blocked.length === 0 ? <p className="text-[13.5px] text-muted">No one blocked.</p> : null}
+        {me.blocked.map((b) => (
+          <div key={b.blocked_id} className="flex items-center gap-2.5">
+            <Avatar person={{ name: b.display_name, hue: 260 }} size={34} />
+            <p className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">
+              {b.display_name} <span className="font-medium text-subtle">@{b.handle}</span>
+            </p>
+            <button
+              type="button"
+              className="k-focus k-hit relative h-8 rounded-full border border-border bg-surface px-3.5 text-[13px] font-bold text-violet hover:bg-surface-alt"
+              onClick={() =>
+                void blockUser({ data: b.blocked_id }).then(() => queryClient.invalidateQueries({ queryKey: ["me"] }), fail)
+              }
+            >
+              Unblock
+            </button>
+          </div>
+        ))}
+      </Card>
+
+      <Card title="Account" icon={<UserRound />} tone="blue">
+        <p className="text-[13.5px] text-muted">{email}</p>
+        <UserButton />
+      </Card>
+
+      <Card title="Your data" icon={<CloudDownload />} tone="blue">
+        <p className="text-[13px] text-muted">
+          Take your writing with you: posts, wiki pages, quiz questions, drafts, characters, comments, your own chat
+          messages, wall notes and shared links, as a JSON file.
+        </p>
+        <LinkRow icon={<Download />} label={exporting ? "Preparing your archive…" : "Export everything I've posted"} onClick={() => void exportData()} disabled={exporting} />
+        <label className="k-focus flex min-h-11 cursor-pointer items-center gap-2.5 rounded-tile text-[14px] font-semibold text-ink focus-within:ring-2 focus-within:ring-violet">
+          <Upload className="size-[19px] text-violet" aria-hidden />
+          <span className="flex-1">{importing ? "Importing…" : "Import an exported file"}</span>
+          <ChevronRight className="size-4 text-subtle" aria-hidden />
+          <input
+            type="file"
+            accept="application/json,.json"
+            disabled={importing}
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              void importFile(file);
+            }}
+          />
+        </label>
+        <p className="text-[12px] text-muted">
+          Your posts and drafts come back as private drafts in the communities you are in. Importing the same file
+          twice is safe.
+        </p>
+      </Card>
+
+      <Card title="Help & legal" icon={<Info />} tone="green">
+        <LinkRow icon={<Shield />} label="Safety and house rules" to="/safety" />
+        <LinkRow icon={<Shield />} label="Privacy policy" href="/privacy" />
+        <LinkRow icon={<FileText />} label="Terms of use" href="/terms" />
+        <LinkRow icon={<Mail />} label="Contact support" href={`mailto:${SUPPORT_EMAIL}`} />
+      </Card>
+
+      <div className="space-y-2 pb-4">
+        <button
+          type="button"
+          onClick={() => setSignOutOpen(true)}
+          className="k-focus h-12 w-full rounded-full border border-border bg-surface text-[15px] font-bold text-ink shadow-card hover:bg-surface-alt"
+        >
+          Sign out
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          className="k-focus h-12 w-full rounded-full bg-tint-pink text-[15px] font-bold text-danger hover:brightness-95"
+        >
+          Delete my account
+        </button>
+      </div>
+
+      <Sheet open={signOutOpen} onOpenChange={setSignOutOpen} title="Sign out?" description="You can sign back in any time.">
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setSignOutOpen(false)} className="k-focus h-11 flex-1 rounded-full border border-border text-[15px] font-bold text-ink">
+            Not now
+          </button>
+          <GradientButton size="md" className="h-11 flex-1" onClick={() => void signOut("/")}>
+            Sign out
+          </GradientButton>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete account"
+        description="This permanently deletes your profile, posts, comments, messages and follows. It can't be undone. Export your data first if you want a copy."
+      >
+        <label className="block space-y-1.5">
+          <span className="block text-[13.5px] font-bold text-ink">Type DELETE to confirm</span>
+          <input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="DELETE"
+            autoCapitalize="characters"
+            autoComplete="off"
+            className={fieldClass}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={confirmText.trim() !== "DELETE" || deleting}
+          onClick={() => void deleteAccount()}
+          className="k-focus h-11 w-full rounded-full bg-red-strong text-[15px] font-bold text-white disabled:opacity-50"
+        >
+          {deleting ? "Deleting…" : "Delete forever"}
+        </button>
+      </Sheet>
+    </>
+  );
+}
+
+/**
+ * Your profile: name, headline, pronouns, bio, status, location, website, the profile category tiles (up to six),
+ * interests, mood, frame, chat bubbles and cover banner. Saved with the "Save profile" button.
+ */
+function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Promise<unknown> }) {
+  const [displayName, setDisplayName] = useState(profile.displayName);
+  const [headline, setHeadline] = useState(profile.headline ?? "");
+  const [pronouns, setPronouns] = useState(profile.pronouns ?? "");
+  const [bio, setBio] = useState(profile.bio);
+  const [status, setStatus] = useState(profile.status);
+  const [location, setLocation] = useState(profile.location ?? "");
+  const [website, setWebsite] = useState(profile.website ?? "");
+  const [categories, setCategories] = useState<string[]>(profile.profileCategories ?? []);
+  const [interests, setInterests] = useState<string[]>(profile.interests ?? []);
+  const [mood, setMood] = useState(profile.mood);
+  const [frame, setFrame] = useState<string>(profile.frame);
+  const [bubbleHue, setBubbleHue] = useState(profile.bubbleHue);
+  const [bubbleStyle, setBubbleStyle] = useState<string>(profile.bubbleStyle);
+  const [cover, setCover] = useState(profile.cover);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const websiteValue = normalizeWebsite(website);
+
+  async function save() {
+    setError(null);
+    if (displayName.trim().length < 2) return setError("Your name needs at least 2 characters.");
+    if (websiteValue === null) return setError("That website doesn't look right. Try something like linktr.ee/yourname.");
+    setBusy(true);
+    try {
+      await updateSettings({
+        data: {
+          displayName: displayName.trim(),
+          headline: headline.trim(),
+          pronouns: pronouns.trim(),
+          bio,
+          status,
+          location: location.trim(),
+          website: websiteValue,
+          profileCategories: categories,
+          interests,
+          mood,
+          frame,
+          bubbleHue,
+          bubbleStyle,
+          cover,
+        },
+      });
+      await onSaved();
+      toast.success("Profile saved");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save your profile");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+      className="space-y-3 lg:space-y-4"
+    >
+      <Card id="profile" title="About you" icon={<UserRound />} tone="violet">
+        <Field label="Display name">
+          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} className={fieldClass} />
+        </Field>
+        <Field label="Headline" hint="A few words under your name.">
+          <input value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={40} placeholder="Digital Artist, Gamer, Bookworm…" className={fieldClass} />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Pronouns (optional)">
+            <input value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={24} placeholder="she/her, he/him, they/them…" autoCapitalize="none" className={fieldClass} />
+          </Field>
+          <Field label="Location (optional)">
+            <input value={location} onChange={(e) => setLocation(e.target.value)} maxLength={40} placeholder="City or region" className={fieldClass} />
+          </Field>
+        </div>
+        <Field label="Bio" hint={`${bio.length}/280`}>
+          <textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={280} rows={3} className={fieldClass} />
+        </Field>
+        <Field label="Status">
+          <input value={status} onChange={(e) => setStatus(e.target.value)} maxLength={80} placeholder="What are you up to?" className={fieldClass} />
+        </Field>
+        <Field label="Website (optional)" hint={websiteValue === null ? "Use a web address like linktr.ee/yourname" : undefined} error={websiteValue === null}>
+          <input
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            maxLength={200}
+            placeholder="linktr.ee/yourname"
+            autoCapitalize="none"
+            autoCorrect="off"
+            inputMode="url"
+            aria-invalid={websiteValue === null}
+            className={fieldClass}
+          />
+        </Field>
+      </Card>
+
+      <Card
+        title="Profile categories"
+        icon={<Grid3x3 />}
+        tone="orange"
+        hint={`Tiles on your profile that open your posts with that tag (#art, #daily…). Pick up to ${MAX_CATEGORIES}: ${categories.length}/${MAX_CATEGORIES}.`}
+      >
+        <div className="flex flex-wrap gap-2">
+          {PROFILE_CATEGORY_OPTIONS.map((c) => {
+            const on = categories.includes(c.key);
+            return (
+              <ChoiceChip
+                key={c.key}
+                label={`${c.emoji} ${c.label}`}
+                selected={on}
+                disabled={!on && categories.length >= MAX_CATEGORIES}
+                onClick={() => setCategories((list) => toggleLimited(list, c.key, MAX_CATEGORIES))}
+              />
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card title="Interests" icon={<Sparkles />} tone="pink" hint="We use these to suggest communities and posts.">
+        <div className="flex flex-wrap gap-2">
+          {INTEREST_OPTIONS.map((o) => (
+            <ChoiceChip
+              key={o.key}
+              label={`${o.emoji} ${o.label}`}
+              selected={interests.includes(o.key)}
+              onClick={() => setInterests((list) => toggleLimited(list, o.key, INTEREST_OPTIONS.length))}
+            />
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Your look" icon={<Palette />} tone="blue">
+        <p className="text-[13px] font-bold text-ink">Mood</p>
+        <div className="flex flex-wrap gap-2">
+          {MOOD_PRESETS.map((m) => (
+            <ChoiceChip key={m} label={m} selected={mood === m} onClick={() => setMood(mood === m ? "" : m)} />
+          ))}
+        </div>
+        <p className="text-[13px] font-bold text-ink">Profile frame</p>
+        <div className="flex flex-wrap gap-2">
+          {PROFILE_FRAMES.map((f) => (
+            <ChoiceChip key={f.id} label={f.label} selected={frame === f.id} onClick={() => setFrame(f.id)} />
+          ))}
+        </div>
+        <p className="text-[13px] font-bold text-ink">Chat bubble colour</p>
+        <div className="flex flex-wrap gap-2">
+          {HUES.map((h) => (
+            <button
+              key={h}
+              type="button"
+              aria-label={`Bubble colour ${h}`}
+              aria-pressed={bubbleHue === h}
+              onClick={() => setBubbleHue(h)}
+              className={cn("k-focus size-10 rounded-full", bubbleHue === h && "ring-[3px] ring-ink ring-offset-2 ring-offset-surface")}
+              style={{ background: `hsl(${h} 70% 62%)` }}
+            />
+          ))}
+        </div>
+        <p className="text-[13px] font-bold text-ink">Chat bubble style</p>
+        <div className="flex flex-wrap gap-2">
+          {BUBBLE_STYLES.map((b) => (
+            <ChoiceChip key={b} label={BUBBLE_STYLE_LABELS[b]} selected={bubbleStyle === b} onClick={() => setBubbleStyle(b)} />
+          ))}
+        </div>
+        <p className="text-[13px] font-bold text-ink">Cover banner</p>
+        <div className="grid grid-cols-3 gap-2">
+          {PROFILE_COVERS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={cover === c.src}
+              aria-label={`Use the ${c.label} banner`}
+              onClick={() => setCover(c.src)}
+              className={cn("k-focus overflow-hidden rounded-[12px] ring-offset-2 ring-offset-surface", cover === c.src && "ring-2 ring-violet")}
+            >
+              <img src={c.src} alt="" className="h-14 w-full object-cover" />
+            </button>
+          ))}
+        </div>
+        <p className="text-[12px] text-muted">
+          Upload your own cover or photo from the ⋯ menu on <Link to="/me" className="font-bold text-violet">your profile</Link>.
+        </p>
+        <Link to="/privacy-dashboard" className="k-focus font-bold text-violet">Manage checked age eligibility</Link>
+      </Card>
+
+      {error ? (
+        <p role="alert" className="flex items-center gap-2 rounded-tile bg-tint-pink p-3 text-[13px] font-semibold text-danger">
+          <Info className="size-[18px] shrink-0" aria-hidden />
+          {error}
+        </p>
+      ) : null}
+      <GradientButton type="submit" size="lg" gradient="hero" full disabled={busy} className="h-12 text-[16px]">
+        {busy ? "Saving…" : "Save profile"}
+      </GradientButton>
+    </form>
+  );
+}
+
+/** A white card with a tinted icon circle and a title (the redesign's section look). */
+function Card({
+  id,
+  title,
+  icon,
+  tone,
+  hint,
+  children,
+}: {
+  id?: string;
+  title: string;
+  icon: ReactNode;
+  tone: Tone;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} className="k-card scroll-mt-20 space-y-3 rounded-card p-3.5 lg:p-5" aria-labelledby={id ? `${id}-title` : undefined}>
+      <div className="flex items-center gap-2.5">
+        <span className={cn("grid size-8 place-items-center rounded-full [&_svg]:size-[17px]", TONE_STYLE[tone].softClassName)} aria-hidden>
+          {icon}
+        </span>
+        <h2 id={id ? `${id}-title` : undefined} className="text-[17px] font-extrabold text-ink">
+          {title}
+        </h2>
+      </div>
+      {hint ? <p className="-mt-1 text-[12.5px] text-muted">{hint}</p> : null}
+      {children}
+    </section>
+  );
+}
+
+function Field({ label, hint, error, children }: { label: string; hint?: string; error?: boolean; children: ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="block text-[13.5px] font-bold text-ink">{label}</span>
+      {children}
+      {hint ? <span className={cn("block text-[12px]", error ? "font-semibold text-danger" : "text-muted")}>{hint}</span> : null}
+    </label>
+  );
+}
+
+/** A label with an on/off switch (saved by the caller). */
+function SwitchRow({
+  label,
+  hint,
+  value,
+  onChange,
+  icon,
+  tone = "violet",
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  icon?: ReactNode;
+  tone?: Tone;
+}) {
+  return (
+    <div className="flex min-h-11 items-center gap-3">
+      {icon ? (
+        <span className={cn("grid size-[34px] shrink-0 place-items-center rounded-full [&_svg]:size-4", TONE_STYLE[tone].softClassName)} aria-hidden>
+          {icon}
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-semibold text-ink">{label}</p>
+        {hint ? <p className="text-[12px] leading-4 text-muted">{hint}</p> : null}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        onClick={() => onChange(!value)}
+        className={cn(
+          "k-focus k-hit relative h-[30px] w-[50px] shrink-0 rounded-full transition-colors",
+          value ? "bg-violet-strong" : "bg-border",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-[3px] left-[3px] size-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform",
+            value && "translate-x-5",
+          )}
+          aria-hidden
+        />
+      </button>
+    </div>
+  );
+}
+
+/** A pickable pill: white with a border, or violet when chosen. */
+function ChoiceChip({ label, selected, disabled, onClick }: { label: string; selected: boolean; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "k-focus k-hit relative h-9 rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-45",
+        selected ? "border-transparent bg-grad-primary font-bold text-white" : "border-border bg-surface font-semibold text-ink hover:bg-surface-alt",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function LinkRow({
+  icon,
+  label,
+  to,
+  href,
+  onClick,
+  disabled,
+}: {
+  icon: ReactNode;
+  label: string;
+  to?: string;
+  href?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const inner = (
+    <>
+      <span className="text-violet [&_svg]:size-[19px]" aria-hidden>
+        {icon}
+      </span>
+      <span className="flex-1">{label}</span>
+      <ChevronRight className="size-4 text-subtle" aria-hidden />
+    </>
+  );
+  const cls = "k-focus flex min-h-11 w-full items-center gap-2.5 rounded-tile text-left text-[14px] font-semibold text-ink hover:text-violet disabled:opacity-60";
+  if (to)
+    return (
+      <Link to={to} className={cls}>
+        {inner}
+      </Link>
+    );
+  if (href)
+    return (
+      <a href={href} className={cls}>
+        {inner}
+      </a>
+    );
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={cls}>
+      {inner}
+    </button>
+  );
+}
+
+/** "From  [-] 10 PM [+]": picks an hour 0–23, wrapping around midnight. */
+function HourStepper({ label, hour, onChange }: { label: string; hour: number; onChange: (h: number) => void }) {
+  const step = (d: number) => onChange((hour + d + 24) % 24);
+  const btn = "k-focus grid size-9 place-items-center rounded-full bg-tint-violet text-violet-ink";
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="w-12 text-[13.5px] font-semibold text-muted">{label}</span>
+      <button type="button" className={btn} onClick={() => step(-1)} aria-label={`${label}: one hour earlier`}>
+        <Minus className="size-4" aria-hidden />
+      </button>
+      <span className="min-w-16 text-center text-[15px] font-extrabold text-ink" aria-live="polite">
+        {hourLabel(hour)}
+      </span>
+      <button type="button" className={btn} onClick={() => step(1)} aria-label={`${label}: one hour later`}>
+        <Plus className="size-4" aria-hidden />
+      </button>
+    </div>
   );
 }

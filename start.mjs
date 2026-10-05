@@ -37,7 +37,8 @@ const fail = (text) => {
 
 // ── 1. Node version ─────────────────────────────────────────────────────────
 const major = Number(process.versions.node.split(".")[0]);
-if (major < 22) fail(`Kamino needs Node.js 22 or newer (you have ${process.versions.node}). Install the current version from https://nodejs.org and run this again.`);
+const minor = Number(process.versions.node.split(".")[1]);
+if (major < 22 || (major === 22 && minor < 13)) fail(`Kamino needs Node.js 22.13 or newer (you have ${process.versions.node}). Install the current version from https://nodejs.org and run this again.`);
 
 // ── 2. Install dependencies the first time ──────────────────────────────────
 function install(folder, name) {
@@ -141,6 +142,6 @@ if (args.has("--server")) {
     env.EXPO_PUBLIC_API_URL = `http://${lan}:${PORT}`; // the phone talks to this computer
     env.REACT_NATIVE_PACKAGER_HOSTNAME = lan;
   }
-  run("The phone app", npx, ["expo", "start", "--lan"], mobile, env);
+  run("The phone app", npx, ["expo", "start", "--dev-client", "--lan"], mobile, env);
   if (!lan) console.log("(Could not find your Wi-Fi address automatically. If the phone can't connect, see mobile/README.md.)");
 }

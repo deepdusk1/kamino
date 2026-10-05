@@ -1,16 +1,18 @@
 # Kamino: App Store and Google Play listing (copy and paste)
 
+> Release 9 note: this store kit predates the new contact matching, provider sign-in, analytics and billing sandbox. Treat the copy, privacy answers and screenshots below as drafts. Review the actual configured services and native permissions, update the declarations and replace device screenshots before submission. Mobile purchases and creator payouts remain unavailable. Do not advertise a feature as live solely because its configuration screen exists.
+
 Everything below is ready to paste into App Store Connect and the Google Play Console.
 Replace `https://YOUR-SERVER` with the public address of your Kamino server (see `DEPLOY.md`).
 
 Screenshots (high-quality JPEG, which both stores accept) and the Google Play banner are in this folder:
 
-- `ios-6.7in-1290x2796/` – upload to App Store Connect ("iPhone 6.9/6.7-inch display").
-- `android-phone-1080x2400/` – upload to Google Play ("Phone screenshots").
+- `ios-6.9in-1290x2796/` – upload to App Store Connect ("iPhone 6.9-inch display").
+- `android-phone-1080x1920/` – upload to Google Play ("Phone screenshots").
 - `google-play-feature-graphic-1024x500.png` – Google Play "Feature graphic".
 - App icon: `mobile/assets/icon.png` (1024 x 1024). Both stores ask for it.
 
-The screenshots show made-up sample people and pictures, so nothing in them belongs to anyone real.
+The pictures are the real app screens filled with made-up sample people, pictures and a made-up story, so nothing in them belongs to anyone real. The live-call picture shows the real call screen with a pretend call in progress (calls only run on an installed phone app). Retake it on a real phone once you have a test build if you prefer. The full sets, including the 6.5-inch iPhone size and the 13-inch iPad size, are in the `Kamino-store-pictures` folder next to this project.
 
 ---
 
@@ -21,10 +23,10 @@ The screenshots show made-up sample people and pictures, so nothing in them belo
 **Subtitle** (iOS, 30 max): `Communities that feel like home`
 
 **Short description** (Google Play, 80 max):
-`Chat, share and hang out in communities. No ads, no coins, no spam.`
+`Find your people. Chat, share and play AI stories in communities you love.`
 
 **Promotional text** (iOS, 170 max):
-`Find your people. Join communities for the things you love, chat in rooms, build wikis together and join weekly challenges, without ads or pushy notifications.`
+`Find your people. Join communities for the things you love, chat in rooms, build wikis together and join weekly challenges, without pushy notifications.`
 
 **Full description** (both stores, 4000 max):
 
@@ -43,8 +45,7 @@ WHAT YOU CAN DO
 • Save posts to read later and keep drafts of what you are writing.
 
 MADE TO BE KIND
-• No ads. Ever.
-• No coins, no in-app currency, no paid stickers.
+• Free to use, with no pay-to-win: reputation and levels can't be bought.
 • No notification spam: you choose exactly which notifications you get.
 • Real tools for community leaders: reports, join requests, timed mutes, bans, strikes, appeals and announcements.
 • Every post, comment, message and profile can be reported. You can block anyone.
@@ -94,27 +95,18 @@ Questions or feedback? Open Settings → Contact support in the app.
 
 ## 3. Privacy questionnaires
 
-Kamino has no ads, no analytics, no tracking SDKs and does not sell data. Answers:
+The old v8 answers have been superseded. Release 9 includes first-party usage analytics. Complete the store forms against the deployed configuration and connected providers; this source inventory is not a completed privacy questionnaire.
 
-**Apple "App Privacy" (nutrition label)**
-- Do you or your third-party partners collect data from this app? **Yes.**
-- Used to **track** people across other companies' apps or sites? **No.** (So you do not need the tracking prompt.)
-- Data linked to the user, all for *App Functionality* only:
-  - Contact info: Email address, Name (display name).
-  - User content: Photos or videos, Audio data (voice notes), Other user content (posts, comments, messages).
-  - Identifiers: User ID.
-  - Usage data / diagnostics: **not collected**.
+- Account/contact data: user IDs, email, display name, profile preferences and optional configured phone sign-in.
+- User content: posts, comments, messages, uploaded photos/video/audio/files, stories and profile content.
+- App activity: post views, community visits, search history/feedback and distinct authenticated UTC member activity used for growth and retention.
+- Optional contacts: the phone requests permission only after a tap. Names remain on the device; confirmed email addresses are processed transiently for matching. This flow must appear in the permission and privacy review.
+- Delivery/authentication providers: configured email/SMS/OAuth, CAPTCHA, Expo push and optional safety/chat services process the data required by their actual integrations.
+- Billing: native purchases are unavailable and the web sandbox is disabled by default. Configured Stripe test checkout stores a local order/access ledger; real-money billing and payouts are unfinished.
+- Data export/deletion: available in Settings and on the web. The release notes describe retained pseudonymous accountability records and external test-subscription cancellation limits.
+- Verify HTTPS on the deployed hostname, provider logging/retention, optional versus required data, purposes, deletion behavior and all current store definitions before submitting. No independent security review was performed in this session.
 
-**Google Play "Data safety"**
-- Does your app collect or share user data? **Collects: yes. Shares: no.** (Push notifications go through Expo's push service, which only passes the delivery address to Apple/Google; if Google's form asks, answer that it is a service provider acting on your behalf.)
-- Data types collected, all "required for app functionality", none used for ads or marketing:
-  - Personal info: Email address, Name, User IDs.
-  - Photos and videos; Audio files (voice notes).
-  - Messages: Other in-app messages. Other user-generated content (posts, comments).
-  - App activity: Other user-generated content only.
-- Is all data encrypted in transit? **Yes** (HTTPS: your host provides this).
-- Can users ask for their data to be deleted? **Yes**, in the app (Settings → Delete account) and on the web (`/delete-account`).
-- Independent security review: No.
+The source does not include a third-party analytics/tracking SDK. That statement does not replace reviewing services added or enabled by the operator. Use the current [Apple app privacy guidance](https://developer.apple.com/app-store/app-privacy-details/) and [Google Play Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469).
 
 ---
 

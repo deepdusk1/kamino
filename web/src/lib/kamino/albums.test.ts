@@ -1,13 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { QUIZ_GRACE_MS, checkAlbum, checkQuestionImages, checkTimeLimit, draftFromExportedDraft, isQuizLate, draftFromExportedPost, folderCounts, normalizeFolder } from "./albums.ts";
+import { MAX_ALBUM_EXTRAS, MAX_POST_PICTURES, QUIZ_GRACE_MS, checkAlbum, checkQuestionImages, checkTimeLimit, draftFromExportedDraft, isQuizLate, draftFromExportedPost, folderCounts, normalizeFolder } from "./albums.ts";
+
+import { draftContentSchema, emptyDraft } from "./writing.ts";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
-test("album: accepts up to five pictures, refuses six", () => {
+test("album: a cover plus up to nine more pictures (ten in all), refuses a tenth extra", () => {
+  assert.equal(MAX_ALBUM_EXTRAS, 9);
+  assert.equal(MAX_POST_PICTURES, 10);
   assert.deepEqual(checkAlbum(undefined), []);
-  assert.equal(checkAlbum([PNG, PNG, PNG, PNG, PNG]).length, 5);
-  assert.throws(() => checkAlbum([PNG, PNG, PNG, PNG, PNG, PNG]), /at most/);
+  assert.equal(checkAlbum(Array(9).fill(PNG)).length, 9);
+  assert.throws(() => checkAlbum(Array(10).fill(PNG)), /10 pictures at most/);
+});
+
+test("album: nine pictures may not add up to more than about 15 MB", () => {
+  const big = `data:image/png;base64,${"A".repeat(2_400_000)}`;
+  assert.equal(checkAlbum(Array(8).fill(big)).length, 8);
+  assert.throws(() => checkAlbum(Array(9).fill(big)), /too large/);
+});
+
+test("drafts hold the same album as a post (nine extras and ten captions)", () => {
+  const draft = { ...emptyDraft("story"), image: PNG, album: Array(9).fill(PNG), captions: Array(10).fill("hi") };
+  assert.equal(draftContentSchema.safeParse(draft).success, true);
+  assert.equal(draftContentSchema.safeParse({ ...draft, album: Array(10).fill(PNG) }).success, false);
+  assert.equal(draftContentSchema.safeParse({ ...draft, captions: Array(11).fill("hi") }).success, false);
 });
 
 test("album: refuses anything that is not an image data URL", () => {

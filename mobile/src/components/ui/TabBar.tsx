@@ -18,12 +18,22 @@ function useBarBottom() {
   return insets.bottom > 0 ? insets.bottom : 12;
 }
 
-/** How much empty space a scrolling tab screen should leave at the bottom so nothing hides under the bar. */
+/** Height of the new bottom navigation bar (without the phone's bottom safe area). See `BottomNav` in `@/components/k`. */
+export const NAV_BAR_HEIGHT = 56;
+
+/**
+ * How much empty space a scrolling tab screen should leave at the bottom so nothing hides under the bottom bar
+ * (`BottomNav`: bar + safe area + a little breathing room).
+ */
 export function useTabBarSpace() {
-  return useBarBottom() + BAR_HEIGHT + 12;
+  const insets = useSafeAreaInsets();
+  return NAV_BAR_HEIGHT + Math.max(insets.bottom, 8) + 16;
 }
 
 /**
+ * Old floating glass tab bar. No longer used by the tabs (they use `BottomNav`); kept so nothing that imports it
+ * breaks.
+ *
  * The floating glass tab bar. A glowing gradient "pill" slides under the chosen tab with a
  * springy bounce, icons pop when tapped, and unread badges bounce in. It hides while the keyboard
  * is open on Android (where the keyboard pushes the screen up).

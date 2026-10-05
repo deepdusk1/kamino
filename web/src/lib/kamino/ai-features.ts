@@ -15,8 +15,6 @@ import { optionalAuth, type Viewer } from "./optional-auth";
 import {
   MAX_CHARACTERS,
   MAX_TURN_CHARS,
-  STORYTELLER_ENDING_TOKENS,
-  STORYTELLER_NARRATION_TOKENS,
   checkScene,
   cleanReply,
   draftPrompt,
@@ -282,9 +280,7 @@ async function storytellerWrites(
       ? endingPrompt(header, cast, turns, extra)
       : narrationPrompt(header, cast, turns, extra);
   const text = cleanReply(
-    await chatComplete(sql, messages, {
-      maxTokens: kind === "ending" ? STORYTELLER_ENDING_TOKENS : STORYTELLER_NARRATION_TOKENS,
-    }),
+    await chatComplete(sql, messages, { maxTokens: kind === "ending" ? 700 : 400 }),
   );
   const inserted = await sql<{ id: number }>`
     insert into roleplay_turns (scene_id, author_user_id, character_name, kind, body)

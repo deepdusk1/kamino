@@ -3,18 +3,25 @@ import { useEffect, useRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { haptic } from "@/lib/haptics";
-import { useTheme } from "@/theme";
+import { font, useTheme } from "@/theme";
 import { Txt } from "./ui";
 
 const PARTICLES = 8;
 
-type Props = { liked: boolean; count: string | number; onPress: () => void; size?: number };
+type Props = {
+  liked: boolean;
+  count: string | number;
+  onPress: () => void;
+  size?: number;
+  /** Text size of the count (default follows the heart size). */
+  countSize?: number;
+};
 
 /**
  * A heart that pops, and bursts into little sparks, when you like something.
  * Unliking just shrinks it back quietly.
  */
-export function LikeButton({ liked, count, onPress, size = 22 }: Props) {
+export function LikeButton({ liked, count, onPress, size = 22, countSize }: Props) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
@@ -32,7 +39,8 @@ export function LikeButton({ liked, count, onPress, size = 22 }: Props) {
   }, [liked, reduceMotion, scale, burst]);
 
   const heart = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const colors = [theme.gradWarm[0], theme.gradWarm[1], theme.gradPrimary[1], theme.accent];
+  const colors = [theme.pink, theme.orange, theme.violet, theme.red];
+  const fs = countSize ?? Math.round(Math.max(12, Math.min(17, size * 0.66)));
 
   return (
     <Pressable
@@ -42,7 +50,7 @@ export function LikeButton({ liked, count, onPress, size = 22 }: Props) {
       }}
       hitSlop={10}
       accessibilityRole="button"
-      accessibilityLabel={liked ? "Unlike" : "Like"}
+      accessibilityLabel={liked ? `Unlike, ${count} likes` : `Like, ${count} likes`}
       accessibilityState={{ selected: liked }}
       style={styles.row}
     >
@@ -51,10 +59,10 @@ export function LikeButton({ liked, count, onPress, size = 22 }: Props) {
           <Spark key={i} index={i} progress={burst} color={colors[i % colors.length]!} distance={size * 1.1} />
         ))}
         <Animated.View style={heart}>
-          <Ionicons name={liked ? "heart" : "heart-outline"} size={size} color={liked ? theme.gradWarm[0] : theme.muted} />
+          <Ionicons name={liked ? "heart" : "heart-outline"} size={size} color={liked ? theme.pink : theme.muted} />
         </Animated.View>
       </View>
-      <Txt variant="small" tone="muted">{count}</Txt>
+      <Txt style={{ fontFamily: font.semibold, fontSize: fs, lineHeight: fs + 5, color: theme.text }}>{count}</Txt>
     </Pressable>
   );
 }
@@ -73,6 +81,6 @@ function Spark({ index, progress, color, distance }: { index: number; progress: 
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 6 },
+  row: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 28 },
   spark: { position: "absolute", width: 6, height: 6, borderRadius: 3 },
 });

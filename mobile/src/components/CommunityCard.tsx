@@ -1,54 +1,42 @@
-import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { StyleSheet, View } from "react-native";
-import { assetUrl } from "@/api/client";
+import { View } from "react-native";
 import type { Community } from "@/api/types";
-import { compactCount } from "@/lib/format";
-import { glowShadow, hueColor, hueGradient, radius, space, useTheme } from "@/theme";
+import { serverImage } from "@/components/community/media";
+import { CountPill, Picture, Pill, VerifiedTick } from "@/components/k";
+import { defaultCover } from "@/lib/brandArt";
+import { font, radius, shadow, useTheme } from "@/theme";
 import { Appear, PressableScale, Txt } from "./ui";
 
 /**
- * A community tile: its cover photo (or a bright gradient in the community's colour), a glossy
- * sheen, and the name on a dark fade so it is always readable. `compact` is the carousel size.
+ * An older-style community tile, used by screens that list whole `Community` objects (Welcome, Profile…).
+ * It now has the redesign look: a white card with the cover on top (or a calm default cover), the member count
+ * pill, the name, the tagline and the category. `compact` is the narrow carousel size.
+ * New screens should prefer the kit's `CommunityCard` from "@/components/k".
  */
 export function CommunityCard({ community, compact, index }: { community: Community; compact?: boolean; index?: number }) {
   const theme = useTheme();
-  const height = compact ? 132 : 164;
   const tile = (
     <PressableScale
       onPress={() => router.push(`/community/${community.id}`)}
       accessibilityLabel={`${community.name}, ${community.memberCount} members`}
       scaleTo={0.97}
-      style={[{ width: compact ? 176 : undefined, height, borderRadius: radius.lg }, glowShadow(hueColor(community.hue, theme.dark))]}
+      style={[{ width: compact ? 176 : undefined, backgroundColor: theme.surface, borderRadius: radius.card, borderWidth: 1, borderColor: theme.border, overflow: "hidden" }, shadow.card]}
     >
-      <View style={[StyleSheet.absoluteFill, { borderRadius: radius.lg, overflow: "hidden" }]}>
-        <LinearGradient colors={hueGradient(community.hue, theme.dark)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        {community.cover ? <Image source={{ uri: assetUrl(community.cover) }} style={StyleSheet.absoluteFill} contentFit="cover" transition={220} /> : null}
-        <LinearGradient colors={["rgba(255,255,255,0.28)", "rgba(255,255,255,0)"]} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.5 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={["transparent", "rgba(12,6,32,0.82)"]} start={{ x: 0, y: 0.35 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-      </View>
-      {!compact && community.visibility !== "public" ? (
-        <View style={styles.badge}>
-          <Ionicons name="lock-closed" size={11} color="#fff" />
-          <Txt variant="caption" style={{ color: "#fff" }}>{community.visibility}</Txt>
-        </View>
-      ) : null}
-      <View style={{ position: "absolute", left: space.md, right: space.md, bottom: space.md, gap: 2 }}>
-        <Txt variant="heading" numberOfLines={1} style={{ color: "#fff" }}>{community.name}</Txt>
+      <Picture source={community.cover ? serverImage(community.cover) : defaultCover(community.hue)} hue={community.hue} style={{ width: "100%", aspectRatio: compact ? 1.9 : 2.6 }}>
+        <CountPill value={community.memberCount} style={{ position: "absolute", left: 8, top: 8, height: 20, paddingHorizontal: 7 }} />
+        {community.visibility !== "public" ? (
+          <Pill label={community.visibility === "private" ? "Private" : "Unlisted"} icon="lock-closed" tone="neutral" variant="solid" style={{ position: "absolute", right: 8, top: 8 }} />
+        ) : null}
+      </Picture>
+      <View style={{ padding: compact ? 10 : 12, gap: 3 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <Ionicons name="people" size={12} color="#ffffffd9" />
-          <Txt variant="caption" numberOfLines={1} style={{ color: "#ffffffd9" }}>
-            {compactCount(community.memberCount)} · {community.category}
-          </Txt>
+          <Txt numberOfLines={1} style={{ fontFamily: font.heavy, fontSize: compact ? 14 : 15.5, lineHeight: compact ? 18 : 20, color: theme.ink, flexShrink: 1 }}>{community.name}</Txt>
+          {community.verified ? <VerifiedTick size={13} /> : null}
         </View>
+        {community.tagline ? <Txt numberOfLines={compact ? 1 : 2} style={{ fontFamily: font.regular, fontSize: 12.5, lineHeight: 17, color: theme.muted }}>{community.tagline}</Txt> : null}
+        {!compact && community.category ? <Pill label={community.category} tone="violet" style={{ marginTop: 4 }} /> : null}
       </View>
     </PressableScale>
   );
   return index === undefined ? tile : <Appear index={index}>{tile}</Appear>;
 }
-
-const styles = StyleSheet.create({
-  badge: { position: "absolute", top: space.md, right: space.md, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(12,6,32,0.45)", borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3 },
-});

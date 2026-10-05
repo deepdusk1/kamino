@@ -1,21 +1,37 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compactCount, parseLocalDateTime, plainPreview, plural, timeAgo } from "./format.ts";
+import { compactCount, compactNumber, parseLocalDateTime, plainPreview, plural, shortTimeAgo, timeAgo } from "./format.ts";
 
 const now = Date.parse("2026-09-28T12:00:00Z");
 test("timeAgo picks a readable unit", () => {
   assert.equal(timeAgo("2026-09-28T11:59:40Z", now), "just now");
-  assert.equal(timeAgo("2026-09-28T11:55:00Z", now), "5m");
-  assert.equal(timeAgo("2026-09-28T09:00:00Z", now), "3h");
-  assert.equal(timeAgo("2026-09-26T12:00:00Z", now), "2d");
+  assert.equal(timeAgo("2026-09-28T11:58:00Z", now), "2m ago");
+  assert.equal(timeAgo("2026-09-28T11:55:00Z", now), "5m ago");
+  assert.equal(timeAgo("2026-09-28T09:00:00Z", now), "3h ago");
+  assert.equal(timeAgo("2026-09-27T12:00:00Z", now), "1d ago");
+  assert.equal(timeAgo("2026-09-26T12:00:00Z", now), "2d ago");
   assert.equal(timeAgo(null, now), "");
   assert.equal(timeAgo("not a date", now), "");
 });
-test("compactCount abbreviates", () => {
-  assert.equal(compactCount(999), "999");
-  assert.equal(compactCount(1200), "1.2k");
-  assert.equal(compactCount(12_000), "12k");
-  assert.equal(compactCount(2_500_000), "2.5m");
+test("shortTimeAgo drops the ago", () => {
+  assert.equal(shortTimeAgo("2026-09-28T11:58:00Z", now), "2m");
+  assert.equal(shortTimeAgo("2026-09-28T11:00:00Z", now), "1h");
+  assert.equal(shortTimeAgo("2026-09-28T11:59:50Z", now), "just now");
+});
+test("compactNumber abbreviates like the mockups", () => {
+  assert.equal(compactNumber(0), "0");
+  assert.equal(compactNumber(999), "999");
+  assert.equal(compactNumber(1000), "1K");
+  assert.equal(compactNumber(1234), "1.2K");
+  assert.equal(compactNumber(12_400), "12.4K");
+  assert.equal(compactNumber(24_500), "24.5K");
+  assert.equal(compactNumber(245_000), "245K");
+  assert.equal(compactNumber(999_999), "999K");
+  assert.equal(compactNumber(1_300_000), "1.3M");
+  assert.equal(compactNumber(2_000_000), "2M");
+  assert.equal(compactNumber(-1500), "-1.5K");
+  assert.equal(compactNumber(Number.NaN), "0");
+  assert.equal(compactCount(1200), "1.2K");
 });
 test("plural handles one and many", () => {
   assert.equal(plural(1, "member"), "1 member");

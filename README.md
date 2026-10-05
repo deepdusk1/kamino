@@ -1,10 +1,35 @@
 # Kamino
 
-Kamino is a calm, ad-free community app and a replacement for Amino. It ships as a **website plus
+Kamino is a calm community app and a replacement for Amino. It ships as a **website plus
 native iPhone and Android apps**, all from this one folder.
 
-House rules built into the product: **no ads, no coins or in-app currency, no paywalled stickers,
-no notification spam** (push only for real activity, and you choose which), ages 13+.
+House rules: **the core app stays free**, reputation and moderation cannot be bought, members control notifications, ages 13+, and humans review held content. Release 9 adds optional offers and a Stripe sandbox. Payments are disabled by default; real-money purchases, creator payouts and native store billing remain unavailable.
+
+## Release 9: community, creator and safety expansion
+
+This release adds shared web/native tools for richer posts and stories, reply threads, group chats and files, community boards/FAQs/roles/policies, events, live stages, quests and earned cosmetics. It also adds privacy/security screens, real authenticator login, configurable provider sign-in, a tutorial, native contact matching, discovery tools, creator analytics, collaboration briefs, support and verified administration.
+
+Paid offers have test checkout, a signed-webhook ledger, subscriptions, gifts, tickets and server-enforced access to mapped communities/posts/rooms/events. Active premium test access raises Content Studio/file attachment quotas and enables GIF avatars. Live billing is deliberately rejected. Read `web/BILLING.md` before configuring a sandbox, and `web/IDENTITY_SECURITY.md` before configuring authentication.
+
+The website can be installed from a supporting desktop/mobile browser. Its offline screen keeps private member data out of the cache. This is an installable web app; no separate Windows/macOS executable is included.
+
+The remaining feature and launch limits are recorded in `RELEASE-9.md`. This release does **not** represent all 490 checklist items as complete.
+
+## What's new in release 8: the redesign
+
+The phone app and the website were rebuilt to match the 10 design mockups (Welcome, Pick Your Interests,
+Home, Explore, Community, Post, Create, Chats & Live Rooms, Notifications, Profile), with a new look
+(Plus Jakarta Sans, white cards, violet-to-blue gradients, the planet logo) on both.
+
+New features that came with it:
+- **Onboarding:** Welcome slides, then pick your interests, join suggested communities, follow creators and set up your profile.
+- **Home:** recommended and trending communities, daily streak, the next live event, featured creators, and a feed with For You / Following / Communities tabs.
+- **Explore and search:** one search for people, communities, posts, tags, rooms and events, with filters and recent searches.
+- **Profiles:** verified and creator badges, headline, pronouns, location, website, profile categories, showcase banners, badges, friends (people you both follow), private accounts with follow requests, mute.
+- **Chats:** live rooms with participant counts, message requests from strangers, typing indicators and "Seen" receipts.
+- **Create:** one place for posts (up to 10 pictures, polls, location, link, tags, members-only, scheduled posts), stories, live rooms and events.
+- **Notifications:** All / Social / Community / Events filters with Follow Back and Join buttons, quiet hours and per-category switches.
+- **Moderation:** comments can be deleted by their author or community moderators; site owners can mark people as verified or creators.
 
 ## What is inside
 
@@ -20,12 +45,12 @@ no notification spam** (push only for real activity, and you choose which), ages
 ## 1. Try it now (10 minutes, nothing to configure)
 
 1. Install [Node.js 24](https://nodejs.org) (the "LTS" or newest installer is fine).
-2. Install the free **Expo Go** app on your phone and connect the phone to the **same Wi-Fi** as your computer.
+2. To test the native app, use an iOS/Android development or store build and connect the phone to the **same Wi-Fi** as your computer. Calls and the new native plugins require a compiled app; Expo Go is insufficient.
 3. Start Kamino:
    - **Windows:** double-click `Start-Kamino.cmd`
    - **Mac / Linux:** open a terminal in this folder and run `./start.sh`
 4. The first start installs everything by itself (a few minutes). Then it prints a **QR code**:
-   scan it with the iPhone Camera (or with Expo Go on Android). The website is at http://localhost:8080.
+   open it with your installed Kamino development client. The website is at http://localhost:8080.
 
 Press `Ctrl+C` in that window to stop everything. To run only the website: `node start.mjs --server`.
 

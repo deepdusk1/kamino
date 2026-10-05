@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { api } from "@/api/endpoints";
 import { AppealsTab } from "@/components/mod/AppealsTab";
+import { BansTab } from '@/components/mod/BansTab';
+import { AuditTab } from '@/components/mod/AuditTab';
 import { PeopleTab } from "@/components/mod/PeopleTab";
 import { ReportsTab } from "@/components/mod/ReportsTab";
 import { RequestsTab } from "@/components/mod/RequestsTab";
@@ -13,7 +15,7 @@ import { Chip, ErrorState, Loading, Screen } from "@/components/ui";
 import { space } from "@/theme";
 import { withCommunityTheme } from "@/components/CommunityTheme";
 
-type Tab = "safety" | "reports" | "requests" | "people" | "appeals" | "tools";
+type Tab = "safety" | "reports" | "requests" | "people" | "appeals" | "tools" | 'bans' | 'audit';
 
 /** Leader and curator tools, split into tabs so each screen stays small and easy to read. */
 function Moderation() {
@@ -31,6 +33,7 @@ function Moderation() {
     void queryClient.invalidateQueries({ queryKey: ["appeals", slug] });
     void queryClient.invalidateQueries({ queryKey: ["community", slug] });
     void queryClient.invalidateQueries({ queryKey: ["safety", slug] });
+    void queryClient.invalidateQueries({ queryKey: ['mod-details',slug] });
   };
 
   if (mod.isPending || page.isPending) return <Loading />;
@@ -48,6 +51,8 @@ function Moderation() {
     { id: "reports", label: `Reports${openReports ? ` (${openReports})` : ""}` },
     { id: "requests", label: `Requests${data.pending.length ? ` (${data.pending.length})` : ""}` },
     { id: "people", label: "People" },
+    { id: 'bans',label:'Bans' },
+    { id: 'audit',label:'Activity log' },
     { id: "appeals", label: `Appeals${openAppeals ? ` (${openAppeals})` : ""}` },
     { id: "tools", label: "Tools" },
   ];
@@ -62,6 +67,8 @@ function Moderation() {
         {tab === "reports" ? <ReportsTab slug={slug!} reports={data.reports} onChanged={refresh} /> : null}
         {tab === "requests" ? <RequestsTab slug={slug!} pending={data.pending} answers={data.joinAnswers} questions={data.joinQuestions.map((q) => q.prompt)} onChanged={refresh} /> : null}
         {tab === "people" ? <PeopleTab slug={slug!} members={page.data?.members ?? []} strikeCounts={strikeCounts} myRole={data.role} myId={me.data?.profile.userId} onChanged={refresh} /> : null}
+        {tab === 'bans' ? <BansTab slug={slug!} onChanged={refresh}/> :null}
+        {tab === 'audit' ? <AuditTab slug={slug!}/> :null}
         {tab === "appeals" ? <AppealsTab slug={slug!} appeals={appeals.data ?? []} onChanged={refresh} /> : null}
         {tab === "tools" ? <ToolsTab slug={slug!} data={data} onChanged={refresh} /> : null}
       </View>

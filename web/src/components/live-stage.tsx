@@ -1,12 +1,13 @@
 import { ChevronDown, Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
+import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "@/components/ui/button";
 import { Face } from "@/components/face";
 import { KAMINO_CALL_EVENT } from "@/components/incoming-call";
 import { parseWatchInput, SHELF, youtubeId, type ShelfKind } from "@/lib/kamino/shelf";
 import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-room";
 import { cn } from "@/lib/utils";
+import { getLiveStage } from '@/lib/kamino/community-v9';
 
 type WatchWire = {
   t: "watch";
@@ -103,12 +104,29 @@ function RemoteMedia({
   if (hasVideo) {
     if (fill) {
       return (
-        <video ref={videoRef} autoPlay playsInline muted={false} className="absolute inset-0 h-full w-full object-cover" />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={false}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
       );
     }
     return (
-      <div className={cn("relative overflow-hidden rounded-2xl bg-elevated", compact ? "h-24 w-36" : "aspect-video w-full")}>
-        <video ref={videoRef} autoPlay playsInline muted={false} className="h-full w-full object-cover" />
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-tile bg-surface-alt",
+          compact ? "h-24 w-36" : "aspect-video w-full",
+        )}
+      >
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={false}
+          className="h-full w-full object-cover"
+        />
         <p className="absolute bottom-1 left-2 text-[11px] font-extrabold">{name}</p>
       </div>
     );
@@ -128,6 +146,7 @@ export function LiveStage({
   peerHue,
   onWatchSaved,
   onVoice,
+  showIdleBar = true,
 }: {
   roomId: number;
   userId: string;
@@ -140,6 +159,11 @@ export function LiveStage({
   peerHue?: number;
   onWatchSaved?: (url: string, title: string) => void;
   onVoice?: (on: boolean) => void;
+  /**
+   * Show the "Call" / "Join voice" bar while not in a call (default). The chat room turns it off for DMs, where the
+   * phone button in its header starts the call instead (it sends the same event as answering an incoming call).
+   */
+  showIdleBar?: boolean;
 }) {
   const screening = kind === "screening";
   const canCall = kind === "voice" || kind === "screening" || kind === "dm";
@@ -152,6 +176,10 @@ export function LiveStage({
   const localRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const startedAt = useRef<number>(0);
+  const stage=useQuery({queryKey:['live-stage',roomId],queryFn:()=>getLiveStage({data:{roomId}}),enabled:kind!=='dm'&&canCall,refetchInterval:2500});
+  const mine=stage.data?.participants.find(p=>p.userId===userId);
+  const maySpeak=kind==='dm'||!!stage.data&&!!mine&&!mine.muted&&(!stage.data.enabled||mine.role==='host'||mine.role==='speaker');
+  const speakingRef=useRef(maySpeak);speakingRef.current=maySpeak;
 
   const enabled = screening || onCall;
   const live = useLiveRoom({
@@ -174,18 +202,23 @@ export function LiveStage({
   async function joinCall(withCam = false) {
     setErr(null);
     try {
-      const stream = await openMic(withCam);
+      const current=kind==='dm'?null:await getLiveStage({data:{roomId}});
+      const self=current?.participants.find(p=>p.userId===userId);
+      if(current?.scheduledAt&&new Date(current.scheduledAt)>new Date())throw new Error('This live room has not started yet.');
+      if(current?.locked&&!current.host)throw new Error('This room is locked.');
+      const allowed=kind==='dm'||!!current&&!!self&&!self.muted&&(!current.enabled||self.role==='host'||self.role==='speaker');
+      const stream = allowed?await openMic(withCam):new MediaStream();
       localRef.current?.getTracks().forEach((t) => t.stop());
       localRef.current = stream;
-      setCam(withCam);
-      setMuted(false);
+      setCam(allowed&&withCam);
+      setMuted(!allowed);
       setMinimized(false);
       startedAt.current = Date.now();
       setOnCall(true);
       onVoice?.(true);
       if (live.joined) live.setLocalStream(stream);
-    } catch {
-      setErr("Mic permission is required for a live call.");
+    } catch (error) {
+      setErr(error instanceof Error?error.message:'Could not join the live room.');
     }
   }
 
@@ -197,9 +230,12 @@ export function LiveStage({
     setCam(false);
     setMinimized(false);
     onVoice?.(false);
+    // Let the header's call button (or an answered call) start a new call later.
+    autoStarted.current = false;
   }
 
   function toggleMute() {
+    if(!speakingRef.current){setErr('You are listening. Ask the host for permission to speak.');return;}
     const next = !muted;
     setMuted(next);
     localRef.current?.getAudioTracks().forEach((t) => {
@@ -208,6 +244,7 @@ export function LiveStage({
   }
 
   async function toggleCam() {
+    if(!speakingRef.current){setErr('Only speakers can turn on a camera in this room.');return;}
     if (!onCall) {
       await joinCall(true);
       return;
@@ -225,6 +262,7 @@ export function LiveStage({
       const extra = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
       });
+      if(!speakingRef.current||!localRef.current){extra.getTracks().forEach(t=>t.stop());return;}
       extra.getVideoTracks().forEach((t) => localRef.current?.addTrack(t));
       setCam(true);
       live.setLocalStream(localRef.current);
@@ -232,6 +270,19 @@ export function LiveStage({
       setErr("Camera permission denied.");
     }
   }
+
+  useEffect(() => {
+    if(!onCall||kind==='dm')return;
+    if(stage.error){hangUp();setErr('You no longer have access to this live room.');return;}
+    if(!maySpeak){localRef.current?.getAudioTracks().forEach(t=>{t.enabled=false;});localRef.current?.getVideoTracks().forEach(t=>{t.enabled=false;});setMuted(true);return;}
+    let cancelled=false;
+    if(localRef.current&&!localRef.current.getAudioTracks().length){
+      void openMic(false).then(stream=>{if(cancelled){stream.getTracks().forEach(t=>t.stop());return;}localRef.current=stream;stream.getAudioTracks().forEach(t=>{t.enabled=false;});live.setLocalStream(stream);setMuted(true);}).catch(()=>setErr('Allow microphone access to speak.'));
+    }
+    return()=>{cancelled=true;};
+    // Each change in the server's role state immediately disables this app's outgoing media.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[onCall,maySpeak,stage.error,kind]);
 
   useEffect(() => {
     return () => {
@@ -275,9 +326,20 @@ export function LiveStage({
   const failed = live.peers.filter((p) => p.connectionState === "failed");
   const otherName = live.peers[0]?.name ?? peerName ?? "Member";
   const otherHue = peerHue ?? 265;
-  const remoteEntries = Object.entries(live.streams);
-  const remoteVideo = remoteEntries.find(([, stream]) => stream.getVideoTracks().some((t) => t.readyState !== "ended"));
+  const remoteEntries = Object.entries(live.streams).filter(([peerId])=>{
+    if(kind==='dm')return true;
+    const person=stage.data?.participants.find(p=>rtcPeerId(p.userId)===peerId);
+    return !!person&&!person.muted&&(!stage.data?.enabled||person.role==='host'||person.role==='speaker');
+  });
+  const remoteVideo = remoteEntries.find(([, stream]) =>
+    stream.getVideoTracks().some((t) => t.readyState !== "ended"),
+  );
   const dmCall = kind === "dm" && onCall;
+  // Nothing to show for a DM that isn't in a call when the header has the call button.
+  if (kind === "dm" && !showIdleBar && !onCall && !err) return null;
+
+  const pill =
+    "k-focus k-hit inline-flex h-8 items-center gap-1.5 rounded-full bg-surface-alt px-3.5 text-[13px] font-bold text-ink transition-colors hover:brightness-[0.97]";
 
   const controls = (
     <>
@@ -286,7 +348,7 @@ export function LiveStage({
         onClick={toggleMute}
         className={cn(
           "grid size-14 place-items-center rounded-full",
-          muted ? "bg-elevated text-fg" : "bg-surface text-fg",
+          muted ? "bg-surface-alt text-ink" : "bg-surface text-ink shadow-card",
         )}
         aria-label={muted ? "Unmute" : "Mute"}
       >
@@ -296,7 +358,7 @@ export function LiveStage({
         <button
           type="button"
           onClick={() => void toggleCam()}
-          className="grid size-14 place-items-center rounded-full bg-surface text-fg"
+          className="grid size-14 place-items-center rounded-full bg-surface text-ink shadow-card"
           aria-label={cam ? "Camera off" : "Camera"}
         >
           {cam ? <VideoOff className="size-6" /> : <Video className="size-6" />}
@@ -305,7 +367,7 @@ export function LiveStage({
       <button
         type="button"
         onClick={hangUp}
-        className="grid size-16 place-items-center rounded-full bg-danger text-fg"
+        className="grid size-16 place-items-center rounded-full bg-red-strong text-white shadow-lift"
         aria-label="Hang up"
       >
         <PhoneOff className="size-7" />
@@ -314,7 +376,7 @@ export function LiveStage({
   );
 
   return (
-    <div className="space-y-3 px-4 pt-4">
+    <div className="space-y-3 px-3 pt-3 lg:px-4">
       {screening && (
         <WatchDeck
           live={live}
@@ -336,8 +398,14 @@ export function LiveStage({
             />
           ))}
           {cam && (
-            <div className="relative h-24 w-36 overflow-hidden rounded-2xl bg-elevated">
-              <video ref={previewRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+            <div className="relative h-24 w-36 overflow-hidden rounded-tile bg-surface-alt">
+              <video
+                ref={previewRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-full w-full object-cover"
+              />
               <p className="absolute bottom-1 left-2 text-[11px] font-extrabold">You</p>
             </div>
           )}
@@ -348,9 +416,9 @@ export function LiveStage({
         <button
           type="button"
           onClick={() => setMinimized(false)}
-          className="flex w-full items-center gap-3 rounded-2xl bg-elevated px-3 py-2 text-left"
+          className="k-focus flex w-full items-center gap-3 rounded-tile bg-tint-green px-3 py-2 text-left"
         >
-          <span className="size-2 rounded-full bg-ok" />
+          <span className="size-2 rounded-full bg-green" />
           <Face name={otherName} hue={otherHue} size="sm" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-extrabold">{otherName}</span>
@@ -358,7 +426,9 @@ export function LiveStage({
               {connected ? formatElapsed(elapsed) : "Calling…"}
             </span>
           </span>
-          <span className="text-xs font-bold text-accent">Return</span>
+          <span className="rounded-full bg-green-strong px-3 py-1 text-xs font-bold text-white">
+            Return
+          </span>
         </button>
       )}
 
@@ -366,25 +436,29 @@ export function LiveStage({
         !minimized &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex flex-col bg-bg text-fg" role="dialog" aria-label="Call">
+          <div
+            className="fixed inset-0 z-50 flex flex-col bg-bg text-ink"
+            role="dialog"
+            aria-label="Call"
+          >
             <div className="relative min-h-0 flex-1 overflow-hidden">
               {remoteVideo ? (
                 <RemoteMedia stream={remoteVideo[1]!} name={otherName} fill />
               ) : (
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--color-elevated),var(--color-bg))]" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--color-tint-violet),var(--color-bg))]" />
               )}
               <div className="absolute inset-x-0 top-0 flex items-start justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
                 <button
                   type="button"
                   onClick={() => setMinimized(true)}
-                  className="grid size-11 place-items-center rounded-full bg-bg/50 text-fg"
+                  className="grid size-11 place-items-center rounded-full bg-surface/70 text-ink shadow-card"
                   aria-label="Hide call"
                 >
                   <ChevronDown className="size-5" />
                 </button>
-                <div className="rounded-full bg-bg/50 px-4 py-1.5 text-center">
-                  <p className="font-display text-sm font-extrabold">{otherName}</p>
-                  <p className="text-xs font-bold text-ok tabular-nums">
+                <div className="rounded-full bg-surface/70 px-4 py-1.5 text-center shadow-card">
+                  <p className="text-sm font-extrabold text-ink">{otherName}</p>
+                  <p className="text-xs font-bold text-green-ink tabular-nums">
                     {connected ? formatElapsed(elapsed) : "Calling…"}
                   </p>
                 </div>
@@ -396,14 +470,24 @@ export function LiveStage({
                     <span className={cn(!connected && "k-ring relative")}>
                       <Face name={otherName} hue={otherHue} size="call" />
                     </span>
-                    <p className="font-display text-2xl font-extrabold">{otherName}</p>
-                    <p className="text-sm font-bold text-muted">{connected ? "Connected" : "Calling…"}</p>
+                    <p className="text-2xl font-extrabold tracking-[-0.02em] text-ink">
+                      {otherName}
+                    </p>
+                    <p className="text-sm font-bold text-muted">
+                      {connected ? "Connected" : "Calling…"}
+                    </p>
                   </div>
                 </div>
               )}
               {cam && (
-                <div className="absolute right-4 bottom-32 h-36 w-28 overflow-hidden rounded-2xl bg-elevated shadow-border">
-                  <video ref={previewRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+                <div className="absolute right-4 bottom-32 h-36 w-28 overflow-hidden rounded-tile bg-surface-alt shadow-lift">
+                  <video
+                    ref={previewRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="h-full w-full object-cover"
+                  />
                 </div>
               )}
             </div>
@@ -414,42 +498,69 @@ export function LiveStage({
           document.body,
         )}
 
-      {!dmCall && (
-        <div className="flex flex-wrap items-center gap-2">
+      {!dmCall && (onCall || showIdleBar) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface p-2.5 shadow-card">
           {onCall ? (
             <>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1.5 text-xs font-extrabold">
-                <span className="size-2 rounded-full bg-ok" />
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-tint-green px-3 text-xs font-extrabold text-green-ink">
+                <span className="size-2 rounded-full bg-green" />
                 Live · {connected}/{live.peers.length || 0} linked
               </span>
-              <Button size="sm" variant="secondary" onClick={toggleMute}>
-                {muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+              <button type="button" onClick={toggleMute} className={pill}>
+                {muted ? (
+                  <MicOff className="size-4" aria-hidden />
+                ) : (
+                  <Mic className="size-4" aria-hidden />
+                )}
                 {muted ? "Unmute" : "Mute"}
-              </Button>
+              </button>
               {screening && (
-                <Button size="sm" variant="secondary" onClick={() => void toggleCam()}>
-                  {cam ? <VideoOff className="size-4" /> : <Video className="size-4" />}
+                <button type="button" onClick={() => void toggleCam()} className={pill}>
+                  {cam ? (
+                    <VideoOff className="size-4" aria-hidden />
+                  ) : (
+                    <Video className="size-4" aria-hidden />
+                  )}
                   {cam ? "Camera off" : "Camera"}
-                </Button>
+                </button>
               )}
-              <Button size="sm" variant="danger" onClick={hangUp}>
-                <PhoneOff className="size-4" />
+              <button
+                type="button"
+                onClick={hangUp}
+                className={cn(pill, "bg-red-strong text-white hover:bg-red-strong")}
+              >
+                <PhoneOff className="size-4" aria-hidden />
                 Hang up
-              </Button>
+              </button>
             </>
           ) : (
-            <Button size="sm" onClick={() => void joinCall(false)}>
-              {kind === "dm" ? <Phone className="size-4" /> : <Mic className="size-4" />}
+            <button
+              type="button"
+              onClick={() => void joinCall(false)}
+              className={cn(pill, "bg-grad-primary text-white shadow-glow hover:brightness-105")}
+            >
+              {kind === "dm" ? (
+                <Phone className="size-4" aria-hidden />
+              ) : (
+                <Mic className="size-4" aria-hidden />
+              )}
               {kind === "dm" ? "Call" : "Join voice"}
-            </Button>
+            </button>
           )}
           {live.peers.map((p) => (
-            <span key={p.id} className="inline-flex items-center gap-1.5 text-xs font-bold text-muted">
+            <span
+              key={p.id}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-muted"
+            >
               <Face name={p.name} hue={210} size="sm" />
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  p.connectionState === "connected" ? "bg-ok" : p.connectionState === "failed" ? "bg-danger" : "bg-warn",
+                  p.connectionState === "connected"
+                    ? "bg-green"
+                    : p.connectionState === "failed"
+                      ? "bg-red"
+                      : "bg-orange",
                 )}
               />
               {p.name}
@@ -459,7 +570,8 @@ export function LiveStage({
       )}
       {failed.length > 0 && (
         <p className="text-xs text-muted">
-          {failed.map((p) => p.name).join(", ")} couldn’t connect — strict networks block some peer paths.
+          {failed.map((p) => p.name).join(", ")} couldn’t connect — strict networks block some peer
+          paths.
         </p>
       )}
       {err ? <p className="text-sm text-danger">{err}</p> : null}
@@ -619,7 +731,8 @@ function WatchDeck({
     const id = window.setInterval(() => {
       if (controller.current !== selfId) return;
       if (kind === "mp4" && videoRef.current) atRef.current = videoRef.current.currentTime;
-      if (kind === "youtube" && yt.current) atRef.current = yt.current.getCurrentTime() ?? atRef.current;
+      if (kind === "youtube" && yt.current)
+        atRef.current = yt.current.getCurrentTime() ?? atRef.current;
       emitRef.current({ at: atRef.current, paused });
     }, 2000);
     return () => window.clearInterval(id);
@@ -636,8 +749,8 @@ function WatchDeck({
   }
 
   return (
-    <section className="overflow-hidden rounded-3xl bg-surface shadow-border">
-      <div className="relative aspect-video bg-elevated">
+    <section className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
+      <div className="relative aspect-video bg-surface-alt">
         {kind === "mp4" ? (
           <video
             ref={videoRef}
@@ -668,14 +781,16 @@ function WatchDeck({
           <div ref={ytHost} className="h-full w-full" />
         )}
         <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-bg/80 to-transparent px-4 py-3">
-          <p className="text-[11px] font-extrabold tracking-[0.16em] text-accent uppercase">Watch party</p>
-          <p className="font-display text-lg font-extrabold">{title}</p>
+          <p className="text-[11px] font-extrabold tracking-[0.16em] text-violet uppercase">
+            Watch party
+          </p>
+          <p className="text-lg font-extrabold text-ink">{title}</p>
         </div>
       </div>
       <div className="space-y-3 p-4">
         <p className="text-xs text-muted">
-          Play, pause, and seek stay in lockstep. Netflix’s catalog can’t stream here — pick an open film or paste
-          YouTube.
+          Play, pause, and seek stay in lockstep. Netflix’s catalog can’t stream here — pick an open
+          film or paste YouTube.
         </p>
         <div className="flex gap-3 overflow-x-auto pb-1 k-scroll">
           {SHELF.map((film) => (
@@ -716,11 +831,15 @@ function WatchDeck({
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
             placeholder="Paste a YouTube link"
-            className="h-11 flex-1 rounded-full bg-elevated px-4 text-sm"
+            aria-label="YouTube link"
+            className="k-focus h-11 flex-1 rounded-full bg-surface-alt px-4 text-[16px] text-ink outline-none placeholder:text-[14px] placeholder:text-subtle lg:text-[15px]"
           />
-          <Button type="submit" variant="secondary">
+          <button
+            type="submit"
+            className="k-focus h-11 rounded-full bg-grad-primary px-5 text-[14px] font-bold text-white shadow-glow"
+          >
             Play
-          </Button>
+          </button>
         </form>
         {note ? <p className="text-sm text-warn">{note}</p> : null}
       </div>

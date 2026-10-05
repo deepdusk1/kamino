@@ -22,7 +22,7 @@ export function LogoOrb({ size = 72 }: { size?: number }) {
 
   return (
     <View style={{ width: size * 1.6, height: size * 1.6, alignItems: "center", justifyContent: "center" }}>
-      <Animated.View style={[{ position: "absolute", width: size, height: size, borderRadius: size * 0.35, backgroundColor: theme.gradPrimary[1] }, ring]} />
+      <Animated.View style={[{ position: "absolute", width: size, height: size, borderRadius: size / 2, backgroundColor: theme.gradPrimary[0] }, ring]} />
       <Animated.View style={[{ shadowColor: theme.glow, shadowOpacity: 0.5, shadowRadius: 22, shadowOffset: { width: 0, height: 10 } }, bob]}>
         <KMark size={size} />
       </Animated.View>

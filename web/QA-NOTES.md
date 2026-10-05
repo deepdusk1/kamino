@@ -1,5 +1,9 @@
 # Kamino update — verification notes
 
+## Current release: 9
+
+Read `../RELEASE-9.md` and `../FEATURE-STATUS.md` for the current expansion, verified checks and launch limits. The entries below are historical. In particular, old statements about Expo Go or unbuilt paid-feature foundations no longer describe the current app: it requires a fresh native development/store build, and billing foundations exist only in a disabled-by-default Stripe sandbox. Real purchases, store billing, payouts and physical-device verification remain unfinished.
+
 Base: the newer `tqGkLPgNgn4QudrX-grok-workspace.zip` supplied by the user. The older ZIP was not used to replace the new feature set.
 
 ## Changes
@@ -81,9 +85,9 @@ Passed here: 111 unit tests; 27 + 15 + 10 + 2 integration groups; 21 phone-API g
 
 Still not verifiable in this environment: two physical devices exchanging live audio/video/screen share, real email or push delivery, feel of the phone UI on a real iPhone or Android phone, store accounts and payments, staffed moderation, legal review of Privacy and Terms, and object storage for media (media is stored in the database).
 
-Left out on purpose (Kamino house rules): rewarded ads, buying coins, fan clubs sold for coins, a paid Amino+ style subscription, paid cosmetics or sticker stores.
+Not built (allowed later under the updated house rules, never pay-to-win): rewarded ads, buying coins, paid fan clubs, a Kamino+ subscription, paid cosmetics or sticker stores.
 
-Known leftover: the website still contains an older Coins wallet and tipping feature (migration 0014). It is not in the phone app and it conflicts with the "no coins" house rule; removing it is a decision for the owner.
+The website still has an older earned-coins wallet with tipping (migration 0014). The updated house rules allow it; it is not in the phone app.
 
 ## Release 6 update (the five items left over from release 5)
 
@@ -99,7 +103,7 @@ Not verifiable here, and the honest reason for each:
 
 Found and fixed on the way: the website's route generator overwrote an edited layout file with an empty template when the file was saved while the dev server was running (an editing hazard of the dev server only; production builds are unaffected).
 
-Known leftover: the older website Coins wallet (migration 0014) still conflicts with the "no coins" house rule; removal is the owner's decision.
+The older website Coins wallet (migration 0014) is allowed under the updated house rules.
 
 ## Release 7 update (AI moderation, role-play stories, wall covers, achievements)
 
@@ -111,6 +115,6 @@ Added:
 
 Passed here: 151 web and 50 phone unit tests; 10 AI integration groups against a pretend AI service that checks the keys (also on real PostgreSQL with all 23 migrations); 27 + 15 + 10 + 2 integration groups; 25 phone-API groups (also on PostgreSQL), including a group proving the rules and stories work with no AI keys at all; 9 object-storage groups; 3 rate-limit groups; the contract check (75 phone calls); web and phone TypeScript and lint with 0 errors; production web build; iOS and Android bundles; a browser run through the new pages (story set-up, playing a turn, an alternate ending, cover upload, achievements, the safety queue) with no page errors.
 
-Not verifiable here: the real OpenAI and Groq services (tested against a pretend service with the same request and answer shapes; their free limits and terms can change), how well the AI judges real content (false alarms and misses will happen; that is why people decide), picture checks for child-abuse imagery (OpenAI's check covers sexual pictures, but the minors category is text-only; dedicated hash-matching tools such as PhotoDNA are not included), and how the new phone screens feel on a device.
+Not verifiable here from the first test round: the real OpenAI and Groq services. A real-key test found that the storyteller's reply came back empty right after a player's turn, because the default model (gpt-oss-20b) thinks silently first and that thinking is paid for out of the same token allowance as the answer; it is now asked to think briefly and given extra room, an empty answer is asked for again with double the room, and a second free model takes over when the first is busy or used up (the pretend service now behaves like the real one here, so the tests catch it). Groq's free limits are per model and counted in tokens (about 200,000 a day), so the default daily reply cap is 300, not 900. The pretend service is still not the real thing, and free limits and terms can change, how well the AI judges real content (false alarms and misses will happen; that is why people decide), picture checks for child-abuse imagery (OpenAI's check covers sexual pictures, but the minors category is text-only; dedicated hash-matching tools such as PhotoDNA are not included), and how the new phone screens feel on a device.
 
 Fixed on the way: a "5s ago" timestamp could differ between the server and the browser and forced a re-render of the profile page; the new Stories page rendered member-only buttons differently on the server.

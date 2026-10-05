@@ -20,7 +20,7 @@ export const COMMUNITIES = [
     cover: "/covers/starlight.jpg",
     hue: 218,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 13,
     contentWarnings: ["spoilers"],
     rules: "Mark spoilers. Credit artists. No piracy links. Be kind in theory threads.",
     createdBy: "seed:mira",
@@ -35,7 +35,7 @@ export const COMMUNITIES = [
     cover: "/covers/midnight-stage.jpg",
     hue: 248,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 13,
     contentWarnings: [],
     rules: "No fanwars. No leaking. Tag unreleased. Critique the work, not the people.",
     createdBy: "seed:jun",
@@ -50,7 +50,7 @@ export const COMMUNITIES = [
     cover: "/covers/pixel-realms.jpg",
     hue: 196,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 13,
     contentWarnings: ["flashing lights"],
     rules: "No cheats for live services. Tag spoilers. LFG posts need timezone + rank.",
     createdBy: "seed:elio",
@@ -65,9 +65,9 @@ export const COMMUNITIES = [
     cover: "/covers/ink-lore.jpg",
     hue: 28,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 16,
     contentWarnings: ["mature themes"],
-    rules: "Age 18+. Tag ratings. No AI-dumped novels. Critique with examples.",
+    rules: "Age 16+. Tag ratings. No AI-dumped novels. Critique with examples.",
     createdBy: "seed:nori",
   },
   {
@@ -80,7 +80,7 @@ export const COMMUNITIES = [
     cover: "/covers/atelier.jpg",
     hue: 320,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 13,
     contentWarnings: [],
     rules: "Credit references. Safety first with tools and chemicals. No stolen patterns sold as original.",
     createdBy: "seed:sage",
@@ -95,9 +95,9 @@ export const COMMUNITIES = [
     cover: "/covers/nightwatch.jpg",
     hue: 172,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 16,
     contentWarnings: ["violence", "mature themes"],
-    rules: "Age 18+. Consent for plots. No godmodding. Fade-to-black on request. OOC in OOC.",
+    rules: "Age 16+. Consent for plots. No godmodding. Fade-to-black on request. OOC in OOC.",
     createdBy: "seed:valen",
   },
   {
@@ -110,7 +110,7 @@ export const COMMUNITIES = [
     cover: "/covers/vinyl-club.jpg",
     hue: 32,
     visibility: "unlisted",
-    ageGate: 18,
+    ageGate: 13,
     contentWarnings: [],
     rules: "Finish the album. No shaming taste. Tag live rips.",
     createdBy: "seed:jun",
@@ -125,7 +125,7 @@ export const COMMUNITIES = [
     cover: "/covers/keep.jpg",
     hue: 36,
     visibility: "public",
-    ageGate: 18,
+    ageGate: 13,
     contentWarnings: [],
     rules: "Name the system. No pay-to-win table ads. Safety tools listed in LFG.",
     createdBy: "seed:valen",
@@ -140,7 +140,7 @@ export const COMMUNITIES = [
     cover: "/covers/hero.jpg",
     hue: 230,
     visibility: "private",
-    ageGate: 18,
+    ageGate: 16,
     contentWarnings: [],
     rules: "Private. No screenshots of reports. Assume good faith. Escalate, don’t pile on.",
     createdBy: "seed:mira",
@@ -416,6 +416,7 @@ export async function ensureSeeded(sql: Sql): Promise<void> {
     await ensureCharacters(sql);
     await ensureProfileParity(sql);
     await ensureAminoComplete(sql);
+    await ensureRedesignDemo(sql);
     return;
   }
 
@@ -572,6 +573,49 @@ export async function ensureSeeded(sql: Sql): Promise<void> {
   await ensureCharacters(sql);
   await ensureProfileParity(sql);
   await ensureAminoComplete(sql);
+  await ensureRedesignDemo(sql);
+}
+
+/** Sample headlines, ticks, interests and community topics for the redesigned screens (runs once). */
+async function ensureRedesignDemo(sql: Sql): Promise<void> {
+  try {
+    const done = await sql`select 1 from app_meta where key = 'redesign-demo'`;
+    if (done.length) return;
+    const people: { id: string; headline: string; pronouns: string; location: string; interests: string[]; categories: string[]; verified: boolean; creator: boolean }[] = [
+      { id: "seed:mira", headline: "Digital Artist", pronouns: "she/her", location: "Vancouver", interests: ["anime", "art", "music"], categories: ["art", "daily", "milestones", "qa"], verified: true, creator: true },
+      { id: "seed:jun", headline: "K-Pop Historian", pronouns: "he/him", location: "Seoul", interests: ["kpop", "music"], categories: ["music", "daily", "reviews"], verified: true, creator: true },
+      { id: "seed:elio", headline: "Game Designer", pronouns: "", location: "Montreal", interests: ["gaming", "tech"], categories: ["gaming", "growth"], verified: false, creator: true },
+      { id: "seed:nori", headline: "Fanfic Archivist", pronouns: "they/them", location: "", interests: ["writing", "books", "anime"], categories: ["fanfic", "writing"], verified: false, creator: false },
+      { id: "seed:sage", headline: "Cosplay Engineer", pronouns: "", location: "Calgary", interests: ["art", "fashion"], categories: ["cosplay", "photos", "growth"], verified: false, creator: false },
+      { id: "seed:valen", headline: "Forever GM", pronouns: "he/they", location: "", interests: ["gaming", "writing"], categories: ["gaming", "milestones"], verified: false, creator: false },
+    ];
+    for (const p of people) {
+      await sql`
+        update profiles set headline = ${p.headline}, pronouns = ${p.pronouns}, location = ${p.location},
+          interests = ${JSON.stringify(p.interests)}, profile_categories = ${JSON.stringify(p.categories)},
+          verified = ${p.verified}, creator = ${p.creator}, onboarded_at = coalesce(onboarded_at, now())
+        where user_id = ${p.id} and headline = ''`;
+    }
+    const topics: Record<string, string[]> = {
+      starlight: ["Frames", "OST", "Theories", "Fan Art"],
+      "midnight-stage": ["Comebacks", "Fancams", "Vocal Analysis", "K-Pop"],
+      "pixel-realms": ["Clips", "Builds", "LFG", "Gaming"],
+      "ink-lore": ["Fanfic", "Workshops", "Slow Burn", "Books"],
+      atelier: ["Cosplay", "Foam", "Wigs", "Photography"],
+      nightwatch: ["Roleplay", "Lore", "Writing"],
+      "vinyl-club": ["Records", "Deep Cuts", "Music"],
+      keep: ["Tabletop", "One-shots", "Gaming"],
+    };
+    for (const [id, list] of Object.entries(topics))
+      await sql`update communities set topics = ${JSON.stringify(list)} where id = ${id} and topics = '[]'`;
+    await sql`update communities set verified = true where id in ('starlight', 'midnight-stage')`;
+    await sql`update chat_rooms set topic = 'Music' where kind = 'voice' and community_id = 'midnight-stage' and topic = ''`;
+    await sql`update chat_rooms set topic = 'Gaming' where kind = 'voice' and community_id = 'keep' and topic = ''`;
+    await sql`update chat_rooms set topic = 'Anime' where kind = 'screening' and community_id = 'starlight' and topic = ''`;
+    await sql`insert into app_meta (key, value) values ('redesign-demo', '1') on conflict (key) do nothing`;
+  } catch {
+    // The redesign columns arrive with migration 0024.
+  }
 }
 
 async function ensureCharacters(sql: Sql): Promise<void> {

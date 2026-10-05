@@ -30,8 +30,17 @@
     "test:limits": "node scripts/smoke-limits.mjs",
     "test:storage": "node scripts/smoke-storage.mjs",
     "test:ai": "node scripts/smoke-ai.mjs",
+    "test:social": "node scripts/smoke-social.mjs",
+    "test:content-v9": "node scripts/smoke-content-v9.mjs",
+    "test:community-v9": "node scripts/smoke-community-v9.mjs",
+    "test:identity-v9": "node scripts/smoke-identity.mjs",
+    "test:paid-access": "node scripts/smoke-paid-access.mjs",
+    "test:billing-ui": "node scripts/smoke-billing-ui.mjs",
+    "test:platform-v9": "node scripts/smoke-platform-v9.mjs",
+    "test:collaborations": "node scripts/smoke-collaborations.mjs",
     "backup": "node scripts/backup.mjs",
-    "restore": "node scripts/restore.mjs"
+    "restore": "node scripts/restore.mjs",
+    "test:profile-stories": "node scripts/smoke-profile-stories.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

@@ -3,8 +3,9 @@ import { Alert, Pressable, View } from "react-native";
 import { api } from "@/api/endpoints";
 import { REPORT_REASONS } from "@/api/types";
 import { useAction } from "@/lib/errors";
-import { space, useTheme } from "@/theme";
-import { Button, Chip, Field, Sheet, Txt } from "./ui";
+import { GradientButton } from "@/components/k";
+import { font, radius, space, useTheme } from "@/theme";
+import { Field, PressableScale, Sheet, Txt } from "./ui";
 
 export type ReportTarget = { targetType: "post" | "comment" | "message" | "user"; targetId: string; communityId?: string; label: string };
 
@@ -24,16 +25,30 @@ export function ReportSheet({ target, onClose }: { target: ReportTarget | null; 
 
   return (
     <Sheet visible={!!target} title={`Report ${target?.label ?? ""}`} onClose={onClose}>
-      <Txt tone="muted">Why are you reporting this? Reports go to the community’s leaders, not to the person.</Txt>
+      <Txt style={{ fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: theme.muted }}>Why are you reporting this? Reports go to the community’s leaders, not to the person.</Txt>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-        {REPORT_REASONS.map((r) => (
-          <Chip key={r} label={r} selected={reason === r} onPress={() => setReason(r)} />
-        ))}
+        {REPORT_REASONS.map((r) => {
+          const on = reason === r;
+          return (
+            <PressableScale
+              key={r}
+              onPress={() => setReason(r)}
+              accessibilityRole="radio"
+              accessibilityLabel={r}
+              accessibilityState={{ selected: on }}
+              hitSlop={4}
+              scaleTo={0.95}
+              style={{ minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: "center", borderWidth: 1.5, borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.tint : theme.surface }}
+            >
+              <Txt style={{ fontFamily: on ? font.bold : font.semibold, fontSize: 13, color: on ? theme.accent : theme.ink }}>{r}</Txt>
+            </PressableScale>
+          );
+        })}
       </View>
       <Field label="Anything else we should know? (optional)" value={details} onChangeText={setDetails} multiline maxLength={500} />
-      <Button label="Send report" onPress={() => void send()} busy={busy} />
-      <Pressable onPress={onClose} accessibilityRole="button" style={{ alignItems: "center", padding: space.sm }}>
-        <Txt tone="muted" style={{ color: theme.muted }}>Cancel</Txt>
+      <GradientButton label="Send report" icon="flag" onPress={() => void send()} busy={busy} size="lg" full />
+      <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Cancel" style={{ alignItems: "center", justifyContent: "center", minHeight: 44, padding: space.sm }}>
+        <Txt style={{ fontFamily: font.bold, color: theme.muted }}>Cancel</Txt>
       </Pressable>
     </Sheet>
   );

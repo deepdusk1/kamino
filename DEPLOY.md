@@ -73,7 +73,7 @@ Without this, "Forgot password" cannot send emails.
 Kamino's built-in safety rules always run. Two free keys add more. Both are optional and you can add them later.
 
 1. **Safety check (text and pictures).** Sign up at [platform.openai.com](https://platform.openai.com), open **API keys**, and create a key. OpenAI does not charge for its moderation service. In Render → `kamino` → **Environment**, set `KAMINO_MODERATION_API_KEY` to that key.
-2. **AI storyteller for role-play.** Sign up at [console.groq.com](https://console.groq.com) (no credit card), open **API Keys**, and create one. Set `KAMINO_AI_API_KEY` to it. The free tier allows about 1,000 replies a day; Kamino stops at 900 by itself (change with `KAMINO_AI_DAILY_LIMIT`).
+2. **AI storyteller for role-play.** Sign up at [console.groq.com](https://console.groq.com) (no credit card), open **API Keys**, and create one. Set `KAMINO_AI_API_KEY` to it. Nothing free is unlimited: Groq gives each model about 200,000 tokens a day, which is roughly 150 story replies per model. Kamino uses two models one after the other (`KAMINO_AI_MODEL`, comma-separated), so about 300 replies a day, and stops at 300 by itself (change with `KAMINO_AI_DAILY_LIMIT`). When the day's free replies run out, members can keep playing and narrate by hand. To remove the limit you would run your own model and point `KAMINO_AI_BASE_URL` at it.
 3. **You as site owner.** Set `KAMINO_ADMIN_EMAILS` to the email you sign in with. You then see serious safety cases from every community, direct messages and profile walls at `https://your-address/admin/safety`, and you get a notification when one comes in.
 
 Check: open any community's **Stories** tab. If it says the storyteller narrates, the key works. Free tiers and their limits are set by OpenAI and Groq and can change; if one stops working, Kamino keeps running on the built-in rules.
@@ -178,3 +178,7 @@ files inside `mobile/` (increase `version` in `app.config.ts` for a new store re
 | No reset emails arrive | Step 4 not finished, or `MAIL_FROM` is not on a verified domain. Check Render logs for lines starting `[mail]`. |
 | No push notifications on Android Expo Go | Expected: Expo Go on Android cannot receive push. Use a real build (step 7.2). |
 | You changed the code and the app looks unchanged | Rebuild the app (step 7). Only website/server changes deploy automatically. |
+# Release 9 prerequisites
+
+Before deploying this expansion, read `web/IDENTITY_SECURITY.md`, `web/BILLING.md` and `RELEASE-9.md`. Run all migrations, configure verified email delivery and administrator identities, and provide `KAMINO_JOB_SECRET` so background reminders/digests run. Keep payments disabled unless deliberately enabling the Stripe sandbox; live purchases and native store billing remain unavailable. Update the store privacy declarations for the optional native contacts flow and configured providers. Physical-device calls, permissions and notification delivery still require verification.
+

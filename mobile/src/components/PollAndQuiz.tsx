@@ -2,16 +2,23 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { authHeaders, postImageUrl } from "@/api/client";
 import { api } from "@/api/endpoints";
 import type { PostPage } from "@/api/models";
 import { useAction } from "@/lib/errors";
 import { QUIZ_IMAGE_BASE, formatClock, remainingMs, usedSoFarMs } from "@/lib/quiz";
-import { radius, space, useTheme } from "@/theme";
-import { Button, Card, Txt } from "./ui";
+import { GradientButton, Pill } from "@/components/k";
+import { font, radius, shadow, space, useTheme } from "@/theme";
+import { PressableScale, Txt } from "./ui";
+
+/** The white rounded box polls and quizzes sit in (matches the post page cards). */
+function Panel({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const theme = useTheme();
+  return <View style={[{ backgroundColor: theme.surface, borderRadius: radius.card, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 10 }, shadow.card, style]}>{children}</View>;
+}
 
 /** Vote on a poll; results (bars) appear after voting. */
 export function PollView({ postId, poll, canVote }: { postId: number; poll: NonNullable<PostPage["poll"]>; canVote: boolean }) {
@@ -25,7 +32,11 @@ export function PollView({ postId, poll, canVote }: { postId: number; poll: NonN
   });
 
   return (
-    <Card>
+    <Panel>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Pill label="Poll" icon="stats-chart" tone="blue" />
+        <Txt style={{ fontFamily: font.semibold, fontSize: 12.5, color: theme.muted }}>{voted ? "Results" : canVote ? "Tap an answer to vote" : "Join to vote"}</Txt>
+      </View>
       {poll.options.map((option, i) => {
         const share = total ? Math.round((100 * (poll.counts[i] ?? 0)) / total) : 0;
         return (
@@ -35,18 +46,18 @@ export function PollView({ postId, poll, canVote }: { postId: number; poll: NonN
             onPress={() => void vote(i)}
             accessibilityRole="button"
             accessibilityLabel={voted ? `${option}: ${share} percent` : `Vote for ${option}`}
-            style={{ borderRadius: radius.md, borderWidth: 1, borderColor: poll.mine === i ? theme.accent : theme.hairline, backgroundColor: theme.dark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.5)", overflow: "hidden", padding: space.md }}
+            style={{ borderRadius: radius.pill, borderWidth: 1.5, borderColor: poll.mine === i ? theme.accent : theme.border, backgroundColor: theme.surfaceAlt, overflow: "hidden", paddingHorizontal: 16, minHeight: 44, justifyContent: "center" }}
           >
             {voted ? <PollBar share={share} mine={poll.mine === i} /> : null}
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Txt style={{ flex: 1 }}>{option}</Txt>
-              {voted ? <Txt tone="muted">{share}%</Txt> : null}
+              <Txt style={{ flex: 1, fontFamily: poll.mine === i ? font.bold : font.semibold, fontSize: 14, color: theme.ink }}>{option}{poll.mine === i ? "  ✓" : ""}</Txt>
+              {voted ? <Txt style={{ fontFamily: font.heavy, fontSize: 14, color: theme.toneText.violet }}>{share}%</Txt> : null}
             </View>
           </Pressable>
         );
       })}
       <Txt variant="caption" tone="subtle">{total} {total === 1 ? "vote" : "votes"}{!canVote ? " · join to vote" : ""}</Txt>
-    </Card>
+    </Panel>
   );
 }
 
@@ -139,9 +150,9 @@ export function QuizView({ postId, questions, timeLimitSec, quizRun, myQuiz, boa
   if (started) {
     const question = questions[index]!;
     return (
-      <Card>
+      <Panel>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Txt variant="label" tone="subtle">Question {index + 1} of {questions.length}</Txt>
+          <Pill label={`Question ${index + 1} of ${questions.length}`} icon="help-circle" tone="orange" />
           {remaining !== null ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }} accessibilityLabel={`${formatClock(remaining)} left`} accessibilityRole="timer">
               <Ionicons name="timer-outline" size={16} color={remaining < 10_000 ? theme.danger : theme.muted} />
@@ -149,56 +160,70 @@ export function QuizView({ postId, questions, timeLimitSec, quizRun, myQuiz, boa
             </View>
           ) : null}
         </View>
-        <Txt variant="heading">{question.q}</Txt>
+        <Txt style={{ fontFamily: font.heavy, fontSize: 17, lineHeight: 23, color: theme.ink }}>{question.q}</Txt>
         {question.hasImage ? (
           <Image
             key={index}
             source={{ uri: postImageUrl(postId, QUIZ_IMAGE_BASE + index), headers: authHeaders() }}
-            style={{ height: 200, borderRadius: radius.md, backgroundColor: theme.elevated }}
+            style={{ height: 200, borderRadius: radius.tile, backgroundColor: theme.surfaceAlt }}
             contentFit="contain"
             accessibilityLabel={`Picture for question ${index + 1}`}
           />
         ) : null}
         {question.choices.map((choice, i) => (
-          <Button key={i} label={choice} variant="secondary" disabled={busy} onPress={() => choose(i)} />
+          <PressableScale
+            key={i}
+            disabled={busy}
+            onPress={() => choose(i)}
+            accessibilityRole="button"
+            accessibilityLabel={choice}
+            scaleTo={0.98}
+            style={{ minHeight: 46, borderRadius: radius.pill, borderWidth: 1.5, borderColor: theme.border, backgroundColor: theme.surfaceAlt, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 10, opacity: busy ? 0.6 : 1 }}
+          >
+            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: theme.tints.violet, alignItems: "center", justifyContent: "center" }}>
+              <Txt style={{ fontFamily: font.heavy, fontSize: 12, color: theme.toneText.violet }}>{String.fromCharCode(65 + i)}</Txt>
+            </View>
+            <Txt style={{ flex: 1, fontFamily: font.semibold, fontSize: 14, color: theme.ink }}>{choice}</Txt>
+          </PressableScale>
         ))}
-      </Card>
+      </Panel>
     );
   }
 
   return (
-    <Card>
+    <Panel>
+      <Pill label="Quiz" icon="help-circle" tone="orange" />
       {myQuiz ? (
         <>
-          <Txt variant="heading">You scored {myQuiz.score} / {myQuiz.total}</Txt>
+          <Txt style={{ fontFamily: font.heavy, fontSize: 18, lineHeight: 24, color: theme.ink }}>You scored {myQuiz.score} / {myQuiz.total} 🎉</Txt>
           {timedOut ? <Txt tone="muted">Time ran out before your answers arrived, so this try scored 0.</Txt> : null}
         </>
       ) : (
         <>
-          <Txt variant="heading">{questions.length} {questions.length === 1 ? "question" : "questions"}</Txt>
+          <Txt style={{ fontFamily: font.heavy, fontSize: 17, lineHeight: 23, color: theme.ink }}>{questions.length} {questions.length === 1 ? "question" : "questions"}</Txt>
           <Txt tone="muted">
             {timeLimitSec > 0
               ? `Timed: ${formatClock(timeLimitSec * 1000)} for the whole quiz. The clock starts when you press Start. You can play once.`
               : "Answer as fast as you can. You can play once."}
           </Txt>
           {quizRun ? <Txt variant="caption" tone="subtle">You started this quiz earlier. The clock has kept running.</Txt> : null}
-          <Button label={quizRun ? "Continue quiz" : "Start quiz"} disabled={!canPlay} busy={starting} onPress={() => void begin()} />
+          <GradientButton label={quizRun ? "Continue quiz" : "Start quiz"} iconRight="arrow-forward" disabled={!canPlay} busy={starting} onPress={() => void begin()} full />
           {!canPlay ? <Txt variant="caption" tone="subtle">Join the community to play.</Txt> : null}
         </>
       )}
       {board.length ? (
         <View style={{ gap: 6, paddingTop: space.sm }}>
-          <Txt variant="label" tone="subtle">Leaderboard</Txt>
+          <Txt style={{ fontFamily: font.heavy, fontSize: 14, color: theme.ink }}>🏆 Leaderboard</Txt>
           {board.slice(0, 10).map((row, i) => (
-            <View key={i} style={{ flexDirection: "row", gap: space.md }}>
-              <Txt style={{ width: 24, color: theme.subtle }}>{i + 1}</Txt>
-              <Txt style={{ flex: 1 }}>{row.nickname}</Txt>
+            <View key={i} style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
+              <Txt style={{ width: 24, fontFamily: font.heavy, color: i < 3 ? theme.toneText.orange : theme.subtle }}>{i + 1}</Txt>
+              <Txt style={{ flex: 1, fontFamily: font.semibold, color: theme.ink }}>{row.nickname}</Txt>
               <Txt tone="muted">{row.score}/{row.total} · {(row.timeMs / 1000).toFixed(1)}s</Txt>
             </View>
           ))}
         </View>
       ) : null}
-    </Card>
+    </Panel>
   );
 }
 

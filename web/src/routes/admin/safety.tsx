@@ -26,14 +26,15 @@ function SiteSafety() {
   return (
     <AppShell title="Site safety">
       <div className="space-y-4 px-4 py-5">
+        {role.data?.siteAdmin ? <a href="/admin/reports" className="text-sm font-semibold text-accent">Review reports from members</a> : null}
         {role.data && !role.data.siteAdmin ? (
           <p className="text-sm text-muted">
             This page is for the site owner. Add your sign-in email to{" "}
             <code>KAMINO_ADMIN_EMAILS</code> on the server to use it.
           </p>
-        ) : (
+        ) : role.data?.siteAdmin ? (
           <SafetyQueue />
-        )}
+        ) : role.isError ? <p role="alert" className="text-sm text-danger">{role.error.message}</p> : <p className="text-sm text-muted">Checking access…</p>}
       </div>
     </AppShell>
   );

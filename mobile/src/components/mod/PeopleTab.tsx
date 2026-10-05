@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, View } from "react-native";
 import { api } from "@/api/endpoints";
+import { communityV9 } from '@/api/community-v9';
 import type { Membership } from "@/api/types";
 import { Avatar, Button, Card, Chip, Field, Sheet, Txt } from "@/components/ui";
 import { showError, useAction } from "@/lib/errors";
@@ -96,6 +97,7 @@ export function PeopleTab({ slug, members, strikeCounts, myRole, myId, onChanged
             <Button label="Make a curator" variant="secondary" onPress={() => void act(() => api.setMemberRole(slug, target.userId, "curator"))} />
           ) : null
         ) : null}
+        {myRole==='agent'&&target&&target.role!=='agent'?<Button label={target.role==='leader'?'Remove co-leader role':'Appoint co-leader'} variant="secondary" onPress={()=>void act(()=>communityV9.appoint(slug,target.userId,target.role==='leader'?'member':'leader'))}/>:null}
         {target?.status === "banned" ? (
           <Button label="Restore to the community" onPress={() => void act(() => api.setMemberRole(slug, target.userId, "unban"))} />
         ) : (

@@ -46,7 +46,7 @@ export function SafetyTab({ slug }: { slug: string }) {
   return (
     <View style={{ gap: space.md }}>
       <Txt variant="small" tone="muted">
-        {status.data?.moderation ? "Built-in rules and the free AI check" : "Built-in rules (the AI check is not set up)"} pause likely illegal or
+        {status.data?.moderation ? "Built-in rules and the configured AI safety check" : "Built-in rules (the AI check is not set up)"} pause likely illegal or
         dangerous content here. You decide what happens.
       </Txt>
       {!open.length ? <EmptyState icon="shield-checkmark-outline" title="Nothing waiting" body="The safety queue is empty." /> : null}

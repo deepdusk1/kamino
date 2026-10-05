@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CommunityLookEditor } from "@/components/community-look-editor";
 import { SafetyQueue } from "@/components/safety-queue";
+import { CommunityModerationV9 } from '@/components/moderation-v9';
 import { TitleChip } from "@/components/title-chip";
 import {
   createTitle,
@@ -67,6 +68,7 @@ function Mod() {
         member. No paid titles.
       </p>
       <SafetyQueue slug={slug} />
+      <CommunityModerationV9 slug={slug}/>
       {["agent", "leader"].includes(data.role) && <CommunityLookEditor slug={slug} />}
       {["agent", "leader"].includes(data.role) && (
         <section className="glass-card rounded-2xl p-4">

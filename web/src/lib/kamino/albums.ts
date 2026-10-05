@@ -2,12 +2,20 @@
  * Small pure helpers for albums, shared-file folders and importing an exported copy of your data.
  * Kept free of database code so they can be tested on their own.
  */
+import { MAX_ALBUM_EXTRAS, MAX_POST_PICTURES } from "./types.ts";
 import { draftContentSchema, emptyDraft, type DraftContent } from "./writing.ts";
 
-/** An album is the cover picture plus up to this many more. */
-export const MAX_ALBUM_EXTRAS = 5;
+// An album is the cover picture plus up to MAX_ALBUM_EXTRAS more (10 pictures in all). The numbers live in
+// types.ts so the phone app gets the same ones.
+export { MAX_ALBUM_EXTRAS, MAX_POST_PICTURES };
+
+/** One picture, as a data: URL (about 2 MB of image). */
 const MAX_IMAGE_CHARS = 2_800_000;
-const MAX_ALBUM_CHARS = 12_000_000;
+/**
+ * All the extra pictures together (about 15 MB of images). Lower than 9 × 2 MB on purpose: an album of nine
+ * full-size pictures would be a very slow upload on a phone, so people are asked to use smaller ones.
+ */
+export const MAX_ALBUM_CHARS = 20_000_000;
 const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 
 /** Checks the extra pictures of an album and returns them. Throws a readable Error when something is off. */
@@ -186,7 +194,7 @@ export function draftFromExportedPost(
     album: album.filter((item) => IMAGE_DATA_URL.test(item)).slice(0, MAX_ALBUM_EXTRAS),
     timeLimitSec: importedTimeLimit(payload.timeLimitSec),
     captions: Array.isArray(payload.captions)
-      ? payload.captions.map((c) => trim(c, 140)).slice(0, 6)
+      ? payload.captions.map((c) => trim(c, 140)).slice(0, MAX_POST_PICTURES)
       : undefined,
   };
   const parsed = draftContentSchema.safeParse(candidate);

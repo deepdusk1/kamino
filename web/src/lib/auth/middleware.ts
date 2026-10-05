@@ -43,8 +43,14 @@ export const authMiddleware = createMiddleware({ type: "function" })
     // Reject scripted cross-site/sibling requests before touching per-user data.
     assertSameSiteRequest();
     const userId = await requireUserId(context.bearerToken);
+    const { getSql } = await import('../db');
+    const { internals } = await import('../kamino/server');
+    await internals.assertAccountAllowed(await getSql(), userId);
     // Stop runaway scripts and retry loops (per person, per minute).
     const { overallBudget } = await import("../kamino/rate-limit.server");
     overallBudget(userId);
+    // "Online now": remember when this person was last active (at most one write a minute).
+    const { touchPresence } = await import("../kamino/presence.server");
+    touchPresence(userId);
     return next({ context: { userId } });
   });

@@ -1,57 +1,103 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
-import { Stack, router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, TextInput, View } from "react-native";
-import Animated, { ZoomIn } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, View } from "react-native";
 import { api } from "@/api/endpoints";
 import type { ChatMessage } from "@/api/types";
+import { ChatBanner, ChatHeader, ChatInputBar, TypingBubble } from "@/components/chat/ChatChrome";
 import { MessageBubble } from "@/components/chat/MessageBubble";
-import { RoomSettings } from "@/components/chat/RoomSettings";
-import { StickerPicker } from "@/components/chat/StickerPicker";
 import { formatSeconds } from "@/components/chat/MessageMedia";
+import { RoomSettings } from "@/components/chat/RoomSettings";
+import { roomPerson, roomTitle } from "@/components/chat/rooms";
+import { StickerPicker } from "@/components/chat/StickerPicker";
+import { OptionRow } from "@/components/create/parts";
+import { EmptyHint, GradientButton, PersonAvatar } from "@/components/k";
 import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
-import { Button, EmptyState, ErrorState, Glass, Loading, PressableScale, Sheet, Txt } from "@/components/ui";
-import { showError } from "@/lib/errors";
-import { pickPhoto, pickVideo } from "@/lib/media";
-import { stickerToken } from "@/lib/stickers";
-import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
-import { font, glowShadow, radius, space, useTheme } from "@/theme";
+import { ErrorState, Field, Loading, PressableScale, Sheet, Txt } from "@/components/ui";
+import { errorMessage, showError } from "@/lib/errors";
+import { timeAgo } from "@/lib/format";
 import { tellIfHeld } from "@/lib/held";
+import { pickPhoto, pickVideo } from "@/lib/media";
+import { previewText, stickerToken } from "@/lib/stickers";
+import { useDebounced } from "@/lib/useDebounced";
+import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
+import { font, radius, useTheme } from "@/theme";
+import { ChatContentTools, ChatMessageContent } from "@/components/content/ChatContentTools";
+import { StageControlsV9 } from "@/components/StageControlsV9";
 
 const REACTIONS = ["❤️", "😂", "✨", "🔥", "👏", "😮"];
 type Media = { kind: "image" | "audio" | "video"; dataUrl: string };
+/** How often we tell the server "I'm typing" while the person types (the server forgets after 6 s). */
+const TYPING_EVERY_MS = 4000;
 
+/**
+ * One conversation (DM, group, or live room) in the new look: header with face and status, white / gradient
+ * bubbles, the comment-bar style input, "is typing…", "Seen" under your last DM message, and a banner to accept or
+ * decline a message request. Reactions, replies, edit / delete, photos, clips, voice notes, stickers, search, calls,
+ * watch-together and invites all live here.
+ */
 export default function ChatRoom() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const { roomId: roomParam } = useLocalSearchParams<{ roomId: string }>();
   const roomId = Number(roomParam);
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   // New messages arrive by asking the server again every few seconds while this screen is open.
   const room = useQuery({ queryKey: ["room", roomId], queryFn: () => api.room(roomId), enabled: Number.isFinite(roomId), refetchInterval: 4000 });
+  // The chat list knows extra things about the room: online, verified, message request…
+  const overview = useQuery({ queryKey: ["chatsOverview"], queryFn: api.chatsOverview, staleTime: 15_000 });
+  const extra = overview.data?.rooms.find((r) => r.id === roomId);
+  const isDm = room.data?.room.kind === "dm";
+  const typing = useQuery({ queryKey: ["typing", roomId], queryFn: () => api.typingIn(roomId), enabled: Number.isFinite(roomId), refetchInterval: 3000 });
+  const receipts = useQuery({ queryKey: ["receipts", roomId], queryFn: () => api.roomReceipts(roomId), enabled: isDm, refetchInterval: 5000 });
 
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [report, setReport] = useState<ReportTarget | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [stickersOpen, setStickersOpen] = useState(false);
+  const [sheet, setSheet] = useState<null | "settings" | "attach" | "stickers" | "search">(null);
   const [sending, setSending] = useState(false);
+  const [answering, setAnswering] = useState(false);
+  const [highlight, setHighlight] = useState<number | null>(null);
   const voice = useVoiceRecorder();
+  const list = useRef<FlatList<ChatMessage>>(null);
 
   const messages = room.data?.messages;
   const byId = useMemo(() => new Map((messages ?? []).map((m) => [m.id, m])), [messages]);
   const newestFirst = useMemo(() => [...(messages ?? [])].reverse(), [messages]);
+  const myId = me.data?.profile.userId;
+  const newestId = newestFirst[0]?.id ?? 0;
+
+  // Tell the server what we've read (not for message requests: the sender shouldn't see "Seen" before you accept).
+  const markedRef = useRef(0);
+  useEffect(() => {
+    if (!newestId || newestId <= markedRef.current || extra?.isRequest) return;
+    markedRef.current = newestId;
+    api
+      .markRoomRead(roomId, newestId)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ["rooms"] });
+        void queryClient.invalidateQueries({ queryKey: ["chatsOverview"] });
+      })
+      .catch(() => undefined);
+  }, [newestId, roomId, extra?.isRequest, queryClient]);
+
+  // "I'm typing": sent at most every few seconds while there is text in the box.
+  const typingSent = useRef(0);
+  const onChangeText = (value: string) => {
+    setText(value);
+    if (value.trim() && !editing && Date.now() - typingSent.current > TYPING_EVERY_MS) {
+      typingSent.current = Date.now();
+      api.setTyping(roomId).catch(() => undefined);
+    }
+  };
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["room", roomId] });
     void queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    void queryClient.invalidateQueries({ queryKey: ["chatsOverview"] });
   };
 
   const submit = async (media?: Media) => {
@@ -63,6 +109,7 @@ export default function ChatRoom() {
       setText("");
       setReplyTo(null);
       setEditing(null);
+      typingSent.current = 0;
       await refresh();
     } catch (error) {
       showError(error, "Message not sent");
@@ -72,7 +119,7 @@ export default function ChatRoom() {
   };
 
   const sendSticker = async (id: string) => {
-    setStickersOpen(false);
+    setSheet(null);
     if (sending) return;
     setSending(true);
     try {
@@ -87,7 +134,7 @@ export default function ChatRoom() {
   };
 
   const attach = async (kind: "photo" | "camera" | "video") => {
-    setAttachOpen(false);
+    setSheet(null);
     try {
       if (kind === "video") {
         const dataUrl = await pickVideo("library");
@@ -131,182 +178,277 @@ export default function ChatRoom() {
     setSelected(null);
     Alert.alert("Delete this message?", "This can't be undone.", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          api.deleteMessage(roomId, message.id).then(refresh, showError);
-        },
-      },
+      { text: "Delete", style: "destructive", onPress: () => void api.deleteMessage(roomId, message.id).then(refresh, showError) },
     ]);
   };
 
+  const answer = async (accept: boolean) => {
+    setAnswering(true);
+    try {
+      if (accept) await api.acceptMessageRequest(roomId);
+      else await api.declineMessageRequest(roomId);
+      void queryClient.invalidateQueries({ queryKey: ["chatsOverview"] });
+      void queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      if (!accept) {
+        if (router.canGoBack()) router.back();
+        else router.replace("/chats");
+      }
+    } catch (error) {
+      showError(error);
+    } finally {
+      setAnswering(false);
+    }
+  };
+
+  /** Jumps to a search result when it's in the loaded messages. */
+  const jumpTo = (id: number) => {
+    setSheet(null);
+    const index = newestFirst.findIndex((m) => m.id === id);
+    if (index < 0) return;
+    setHighlight(id);
+    setTimeout(() => setHighlight((h) => (h === id ? null : h)), 2500);
+    list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+  };
+
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace("/chats"));
+
   if (room.isPending) return <Loading />;
-  if (room.isError || !room.data) return <ErrorState error={room.error} onRetry={() => void room.refetch()} />;
+  if (room.isError || !room.data) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        <ChatHeader person={{ name: "?", hue: 260 }} title="Chat" onBack={goBack} actions={[]} />
+        <ErrorState error={room.error} onRetry={() => void room.refetch()} />
+      </View>
+    );
+  }
 
   const info = room.data.room;
-  const title = info.kind === "dm" ? (info.peerName ?? "Direct message") : info.name;
-  const myId = me.data?.profile.userId;
+  const title = roomTitle({ ...info, communityName: extra?.communityName });
+  const typingNames = (typing.data?.names ?? []).filter((_, i) => typing.data?.userIds[i] !== myId);
   const mineSelected = !!selected && selected.author.userId === myId;
+  // "Seen" under my newest message when the other person has read up to it (DMs only, when they share receipts).
+  const myLast = newestFirst.find((m) => m.author.userId === myId && !m.deleted);
+  const seen = !!myLast && (receipts.data?.seenBy ?? []).some((s) => s.userId !== myId && s.lastReadId >= myLast.id);
+  const subtitle = typingNames.length
+    ? isDm
+      ? "typing…"
+      : `${typingNames[0]}${typingNames.length > 1 ? ` +${typingNames.length - 1}` : ""} typing…`
+    : isDm
+      ? extra?.peerOnline
+        ? "Online"
+        : info.peerHandle
+          ? `@${info.peerHandle}`
+          : undefined
+      : info.kind === "voice"
+        ? `Live room${room.data.voices.length ? ` · ${room.data.voices.length} in the call` : ""}`
+        : [extra?.communityName, room.data.participants.length ? `${room.data.participants.length} people` : null].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}>
-      <Stack.Screen
-        options={{
-          title,
-          headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.lg }}>
-              <Pressable onPress={() => router.push(`/call/${roomId}`)} accessibilityRole="button" accessibilityLabel="Start or join a call" hitSlop={10}>
-                <Ionicons name="call-outline" size={24} color={theme.fg} />
-              </Pressable>
-              <Pressable onPress={() => setSettingsOpen(true)} accessibilityRole="button" accessibilityLabel="Room settings" hitSlop={10}>
-                <Ionicons name="ellipsis-horizontal-circle-outline" size={26} color={theme.fg} />
-              </Pressable>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ChatHeader
+        person={roomPerson(info)}
+        title={title}
+        verified={isDm && extra?.peerVerified}
+        online={isDm ? !!extra?.peerOnline : undefined}
+        subtitle={subtitle}
+        subtitleTone={typingNames.length ? "accent" : isDm && extra?.peerOnline ? "green" : "muted"}
+        onBack={goBack}
+        onPressTitle={isDm && info.peerHandle ? () => router.push(`/profile/${info.peerHandle}`) : undefined}
+        actions={[
+          { icon: "search-outline", label: "Search messages", onPress: () => setSheet("search") },
+          { icon: "call-outline", label: "Start or join a call", onPress: () => router.push(`/call/${roomId}`) },
+          { icon: "ellipsis-horizontal", label: "Chat settings and invites", onPress: () => setSheet("settings") },
+        ]}
+      />
+
+      <ChatContentTools roomId={roomId} myId={myId ?? ""} messages={messages ?? []}/>
+      {info.kind === "voice" || info.kind === "screening" ? <StageControlsV9 roomId={roomId} userId={myId ?? ""}/> : null}
+      {extra?.isRequest ? (
+        <View style={{ margin: 12, marginBottom: 0, padding: 14, gap: 10, borderRadius: radius.card, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <PersonAvatar person={roomPerson(info)} size={40} />
+            <View style={{ flex: 1 }}>
+              <Txt style={{ fontFamily: font.bold, fontSize: 14.5, lineHeight: 19, color: theme.ink }}>{`${title} wants to message you`}</Txt>
+              <Txt style={{ fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: theme.muted }}>You don’t follow each other yet. They won’t know you’ve seen this until you accept or reply.</Txt>
             </View>
-          ),
-        }}
-      />
-
-      {room.data?.voices.length ? (
-        <Pressable onPress={() => router.push(`/call/${roomId}`)} accessibilityRole="button" accessibilityLabel="Join the call" style={{ flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, backgroundColor: theme.tint }}>
-          <Ionicons name="call" size={20} color={theme.accent} />
-          <Txt variant="small" tone="accent" numberOfLines={1} style={{ flex: 1 }}>
-            {room.data.voices.length} in a call · {room.data.voices.map((v) => v.nickname).join(", ")}
-          </Txt>
-          <Txt variant="small" tone="accent">Join</Txt>
-        </Pressable>
-      ) : null}
-
-      {info.kind === "screening" && info.watchUrl ? (
-        <Pressable onPress={() => void Linking.openURL(info.watchUrl)} accessibilityRole="link" accessibilityLabel={`Open ${info.watchTitle || "watch link"}`} style={{ flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, backgroundColor: theme.tint }}>
-          <Ionicons name="film-outline" size={20} color={theme.accent} />
-          <Txt variant="small" tone="accent" numberOfLines={1} style={{ flex: 1 }}>Watching: {info.watchTitle || info.watchUrl}</Txt>
-          <Ionicons name="open-outline" size={18} color={theme.accent} />
-        </Pressable>
-      ) : null}
-
-      <FlatList
-        inverted
-        data={newestFirst}
-        keyExtractor={(m) => String(m.id)}
-        renderItem={({ item }) => (
-          <MessageBubble
-            message={item}
-            mine={item.author.userId === myId}
-            replyTo={item.replyTo ? byId.get(item.replyTo) : undefined}
-            onLongPress={() => setSelected(item)}
-            onOpenProfile={() => router.push(`/profile/${item.author.handle}`)}
-            onReact={(emoji) => void react(item, emoji)}
-          />
-        )}
-        contentContainerStyle={{ paddingVertical: space.md, flexGrow: 1 }}
-        ListEmptyComponent={<EmptyState icon="chatbubble-ellipses-outline" title="Say hello" body="No messages yet. Yours can be the first." />}
-        keyboardShouldPersistTaps="handled"
-      />
-
-      {replyTo || editing ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: theme.elevated }}>
-          <Txt variant="small" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
-            {editing ? "Editing your message" : `Replying to ${replyTo!.author.nickname}: ${replyTo!.body || "attachment"}`}
-          </Txt>
-          <Pressable onPress={() => { setReplyTo(null); setEditing(null); setText(""); }} accessibilityRole="button" accessibilityLabel="Cancel" hitSlop={10}>
-            <Ionicons name="close-circle" size={22} color={theme.subtle} />
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <GradientButton label="Accept" icon="checkmark" busy={answering} onPress={() => void answer(true)} style={{ flex: 1 }} full />
+            <PressableScale onPress={() => void answer(false)} disabled={answering} accessibilityLabel="Decline message request" scaleTo={0.96} style={{ flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: theme.border, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface }}>
+              <Txt style={{ fontFamily: font.bold, fontSize: 14, lineHeight: 18, color: theme.muted }}>Decline</Txt>
+            </PressableScale>
+          </View>
+          <Pressable
+            onPress={() => setReport({ targetType: "message", targetId: String(newestFirst[0]?.id ?? ""), communityId: undefined, label: "message request" })}
+            accessibilityRole="button"
+            accessibilityLabel="Report this request"
+            hitSlop={8}
+            style={{ alignSelf: "center" }}
+          >
+            <Txt style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: theme.danger }}>Report</Txt>
           </Pressable>
         </View>
       ) : null}
+      {extra?.awaitingAccept ? <ChatBanner icon="paper-plane-outline" tone="blue" text={`Message request sent. ${title} will see it once they accept.`} /> : null}
 
-      <Glass intensity={70} style={{ flexDirection: "row", alignItems: "flex-end", gap: space.sm, padding: space.sm, paddingBottom: Math.max(insets.bottom, space.sm), borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }}>
-        {voice.isRecording ? (
-          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, height: 44, paddingHorizontal: space.md }}>
-            <Ionicons name="radio-button-on" size={18} color={theme.danger} />
-            <Txt tone="danger">Recording {formatSeconds(voice.seconds)}</Txt>
-            <Txt variant="caption" tone="muted">tap send to finish</Txt>
-          </View>
-        ) : (
-          <>
-            {editing ? null : (
-              <Pressable onPress={() => setStickersOpen(true)} accessibilityRole="button" accessibilityLabel="Send a sticker" style={{ height: 44, width: 36, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="happy-outline" size={26} color={theme.accent} />
-              </Pressable>
-            )}
-            {editing ? null : (
-              <Pressable onPress={() => setAttachOpen(true)} accessibilityRole="button" accessibilityLabel="Attach a photo or video" style={{ height: 44, width: 40, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="add-circle-outline" size={28} color={theme.accent} />
-              </Pressable>
-            )}
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Message"
-              accessibilityLabel="Message"
-              placeholderTextColor={theme.subtle}
-              multiline
-              maxLength={2000}
-              selectionColor={theme.accent}
-              style={{ flex: 1, maxHeight: 120, minHeight: 44, paddingHorizontal: space.lg, paddingTop: 12, paddingBottom: 12, borderRadius: 22, backgroundColor: theme.dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.85)", borderWidth: 1, borderColor: theme.hairline, color: theme.fg, fontFamily: font.regular, fontSize: 16, outlineWidth: 0 }}
+      {room.data.voices.length ? (
+        <ChatBanner
+          icon="call"
+          tone="green"
+          text={`${room.data.voices.length} in a call · ${room.data.voices.map((v) => v.nickname).join(", ")}`}
+          action="Join"
+          onPress={() => router.push(`/call/${roomId}`)}
+        />
+      ) : null}
+      {info.kind === "screening" && info.watchUrl ? (
+        <ChatBanner icon="film-outline" tone="violet" text={`Watching together: ${info.watchTitle || info.watchUrl}`} action="Open" onPress={() => void Linking.openURL(info.watchUrl)} />
+      ) : null}
+
+      <FlatList
+        ref={list}
+        inverted
+        data={newestFirst}
+        keyExtractor={(m) => String(m.id)}
+        onScrollToIndexFailed={() => undefined}
+        renderItem={({ item, index }) => {
+          const newer = newestFirst[index - 1];
+          const older = newestFirst[index + 1];
+          const sameAsOlder = older?.author.userId === item.author.userId && new Date(item.createdAt).getTime() - new Date(older.createdAt).getTime() < 5 * 60_000;
+          const sameAsNewer = newer?.author.userId === item.author.userId && new Date(newer.createdAt).getTime() - new Date(item.createdAt).getTime() < 5 * 60_000;
+          const mine = item.author.userId === myId;
+          return (
+            <View>
+            <MessageBubble
+              message={item}
+              mine={mine}
+              replyTo={item.replyTo ? byId.get(item.replyTo) : undefined}
+              showName={!isDm && !sameAsOlder}
+              showAvatar={!sameAsNewer}
+              showTime={!sameAsNewer}
+              receipt={isDm && mine && item.id === myLast?.id ? (seen ? "Seen" : "Sent") : null}
+              highlighted={highlight === item.id}
+              onLongPress={() => setSelected(item)}
+              onOpenProfile={() => router.push(`/profile/${item.author.handle}`)}
+              onReact={(emoji) => void react(item, emoji)}
             />
-          </>
-        )}
-        {text.trim() || editing ? (
-          <RoundButton icon="arrow-up" label={editing ? "Save edit" : "Send message"} onPress={() => void submit()} busy={sending} />
-        ) : (
-          <RoundButton icon={voice.isRecording ? "stop" : "mic"} label={voice.isRecording ? "Finish and send voice message" : "Record a voice message"} onPress={() => void toggleRecording()} busy={sending || voice.busy} />
-        )}
-      </Glass>
+            <ChatMessageContent roomId={roomId} messageId={item.id}/>
+            </View>
+          );
+        }}
+        ListHeaderComponent={typingNames.length ? <TypingBubble names={typingNames} /> : null}
+        contentContainerStyle={{ paddingVertical: 10, flexGrow: 1 }}
+        ListEmptyComponent={
+          <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
+            <EmptyHint emoji="👋" title="Say hello" text="No messages yet. Yours can be the first." />
+          </View>
+        }
+        keyboardShouldPersistTaps="handled"
+      />
 
+      <ChatInputBar
+        value={text}
+        onChangeText={onChangeText}
+        onSend={() => void submit()}
+        onRecord={() => void toggleRecording()}
+        recording={voice.isRecording ? { seconds: formatSeconds(voice.seconds) } : null}
+        onAttach={() => setSheet("attach")}
+        onSticker={() => setSheet("stickers")}
+        onCamera={() => void attach("photo")}
+        sending={sending || voice.busy}
+        editing={!!editing}
+        placeholder={extra?.isRequest ? "Reply to accept…" : isDm ? `Message ${title}…` : "Message…"}
+        top={
+          replyTo || editing ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingTop: 8 }}>
+              <View style={{ width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: theme.violet }} />
+              <View style={{ flex: 1 }}>
+                <Txt style={{ fontFamily: font.bold, fontSize: 12, lineHeight: 16, color: theme.toneText.violet }}>{editing ? "Editing your message" : `Replying to ${replyTo!.author.nickname}`}</Txt>
+                {replyTo ? <Txt numberOfLines={1} style={{ fontFamily: font.regular, fontSize: 12.5, lineHeight: 16, color: theme.muted }}>{previewText(replyTo.body) || "Attachment"}</Txt> : null}
+              </View>
+              <PressableScale onPress={() => { setReplyTo(null); setEditing(null); setText(""); }} accessibilityLabel="Cancel" scaleTo={0.85} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close-circle" size={22} color={theme.subtle} />
+              </PressableScale>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* ── Long-press menu: reactions, reply, edit, delete, report ── */}
       <Sheet visible={!!selected} title="Message" onClose={() => setSelected(null)}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 6, borderRadius: radius.pill, backgroundColor: theme.surfaceAlt }}>
           {REACTIONS.map((emoji) => (
-            <Pressable key={emoji} onPress={() => selected && void react(selected, emoji)} accessibilityRole="button" accessibilityLabel={`React ${emoji}`} style={{ padding: space.sm }}>
-              <Txt style={{ fontSize: 28, lineHeight: 34 }}>{emoji}</Txt>
-            </Pressable>
+            <PressableScale key={emoji} onPress={() => selected && void react(selected, emoji)} accessibilityLabel={`React ${emoji}`} scaleTo={0.8} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+              <Txt style={{ fontSize: 26, lineHeight: 32 }}>{emoji}</Txt>
+            </PressableScale>
           ))}
         </View>
         {selected && !selected.deleted ? (
           <>
-            <Button label="Reply" variant="secondary" onPress={() => { setReplyTo(selected); setEditing(null); setSelected(null); }} />
+            <OptionRow icon="arrow-undo-outline" title="Reply" onPress={() => { setReplyTo(selected); setEditing(null); setSelected(null); }} right={null} />
             {mineSelected && !selected.mediaKind ? (
-              <Button label="Edit" variant="secondary" onPress={() => { setEditing(selected); setReplyTo(null); setText(selected.body); setSelected(null); }} />
+              <OptionRow icon="create-outline" title="Edit" onPress={() => { setEditing(selected); setReplyTo(null); setText(selected.body); setSelected(null); }} right={null} />
             ) : null}
-            <Button label="Delete" variant="danger" onPress={() => remove(selected)} />
+            <OptionRow icon="trash-outline" title="Delete" onPress={() => remove(selected)} right={null} />
             {mineSelected ? null : (
-              <Button
-                label="Report"
-                variant="ghost"
+              <OptionRow
+                icon="flag-outline"
+                title="Report"
                 onPress={() => {
                   setReport({ targetType: "message", targetId: String(selected.id), communityId: info.communityId ?? undefined, label: "message" });
                   setSelected(null);
                 }}
+                right={null}
               />
             )}
           </>
         ) : null}
       </Sheet>
 
-      <Sheet visible={attachOpen} title="Attach" onClose={() => setAttachOpen(false)}>
-        <Button label="Photo from library" variant="secondary" onPress={() => void attach("photo")} />
-        <Button label="Take a photo" variant="secondary" onPress={() => void attach("camera")} />
-        <Button label="Short video (up to 30 s)" variant="secondary" onPress={() => void attach("video")} />
+      <Sheet visible={sheet === "attach"} title="Attach" onClose={() => setSheet(null)}>
+        <OptionRow icon="images-outline" title="Photo from library" onPress={() => void attach("photo")} right={null} />
+        <OptionRow icon="camera-outline" title="Take a photo" onPress={() => void attach("camera")} right={null} />
+        <OptionRow icon="videocam-outline" title="Short video" text="Up to 30 seconds" onPress={() => void attach("video")} right={null} />
       </Sheet>
 
-      <StickerPicker visible={stickersOpen} onClose={() => setStickersOpen(false)} onPick={(id) => void sendSticker(id)} />
-
-      <RoomSettings visible={settingsOpen} onClose={() => setSettingsOpen(false)} page={room.data} myId={myId} onChanged={() => void refresh()} />
+      <SearchSheet visible={sheet === "search"} roomId={roomId} onClose={() => setSheet(null)} onPick={jumpTo} loaded={byId} />
+      <StickerPicker visible={sheet === "stickers"} onClose={() => setSheet(null)} onPick={(id) => void sendSticker(id)} />
+      <RoomSettings visible={sheet === "settings"} onClose={() => setSheet(null)} page={room.data} myId={myId} onChanged={() => void refresh()} />
       <ReportSheet target={report} onClose={() => setReport(null)} />
     </KeyboardAvoidingView>
   );
 }
 
-/** The round gradient send / record button. It pops in when it changes from mic to send. */
-function RoundButton({ icon, label, onPress, busy }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; busy?: boolean }) {
+/** Search this conversation (the server searches the whole history). */
+function SearchSheet({ visible, roomId, onClose, onPick, loaded }: { visible: boolean; roomId: number; onClose: () => void; onPick: (id: number) => void; loaded: Map<number, ChatMessage> }) {
   const theme = useTheme();
+  const [q, setQ] = useState("");
+  const query = useDebounced(q.trim(), 300);
+  const results = useQuery({ queryKey: ["searchMessages", roomId, query], queryFn: () => api.searchMessages(roomId, query), enabled: visible && query.length >= 2 });
   return (
-    <PressableScale onPress={onPress} disabled={busy} accessibilityLabel={label} scaleTo={0.85} style={[{ height: 44, width: 44, borderRadius: 22, opacity: busy ? 0.5 : 1 }, glowShadow(theme.glow)]}>
-      <Animated.View key={icon} entering={ZoomIn.springify().damping(14)} style={{ flex: 1 }}>
-        <LinearGradient colors={theme.gradPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, borderRadius: 22, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name={icon} size={22} color="#ffffff" />
-        </LinearGradient>
-      </Animated.View>
-    </PressableScale>
+    <Sheet visible={visible} title="Search this chat" onClose={onClose}>
+      <Field value={q} onChangeText={setQ} placeholder="Search messages" autoCapitalize="none" autoFocus />
+      {query.length < 2 ? (
+        <Txt variant="small" tone="muted">Type at least two letters.</Txt>
+      ) : results.isPending ? (
+        <Txt variant="small" tone="muted">Searching…</Txt>
+      ) : results.isError ? (
+        <Txt variant="small" tone="danger">{errorMessage(results.error)}</Txt>
+      ) : results.data?.length ? (
+        results.data.map((m) => {
+          const here = loaded.has(m.id);
+          return (
+            <PressableScale key={m.id} onPress={() => onPick(m.id)} disabled={!here} accessibilityLabel={`${m.author.nickname}: ${previewText(m.body)}. ${here ? "Show in chat" : "Older message"}`} scaleTo={0.98} style={{ gap: 2, padding: 10, borderRadius: 12, backgroundColor: theme.surfaceAlt }}>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <Txt style={{ flex: 1, fontFamily: font.bold, fontSize: 12.5, lineHeight: 16, color: theme.ink }}>{m.author.nickname}</Txt>
+                <Txt style={{ fontFamily: font.regular, fontSize: 11.5, lineHeight: 15, color: theme.subtle }}>{timeAgo(m.createdAt)}{here ? "" : " · older"}</Txt>
+              </View>
+              <Txt numberOfLines={3} style={{ fontFamily: font.regular, fontSize: 13.5, lineHeight: 18, color: theme.text }}>{previewText(m.body) || "Attachment"}</Txt>
+            </PressableScale>
+          );
+        })
+      ) : (
+        <Txt variant="small" tone="muted">No messages match that.</Txt>
+      )}
+    </Sheet>
   );
 }
