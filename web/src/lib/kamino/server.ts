@@ -2558,6 +2558,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       roomId: number;
       body: string;
       replyTo?: number | null;
+      clientTag?: string | null;
       media?: { kind: "image" | "audio" | "video"; dataUrl: string };
     }) => d,
   )
@@ -2575,6 +2576,14 @@ export const sendMessage = createServerFn({ method: "POST" })
         if (count >= 100) throw new Error('Teen accounts can send up to 100 direct or group messages per day. Try again tomorrow.');
       }
     }
+    // Offline replay safety: the phone app tags each message it queues, so a retry after a
+    // reconnect returns the original instead of posting a second copy.
+    if (data.clientTag) {
+      const tag = String(data.clientTag).slice(0, 64);
+      if (!/^[A-Za-z0-9_-]+$/.test(tag)) throw new Error("Invalid message tag.");
+      const existing = (await sql<{ id: number }>`select id from messages where client_tag = ${tag} and room_id = ${data.roomId}`)[0];
+      if (existing) return { id: Number(existing.id), duplicate: true };
+    }
     const media = checkedChatMedia(data.media);
     const body = data.body.trim().slice(0, 2000);
     if (!body && !media) throw new Error("Write a message or attach media first.");
@@ -2588,9 +2597,12 @@ export const sendMessage = createServerFn({ method: "POST" })
       const err = scanText(body);
       if (err) throw new Error(err);
     }
+    const clientTag = data.clientTag && /^[A-Za-z0-9_-]+$/.test(String(data.clientTag).slice(0, 64))
+      ? String(data.clientTag).slice(0, 64)
+      : null;
     const rows = await sql<{ id: number }>`
-      insert into messages (room_id, author_user_id, body, reply_to, held)
-      values (${data.roomId}, ${userId}, ${body}, ${data.replyTo ?? null}, true)
+      insert into messages (room_id, author_user_id, body, reply_to, held, client_tag)
+      values (${data.roomId}, ${userId}, ${body}, ${data.replyTo ?? null}, true, ${clientTag})
       returning id
     `;
     if (media) {

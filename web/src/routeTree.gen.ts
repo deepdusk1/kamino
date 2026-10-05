@@ -15,8 +15,10 @@ import { Route as AdminAnalyticsRouteImport } from './routes/admin-analytics'
 import { Route as AppealRouteImport } from './routes/appeal'
 import { Route as CaptchaRouteImport } from './routes/captcha'
 import { Route as ChatsRouteImport } from './routes/chats'
+import { Route as ChildSafetyRouteImport } from './routes/child-safety'
 import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as ContentStudioRouteImport } from './routes/content-studio'
+import { Route as CopyrightRouteImport } from './routes/copyright'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as DiscoverPlusRouteImport } from './routes/discover-plus'
@@ -45,7 +47,6 @@ import { Route as SmartSearchRouteImport } from './routes/smart-search'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TutorialRouteImport } from './routes/tutorial'
-import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
@@ -114,6 +115,11 @@ const ChatsRoute = ChatsRouteImport.update({
   path: '/chats',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChildSafetyRoute = ChildSafetyRouteImport.update({
+  id: '/child-safety',
+  path: '/child-safety',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConnectionsRoute = ConnectionsRouteImport.update({
   id: '/connections',
   path: '/connections',
@@ -122,6 +128,11 @@ const ConnectionsRoute = ConnectionsRouteImport.update({
 const ContentStudioRoute = ContentStudioRouteImport.update({
   id: '/content-studio',
   path: '/content-studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CopyrightRoute = CopyrightRouteImport.update({
+  id: '/copyright',
+  path: '/copyright',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CreatorRoute = CreatorRouteImport.update({
@@ -262,11 +273,6 @@ const TermsRoute = TermsRouteImport.update({
 const TutorialRoute = TutorialRouteImport.update({
   id: '/tutorial',
   path: '/tutorial',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WalletRoute = WalletRouteImport.update({
-  id: '/wallet',
-  path: '/wallet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -469,8 +475,10 @@ export interface FileRoutesByFullPath {
   '/appeal': typeof AppealRoute
   '/captcha': typeof CaptchaRoute
   '/chats': typeof ChatsRouteWithChildren
+  '/child-safety': typeof ChildSafetyRoute
   '/connections': typeof ConnectionsRoute
   '/content-studio': typeof ContentStudioRoute
+  '/copyright': typeof CopyrightRoute
   '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
   '/discover-plus': typeof DiscoverPlusRoute
@@ -499,7 +507,6 @@ export interface FileRoutesByFullPath {
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/tutorial': typeof TutorialRoute
-  '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -544,8 +551,10 @@ export interface FileRoutesByTo {
   '/admin-analytics': typeof AdminAnalyticsRoute
   '/appeal': typeof AppealRoute
   '/captcha': typeof CaptchaRoute
+  '/child-safety': typeof ChildSafetyRoute
   '/connections': typeof ConnectionsRoute
   '/content-studio': typeof ContentStudioRoute
+  '/copyright': typeof CopyrightRoute
   '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
   '/discover-plus': typeof DiscoverPlusRoute
@@ -574,7 +583,6 @@ export interface FileRoutesByTo {
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/tutorial': typeof TutorialRoute
-  '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -620,8 +628,10 @@ export interface FileRoutesById {
   '/appeal': typeof AppealRoute
   '/captcha': typeof CaptchaRoute
   '/chats': typeof ChatsRouteWithChildren
+  '/child-safety': typeof ChildSafetyRoute
   '/connections': typeof ConnectionsRoute
   '/content-studio': typeof ContentStudioRoute
+  '/copyright': typeof CopyrightRoute
   '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
   '/discover-plus': typeof DiscoverPlusRoute
@@ -650,7 +660,6 @@ export interface FileRoutesById {
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/tutorial': typeof TutorialRoute
-  '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -698,8 +707,10 @@ export interface FileRouteTypes {
     | '/appeal'
     | '/captcha'
     | '/chats'
+    | '/child-safety'
     | '/connections'
     | '/content-studio'
+    | '/copyright'
     | '/creator'
     | '/delete-account'
     | '/discover-plus'
@@ -728,7 +739,6 @@ export interface FileRouteTypes {
     | '/support'
     | '/terms'
     | '/tutorial'
-    | '/wallet'
     | '/welcome'
     | '/admin/operations'
     | '/admin/reports'
@@ -773,8 +783,10 @@ export interface FileRouteTypes {
     | '/admin-analytics'
     | '/appeal'
     | '/captcha'
+    | '/child-safety'
     | '/connections'
     | '/content-studio'
+    | '/copyright'
     | '/creator'
     | '/delete-account'
     | '/discover-plus'
@@ -803,7 +815,6 @@ export interface FileRouteTypes {
     | '/support'
     | '/terms'
     | '/tutorial'
-    | '/wallet'
     | '/welcome'
     | '/admin/operations'
     | '/admin/reports'
@@ -848,8 +859,10 @@ export interface FileRouteTypes {
     | '/appeal'
     | '/captcha'
     | '/chats'
+    | '/child-safety'
     | '/connections'
     | '/content-studio'
+    | '/copyright'
     | '/creator'
     | '/delete-account'
     | '/discover-plus'
@@ -878,7 +891,6 @@ export interface FileRouteTypes {
     | '/support'
     | '/terms'
     | '/tutorial'
-    | '/wallet'
     | '/welcome'
     | '/admin/operations'
     | '/admin/reports'
@@ -925,8 +937,10 @@ export interface RootRouteChildren {
   AppealRoute: typeof AppealRoute
   CaptchaRoute: typeof CaptchaRoute
   ChatsRoute: typeof ChatsRouteWithChildren
+  ChildSafetyRoute: typeof ChildSafetyRoute
   ConnectionsRoute: typeof ConnectionsRoute
   ContentStudioRoute: typeof ContentStudioRoute
+  CopyrightRoute: typeof CopyrightRoute
   CreatorRoute: typeof CreatorRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
   DiscoverPlusRoute: typeof DiscoverPlusRoute
@@ -955,7 +969,6 @@ export interface RootRouteChildren {
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
   TutorialRoute: typeof TutorialRoute
-  WalletRoute: typeof WalletRoute
   WelcomeRoute: typeof WelcomeRoute
   ApiRtcRoute: typeof ApiRtcRoute
   CSlugRoute: typeof CSlugRouteWithChildren
@@ -1022,6 +1035,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/child-safety': {
+      id: '/child-safety'
+      path: '/child-safety'
+      fullPath: '/child-safety'
+      preLoaderRoute: typeof ChildSafetyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/connections': {
       id: '/connections'
       path: '/connections'
@@ -1034,6 +1054,13 @@ declare module '@tanstack/react-router' {
       path: '/content-studio'
       fullPath: '/content-studio'
       preLoaderRoute: typeof ContentStudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/copyright': {
+      id: '/copyright'
+      path: '/copyright'
+      fullPath: '/copyright'
+      preLoaderRoute: typeof CopyrightRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/creator': {
@@ -1230,13 +1257,6 @@ declare module '@tanstack/react-router' {
       path: '/tutorial'
       fullPath: '/tutorial'
       preLoaderRoute: typeof TutorialRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/wallet': {
-      id: '/wallet'
-      path: '/wallet'
-      fullPath: '/wallet'
-      preLoaderRoute: typeof WalletRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/welcome': {
@@ -1566,8 +1586,10 @@ const rootRouteChildren: RootRouteChildren = {
   AppealRoute: AppealRoute,
   CaptchaRoute: CaptchaRoute,
   ChatsRoute: ChatsRouteWithChildren,
+  ChildSafetyRoute: ChildSafetyRoute,
   ConnectionsRoute: ConnectionsRoute,
   ContentStudioRoute: ContentStudioRoute,
+  CopyrightRoute: CopyrightRoute,
   CreatorRoute: CreatorRoute,
   DeleteAccountRoute: DeleteAccountRoute,
   DiscoverPlusRoute: DiscoverPlusRoute,
@@ -1596,7 +1618,6 @@ const rootRouteChildren: RootRouteChildren = {
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
   TutorialRoute: TutorialRoute,
-  WalletRoute: WalletRoute,
   WelcomeRoute: WelcomeRoute,
   ApiRtcRoute: ApiRtcRoute,
   CSlugRoute: CSlugRouteWithChildren,

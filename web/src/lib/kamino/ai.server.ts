@@ -177,6 +177,13 @@ type Attempt =
   | { kind: "busy"; retryAfterMs: number }
   | { kind: "failed" };
 
+/**
+ * Default reply budget for one storyteller call. The default reasoning model (gpt-oss) pays for
+ * its thinking out of this allowance, so it must stay well above a plain answer's length or the
+ * reply comes back empty (the 2026-09-29 regression). Callers may pass more.
+ */
+export const STORYTELLER_DEFAULT_TOKENS = 1000;
+
 /** Models that ran out of allowance or were busy, and when to try them again (kept in memory). */
 const restingUntil = new Map<string, number>();
 export const resetModelRests = () => restingUntil.clear();
@@ -231,7 +238,7 @@ export async function chatComplete(
     throw new AiUnavailableError(
       "The AI storyteller has used today's free replies. It will be back tomorrow.",
     );
-  const maxTokens = options.maxTokens ?? 500;
+  const maxTokens = options.maxTokens ?? STORYTELLER_DEFAULT_TOKENS;
   let sawBusy = false;
   let sawEmpty = false;
   for (const model of config.models) {

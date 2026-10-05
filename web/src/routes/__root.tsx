@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { I18nProvider, isRtl, readLocaleCookie } from "@/lib/i18n";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AuthProvider } from "@/lib/auth/provider";
 import appCss from "../styles.css?url";
@@ -26,6 +27,8 @@ function getQueryClient(): QueryClient {
 }
 
 export const Route = createRootRoute({
+  // The locale cookie decides the interface language; the provider below hands it to `useT`.
+  loader: () => ({ locale: readLocaleCookie() }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -48,8 +51,9 @@ export const Route = createRootRoute({
 
 function Root() {
   const [queryClient] = useState(getQueryClient);
+  const { locale } = Route.useLoaderData();
   return (
-    <html lang="en" className="antialiased" suppressHydrationWarning>
+    <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className="antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
@@ -58,11 +62,13 @@ function Root() {
         <PreviewHostBridge />
         <AuthProvider>
           <QueryClientProvider client={queryClient}>
-            <PwaProvider>
-              <IdentityAppearance />
-              <Outlet />
+            <I18nProvider locale={locale}>
+              <PwaProvider>
+                <IdentityAppearance />
+                <Outlet />
               <Toaster theme="system" richColors position="top-center" />
-            </PwaProvider>
+              </PwaProvider>
+            </I18nProvider>
           </QueryClientProvider>
         </AuthProvider>
         <Scripts />

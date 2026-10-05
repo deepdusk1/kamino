@@ -12,7 +12,6 @@ import {
   ChevronDown,
   CirclePlus,
   Clock,
-  Coins,
   Flag,
   Link2,
   LogOut,
@@ -75,7 +74,6 @@ import {
   FollowListSheet,
   ProfilePostsSheet,
   SafetySheet,
-  TipSheet,
   type ListKind,
 } from "./profile-sheets";
 import { useShellData } from "@/components/k/use-shell-data";
@@ -129,7 +127,6 @@ export function ProfilePage({
   const [communitiesOpen, setCommunitiesOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
-  const [tipOpen, setTipOpen] = useState(false);
   const [report, setReport] = useState<ReportTarget | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -299,7 +296,6 @@ export function ProfilePage({
         { key: "notifications", label: "Notifications", icon: <Bell />, tone: "orange", to: "/notifications" },
         { key: "settings", label: "Settings", icon: <Settings />, tone: "blue", hint: "Privacy, notifications and your account", to: "/settings" },
         { key: "saved", label: "Saved", icon: <Bookmark />, tone: "green", to: "/saved" },
-        { key: "coins", label: "Coins", icon: <Coins />, tone: "orange", hint: "Daily check-in and tips", to: "/wallet" },
         { key: "safety", label: "Safety", icon: <ShieldCheck />, tone: "violet", onSelect: () => setSafetyOpen(true) },
         {
           key: "signout",
@@ -313,7 +309,6 @@ export function ProfilePage({
     : [
         { key: "message", label: "Message", icon: <MessageCircle />, onSelect: () => void message() },
         { key: "call", label: "Voice call", icon: <Phone />, tone: "green", onSelect: () => void call() },
-        { key: "tip", label: "Send coins", icon: <Coins />, tone: "orange", hint: "A little thank-you", onSelect: () => (user ? setTipOpen(true) : needSignIn()) },
         { key: "share", label: "Share profile", icon: <Share2 />, tone: "blue", onSelect: share },
         ...(user
           ? ([
@@ -645,10 +640,9 @@ export function ProfilePage({
             }}
           />
         </>
-      ) : (
-        <TipSheet open={tipOpen} onClose={() => setTipOpen(false)} userId={p.userId} name={p.displayName} />
-      )}
+      ) : null}
       <ConfirmSheet confirm={confirm} onClose={() => setConfirm(null)} />
+
     </AppShell>
   );
 }

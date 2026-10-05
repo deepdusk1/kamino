@@ -15,6 +15,14 @@ export type TurnForPrompt = { kind: RoleplayTurnKind; character: string; body: s
 export const MAX_CHARACTERS = 8;
 export const MAX_TURN_CHARS = 1200;
 
+/**
+ * Reply budgets for the storyteller. The default reasoning model (gpt-oss) spends part of the
+ * allowance thinking before it writes, so these must stay large enough that narration and
+ * endings never come back empty (the 2026-09-29 regression). Endings run longer than narration.
+ */
+export const STORYTELLER_NARRATION_TOKENS = 1000;
+export const STORYTELLER_ENDING_TOKENS = 1400;
+
 const clip = (value: unknown, max: number) =>
   typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
 

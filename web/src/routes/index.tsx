@@ -8,7 +8,8 @@ import { HomeToolsStrip } from '@/components/platform-tools';
 import { TutorialPrompt } from '@/components/tutorial-prompt';
 import { afterCheckIn, eventWhen, patchPages, uniqueById, wasOnboardingShown } from "@/components/home/home-data";
 import { CommunityRow, CreatorRow, HomeSection, HomeSkeleton, StreakAndEvent } from "@/components/home/home-sections";
-import { WelcomeScreen } from "@/components/home/welcome-screen";
+import { Landing } from "@/components/home/landing";
+import { useT } from "@/lib/i18n";
 import { CategoryChips, EmptyHint, GradientButton, HOME_CATEGORIES, HeroCarousel, SectionHeader, TabsUnderline } from "@/components/k";
 import { PostCard } from "@/components/post-card";
 import { heroArt } from "@/lib/brand-art";
@@ -48,24 +49,26 @@ type FeedPage = Awaited<ReturnType<typeof feed>>;
 type FeedPost = FeedPage["posts"][number];
 
 const FEED_TABS: { key: FeedTab; label: string; icon: React.ReactNode }[] = [
-  { key: "forYou", label: "For You", icon: <Sparkles /> },
-  { key: "following", label: "Following", icon: <Users /> },
-  { key: "communities", label: "Communities", icon: <Newspaper /> },
+  { key: "forYou", label: "home.tab.forYou", icon: <Sparkles /> },
+  { key: "following", label: "home.tab.following", icon: <Users /> },
+  { key: "communities", label: "home.tab.communities", icon: <Newspaper /> },
 ];
 
 const FEED_EMPTY: Record<FeedTab, { icon: string; title: string; body: string; action: { label: string; to: string } }> = {
-  forYou: { icon: "🌱", title: "Your feed is quiet", body: "Join a few communities and their posts will show up here.", action: { label: "Find communities", to: "/explore" } },
-  following: { icon: "👋", title: "No posts from people you follow", body: "Follow creators you like to see their posts here.", action: { label: "Find people", to: "/explore" } },
-  communities: { icon: "🏡", title: "Nothing new in your communities", body: "Join communities to see their newest posts here.", action: { label: "Explore communities", to: "/explore" } },
+  forYou: { icon: "🌱", title: "home.empty.forYou.title", body: "home.empty.forYou.body", action: { label: "home.empty.forYou.action", to: "/explore" } },
+  following: { icon: "👋", title: "home.empty.following.title", body: "home.empty.following.body", action: { label: "home.empty.following.action", to: "/explore" } },
+  communities: { icon: "🏡", title: "home.empty.communities.title", body: "home.empty.communities.body", action: { label: "home.empty.communities.action", to: "/explore" } },
 };
 
 function HomeRoute() {
   const data = Route.useLoaderData();
-  if (!data.signedIn) return <WelcomeScreen />;
+  // Signed-out visitors get the marketing page; the guided tour lives at /welcome.
+  if (!data.signedIn) return <Landing />;
   return <Home userId={data.userId} onboardedAt={data.onboardedAt} initial={data.overview} />;
 }
 
 function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: string | null; initial: Overview }) {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [category, setCategory] = useState("forYou");
@@ -214,6 +217,12 @@ function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: s
   const o = loaded ? overview.data : initial;
   const posts = loaded ? uniqueById(feedQuery.data?.pages.flatMap((p) => p.posts) ?? []) : [];
   const empty = FEED_EMPTY[tab];
+  const translatedTabs = FEED_TABS.map((tabItem) => ({ ...tabItem, label: t(tabItem.label as "home.tab.forYou") }));
+  const emptyText = {
+    title: t(empty.title as "home.empty.forYou.title"),
+    body: t(empty.body as "home.empty.forYou.body"),
+    action: { ...empty.action, label: t(empty.action.label as "home.empty.forYou.action") },
+  };
 
   // Loads the next page when the bottom of the feed comes into view (the button below does the same).
   const sentinel = useRef<HTMLDivElement>(null);
@@ -323,7 +332,7 @@ function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: s
         {/* Your feed: the posts, in three tabs. */}
         <section className="mt-1.5 flex flex-col gap-3 lg:mt-2" aria-label="Your feed">
           <SectionHeader icon="💜" title="Your feed" />
-          <TabsUnderline label="Feed" tabs={FEED_TABS} value={tab} onChange={(k) => setTab(k as FeedTab)} className="rounded-t-tile" />
+          <TabsUnderline label="Feed" tabs={translatedTabs} value={tab} onChange={(k) => setTab(k as FeedTab)} className="rounded-t-tile" />
           {!loaded || feedQuery.isPending ? (
             <FeedSkeleton />
           ) : feedQuery.isError ? (
@@ -340,11 +349,11 @@ function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: s
           ) : posts.length === 0 ? (
             <EmptyHint
               icon={empty.icon}
-              title={empty.title}
-              text={empty.body}
+              title={emptyText.title}
+              text={emptyText.body}
               action={
                 <GradientButton to={empty.action.to} size="sm">
-                  {empty.action.label}
+                  {emptyText.action.label}
                 </GradientButton>
               }
             />

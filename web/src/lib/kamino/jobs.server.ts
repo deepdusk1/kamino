@@ -4,6 +4,7 @@ import { parseNotifyPrefs, shouldPush, localHour, inQuietHours } from "./social-
 import { sendPush } from "./push.server";
 import { processMediaDeletionQueue } from "./media-deletion.server";
 import { processPushDeliveries, processEmailDigests } from "./delivery-v10.server";
+import { enqueueDueMediaJobs, mediaJobConfig, processMediaJobs } from "./media-jobs.server";
 type Row = Record<string, unknown>;
 type Sql = Awaited<ReturnType<typeof internals.db>>;
 
@@ -47,6 +48,12 @@ async function deliver(
 export async function runNotificationJobs() {
   const sql = await internals.db();
   const mediaDeletion = await processMediaDeletionQueue(sql);
+  let mediaJobs: unknown = { processed: 0 };
+  try {
+    const config = mediaJobConfig();
+    await enqueueDueMediaJobs(sql, config);
+    mediaJobs = { processed: await processMediaJobs(sql, config) };
+  } catch { mediaJobs = { processed: 0, unavailable: true }; }
   let semanticIndex: unknown = { indexed: 0 };
   try {
     const { indexSemanticBatch } = await import("./search-v10.server");

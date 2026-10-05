@@ -19,6 +19,7 @@ import { showError } from "@/lib/errors";
 import { useTheme } from "@/theme";
 import { notify } from "@/components/community/platform";
 import { MediaLibraryPicker } from "@/components/content/MediaLibraryPicker";
+import { GifSearch } from "@/components/content/GifSearch";
 
 const KINDS = [
   { kind: "video", title: "🎬 Video" },
@@ -269,6 +270,7 @@ export default function ContentStudio() {
             />
             {kind==="article"?images.map((image,index)=><View key={index} style={{gap:8}}><Txt variant="small">Image {index+1}: [image:{index+1}]</Txt><Field label={`Describe image ${index+1}`} value={image.altText??""} maxLength={600} onChangeText={altText=>setImages(previous=>previous.map((item,i)=>i===index?{...item,altText}:item))}/><Button small variant="danger" label={`Remove image ${index+1}`} onPress={()=>{setImages(previous=>previous.filter((_,i)=>i!==index));setBody(previous=>previous.replace(/\[image:(\d+)\]/g,(marker,n)=>Number(n)===index+1?"":Number(n)>index+1?`[image:${Number(n)-1}]`:marker));}}/></View>):null}
             {kind==="gif"?<MediaLibraryPicker kind="gif" onSelect={setMedia}/>:null}
+            {kind==="gif"?<GifSearch onSelect={setMedia}/>:null}
             {kind==="audio"?<MediaLibraryPicker kind="audio" onSelect={setMedia}/>:null}
             {kind === "story" ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>

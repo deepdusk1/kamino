@@ -15,7 +15,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AchievementTile } from "@/components/achievement-banner";
-import { Sheet, fieldClass } from "@/components/community/sheet";
+import { Sheet } from "@/components/community/sheet";
 import { SUPPORT_EMAIL } from "@/components/legal-page";
 import {
   Avatar,
@@ -30,7 +30,7 @@ import { resizeImage } from "@/lib/image-resize";
 import { compactNumber } from "@/lib/format-ui";
 import { removeAvatar, removeProfileCover, setAvatar, setProfileCover } from "@/lib/kamino/extras";
 import { getUploadAllowance } from "@/lib/kamino/content-v9";
-import { tipMember, toggleFollowProfile, updateSettings } from "@/lib/kamino/server";
+import { toggleFollowProfile, updateSettings } from "@/lib/kamino/server";
 import { followLists, profilePosts } from "@/lib/kamino/social";
 import { PROFILE_COVERS } from "@/lib/kamino/titles";
 import type { Achievement, CommunityCardData, PersonRow } from "@/lib/kamino/types";
@@ -680,69 +680,6 @@ export function CoverSheet({
             <img src={c.src} alt="" className="h-16 w-full object-cover" />
           </button>
         ))}
-      </div>
-    </Sheet>
-  );
-}
-
-// ── Tip coins ───────────────────────────────────────────────────────────────
-
-/** Send a few community coins to someone as a thank-you (1–100). */
-export function TipSheet({
-  open,
-  onClose,
-  userId,
-  name,
-}: {
-  open: boolean;
-  onClose: () => void;
-  userId: string;
-  name: string;
-}) {
-  const [amount, setAmount] = useState(5);
-  const [busy, setBusy] = useState(false);
-  async function send() {
-    setBusy(true);
-    try {
-      await tipMember({ data: { targetUserId: userId, amount } });
-      toast.success(`Sent ${amount} coins to ${name}!`);
-      onClose();
-    } catch (e) {
-      fail(e, "Could not send the tip.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(o) => !o && onClose()}
-      title={`Send ${name} some coins`}
-      description="A little thank-you. Coins are for fun and can't be bought or sold."
-    >
-      <label className="block space-y-1.5">
-        <span className="block text-[13.5px] font-bold text-ink">Coins to send (1–100)</span>
-        <input
-          type="number"
-          min={1}
-          max={100}
-          step={1}
-          value={amount}
-          onChange={(e) => setAmount(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-          className={fieldClass}
-        />
-      </label>
-      <div className="flex items-center gap-3">
-        <GradientButton size="md" disabled={busy} onClick={() => void send()} className="flex-1">
-          {busy ? "Sending…" : "Send tip"}
-        </GradientButton>
-        <Link
-          to="/wallet"
-          className="k-focus min-h-11 content-center text-[14px] font-bold text-violet"
-          onClick={onClose}
-        >
-          My coins
-        </Link>
       </div>
     </Sheet>
   );

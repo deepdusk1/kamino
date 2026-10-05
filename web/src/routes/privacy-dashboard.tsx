@@ -11,6 +11,7 @@ import { RedirectToSignIn } from '@/lib/auth/gates';
 import { getIdentityDashboard, updateIdentityPreferences, setPersonRelationship, findContacts } from '@/lib/kamino/identity-v9';
 import { BirthdayFields, EMPTY_BIRTHDAY, judgeBirthday } from '@/components/birthday-fields';
 import { confirmMinimumAge } from '@/lib/kamino/extras';
+import { useT, LOCALES, writeLocaleCookie } from '@/lib/i18n';
 
 export const Route = createFileRoute('/privacy-dashboard')({ component: PrivacyDashboard });
 type Dashboard = Awaited<ReturnType<typeof getIdentityDashboard>>;
@@ -18,6 +19,7 @@ const card = 'rounded-card border border-border bg-surface p-5 space-y-4';
 
 function PrivacyDashboard() {
   const { user, isPending } = useCurrentUserState();
+  const t = useT();
   const client = useQueryClient();
   const dashboard = useQuery({ queryKey: ['identityDashboard'], queryFn: () => getIdentityDashboard(), enabled: !!user });
   const [handle, setHandle] = useState(''); const [links, setLinks] = useState(''); const [target, setTarget] = useState('');
@@ -41,8 +43,8 @@ function PrivacyDashboard() {
       <section className={card}><h2 className="flex items-center gap-2 text-xl font-bold"><UserRound size={20}/> Your identity</h2>
         <label className="block">Username<input className={fieldClass} value={handle} onChange={e => setHandle(e.target.value)} maxLength={30}/></label>
         <GradientButton onClick={() => void save({handle})}>Save username</GradientButton>
-        <label className="block">Language<select className={fieldClass} value={d.preferences.language} onChange={e => void save({language:e.target.value as 'en'})}>{Object.entries({en:'English',fr:'Français',es:'Español',de:'Deutsch',pt:'Português',ja:'日本語',ko:'한국어',zh:'中文',hi:'हिन्दी',ar:'العربية'}).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <p className="text-sm text-muted">Your language preference helps discovery and translation tools. Interface translations depend on available translations.</p>
+        <label className="block">{t("privacy.language.title")}<select className={fieldClass} value={d.preferences.language} onChange={e => { const language = e.target.value as 'en'; writeLocaleCookie(language); void save({ language }).then(() => window.location.reload()); }}>{Object.entries(LOCALES).map(([key, meta]) => <option key={key} value={key}>{meta.name}</option>)}</select></label>
+        <p className="text-sm text-muted">{t("privacy.language.help")}</p>
         <label className="block">Profile links<textarea className={fieldClass} value={links} onChange={e => setLinks(e.target.value)} rows={4} placeholder="Portfolio|https://example.com"/></label>
         <p className="text-sm text-muted">Up to six links, one per line: label|https://address</p>
         <GradientButton onClick={() => void save({socialLinks: links.split('\n').filter(Boolean).map(line => { const [label,...url] = line.split('|'); return {label:label?.trim() ?? '',url:url.join('|').trim()}; })})}>Save links</GradientButton>

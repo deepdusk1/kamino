@@ -78,6 +78,9 @@ export async function exportV9PersonalData(sql: Sql, userId: string, readMedia: 
     collectibles: "select a.set_id,a.awarded_at,s.title,s.description,s.cosmetic from collectible_awards a join collectible_sets s on s.id=a.set_id where a.user_id=$1",
     semanticPreferences: "select namespace,embedding,enabled,updated_at from semantic_preferences where user_id=$1",
     semanticIndex: "select kind,target_id,revision,chunk_index,embedding,indexed_at from semantic_documents where owner_id=$1",
+    watchQueue: "select q.id,q.url,q.title,q.kind,q.created_at,r.name as room_name from watch_queue q join chat_rooms r on r.id=q.room_id where q.added_by=$1",
+    watchVotes: "select q.title,v.created_at,r.name as room_name from watch_queue_votes v join watch_queue q on q.id=v.item_id join chat_rooms r on r.id=q.room_id where v.user_id=$1",
+    watchReadyHistory: "select w.round,w.ready,w.updated_at,r.name as room_name from watch_ready w join chat_rooms r on r.id=w.room_id where w.user_id=$1",
   };
   const entries = await Promise.all(Object.entries(queries).map(async ([key, query]) => [key, await sql.query<Row>(query, [userId])] as const));
   const contentRows = await sql.query<Row>(`select cm.* from content_media cm

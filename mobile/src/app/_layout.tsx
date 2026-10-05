@@ -19,6 +19,9 @@ import { appHrefFromServerHref } from "@/lib/hrefs";
 import { configureForegroundNotifications, registerPushDevice } from "@/lib/push";
 import { useNotificationTap } from "@/lib/useNotificationTap";
 import { useOnboardingRedirect } from "@/lib/useWelcome";
+import { OfflineBanner } from "@/lib/connectivity";
+import { rpc } from "@/api/client";
+import { wireOfflineFlush } from "@/lib/offline-queue";
 import { font, space, useTheme } from "@/theme";
 
 void SplashScreen.preventAutoHideAsync();
@@ -49,7 +52,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
-          <IdentityAppearance><Navigation /></IdentityAppearance>
+          <IdentityAppearance><Navigation /><OfflineBanner /></IdentityAppearance>
         </SessionProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
@@ -70,6 +73,12 @@ function Navigation() {
   // Ask for notification permission once the person is signed in.
   useEffect(() => {
     if (status === "signedIn") void registerPushDevice();
+  }, [status]);
+
+  // Replay chat messages that were queued while the phone was offline (de-duplicated server-side).
+  useEffect(() => {
+    if (status !== "signedIn") return;
+    wireOfflineFlush((input) => rpc("sendMessage", input));
   }, [status]);
 
   // Tapping a push notification opens the matching screen (also when the app was closed).
@@ -123,6 +132,7 @@ function Navigation() {
           <Stack.Screen name="community/[slug]/roleplay/index" options={{ title: "Stories" }} />
           <Stack.Screen name="community/[slug]/roleplay/[sceneId]" options={{ title: "Story" }} />
           <Stack.Screen name="chat/[roomId]" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/watch/[roomId]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
           <Stack.Screen name="call/[roomId]" options={{ title: "Call", presentation: "fullScreenModal" }} />
           <Stack.Screen name="profile/[handle]" options={{ headerShown: false }} />
           <Stack.Screen name="new-community" options={{ title: "New community", presentation: "modal" }} />

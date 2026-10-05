@@ -445,6 +445,7 @@ export const REPORT_REASONS = [
   "Non-consensual intimate content",
   "Self-harm",
   "Impersonation",
+  "Copyright infringement",
   "Off-topic / community rules",
 ] as const;
 

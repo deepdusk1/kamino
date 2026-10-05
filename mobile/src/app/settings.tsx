@@ -8,6 +8,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { readAsStringAsync } from "expo-file-system/legacy";
 import { apiBaseUrl, SUPPORT_EMAIL } from "@/api/config";
 import { api } from "@/api/endpoints";
+import { referrals } from "@/api/referrals";
 import type { DmPrivacy, NotifyPrefs, Profile } from "@/api/types";
 import { useSession } from "@/auth/session";
 import { confirmAction, notify } from "@/components/community/platform";
@@ -195,6 +196,8 @@ export default function Settings() {
         </Txt>
       </Section>
 
+      <InviteFriendsSection />
+
       <Section title="Help & legal" icon="information-circle" tone="green">
         <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL(`${apiBaseUrl()}/privacy`)} />
         <LinkRow icon="document-text-outline" label="Terms of use" onPress={() => void Linking.openURL(`${apiBaseUrl()}/terms`)} />
@@ -225,6 +228,32 @@ export default function Settings() {
 }
 
 /** A white card with a tinted icon circle and a title. */
+function InviteFriendsSection() {
+  const theme = useTheme();
+  const referral = useQuery({ queryKey: ["myReferral"], queryFn: () => referrals.mine(), staleTime: 30_000 });
+  if (!referral.data) return null;
+  return (
+    <Section title="Invite friends" icon="person-add" tone="orange">
+      <Txt style={{ fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: theme.muted }}>
+        Share your link. When a friend joins and claims it, you earn {referral.data.repPerInvite} reputation and they
+        start with {referral.data.repForFriend}. Reputation is earned, never bought.
+      </Txt>
+      <Txt style={{ fontFamily: font.bold, fontSize: 13, color: theme.text }}>
+        {referral.data.invited} joined through your link · {referral.data.repEarned} reputation earned
+      </Txt>
+      <LinkRow
+        icon="share-social-outline"
+        label={`Share your invite code: ${referral.data.code}`}
+        onPress={() =>
+          void Share.share({
+            message: `Join me on Kamino — ${apiBaseUrl()}${referral.data!.path}`,
+          })
+        }
+      />
+    </Section>
+  );
+}
+
 function Section({ title, icon, tone, hint, children }: { title: string; icon: keyof typeof Ionicons.glyphMap; tone: Tone; hint?: string; children: ReactNode }) {
   const theme = useTheme();
   return (

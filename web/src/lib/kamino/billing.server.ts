@@ -34,10 +34,16 @@ export function requireBillingConfig(): BillingConfig {
 }
 export function stripeRequest(config: BillingConfig): StripeRequest {
   return async (path, method = "GET", data, idempotencyKey) => {
-    if (!config.enabled || config.mode !== "test" || !config.secretKey.startsWith("sk_test_"))
-      throw new Error("Payments are disabled.");
+    if (!config.enabled) throw new Error("Payments are disabled.");
+    const keyIsRight =
+      config.mode === "test"
+        ? config.secretKey.startsWith("sk_test_")
+        : config.mode === "live"
+          ? config.secretKey.startsWith("sk_live_")
+          : false;
+    if (!keyIsRight) throw new Error("Payments are disabled.");
     if (
-      !/^\/v1\/(?:checkout\/sessions|subscriptions|invoices|charges|payment_intents|billing_portal\/sessions)(?:\/[A-Za-z0-9_]+)?$/.test(
+      !/^\/v1\/(?:checkout\/sessions|subscriptions|invoices|charges|payment_intents|billing_portal\/sessions|accounts|account_links|transfers|balance|identity\/verification_sessions)(?:\/[A-Za-z0-9_]+)?$/.test(
         path,
       )
     )
@@ -90,7 +96,7 @@ const orderById = async (sql: Sql, id: unknown) =>
     ? (await sql<Row>`select * from billing_orders where id=${id}`)[0]
     : undefined;
 const terminal = (row: Row) => row.privacy_closed === true || ["refunded", "disputed", "cancelled"].includes(String(row.status));
-type WriteLease = { eventId: string; claim: string };
+type WriteLease = { eventId: string; claim: string; livemode?: boolean };
 
 async function persist(
   sql: Sql,
@@ -105,20 +111,22 @@ async function persist(
   } = {},
 ) {
   const active = status === "paid" && row.kind !== "tip";
+  const testMode = lease.livemode !== true;
   const changed = await sql.query(
     `with changed as (
-    update billing_orders set status=$2,stripe_customer_id=coalesce($5,stripe_customer_id),stripe_subscription_id=coalesce($6,stripe_subscription_id),
-      stripe_payment_intent_id=coalesce($7,stripe_payment_intent_id),updated_at=now(),billing_revision=billing_revision+1 where id=$1 and billing_revision=$8 and privacy_closed=false
-      and exists(select 1 from billing_webhook_events where event_id=$9 and claim_token=$10 and status='processing')
+    update billing_orders set status=$2,stripe_customer_id=coalesce($6,stripe_customer_id),stripe_subscription_id=coalesce($7,stripe_subscription_id),
+      stripe_payment_intent_id=coalesce($8,stripe_payment_intent_id),updated_at=now(),billing_revision=billing_revision+1 where id=$1 and billing_revision=$9 and privacy_closed=false
+      and exists(select 1 from billing_webhook_events where event_id=$10 and claim_token=$11 and status='processing')
       and (status not in ('refunded','disputed','cancelled') or $2 in ('refunded','disputed','cancelled')) returning id,beneficiary_id,offer_id
   ), entitlement as (insert into billing_entitlements(order_id,beneficiary_id,offer_id,state,expires_at,test_mode)
-    select id,beneficiary_id,offer_id,$3,$4::timestamptz,true from changed
+    select id,beneficiary_id,offer_id,$3,$4::timestamptz,$5 from changed
     on conflict(order_id) do update set state=excluded.state,expires_at=excluded.expires_at,updated_at=now() returning order_id) select id from changed`,
     [
       String(row.id),
       status,
       active ? "active" : "revoked",
       expiresAt,
+      testMode,
       ids.customer ?? null,
       ids.subscription ?? null,
       ids.paymentIntent ?? null,
@@ -127,6 +135,12 @@ async function persist(
       lease.claim,
     ],
   );
+  if (status === "paid" && changed.length) {
+    const { creditCreatorEarnings } = await import("./money.server.ts");
+    await creditCreatorEarnings(sql, String(row.id), testMode).catch((error) => {
+      console.error("[billing] earnings credit failed:", error);
+    });
+  }
   if (!changed.length) {
     if (
       !(
@@ -210,7 +224,8 @@ async function fulfillCheckout(
 }
 
 async function revokeCharge(sql: Sql, charge: StripeObject, api: StripeRequest, lease: WriteLease) {
-  if (charge.livemode !== false) throw new Error("Live payment events are not accepted.");
+  if (typeof charge.livemode === "boolean" && charge.livemode !== (lease.livemode === true))
+    throw new Error("The payment event does not match this server's billing mode.");
   let row: Row | undefined;
   if (charge.payment_intent)
     row = (
@@ -272,8 +287,14 @@ export async function applyStripeEvent(
   config: BillingConfig,
   api = stripeRequest(config),
 ): Promise<{ duplicate: boolean }> {
-  if (!config.enabled || config.mode !== "test" || event.livemode !== false)
-    throw new Error("Payments are disabled or the event is not from test mode.");
+  if (!config.enabled)
+    throw new Error("Payments are disabled.");
+  if (event.livemode !== (config.mode === "live"))
+    throw new Error(
+      config.mode === "test"
+        ? "Live payment events are not accepted; this server runs Stripe test mode."
+        : "Test payment events are not accepted; this server runs Stripe live mode.",
+    );
   const hash = createHash("sha256").update(rawBody).digest("hex"),
     claim = randomUUID();
   const rows =
@@ -291,8 +312,22 @@ export async function applyStripeEvent(
     throw new Error("Payment event is already processing. Please retry.");
   }
   try {
-    const lease = { eventId: event.id, claim };
+    const lease = { eventId: event.id, claim, livemode: config.mode === "live" };
     const remote = event.data.object;
+    if (
+      ["identity.verification_session.verified", "identity.verification_session.failed"].includes(
+        event.type,
+      )
+    ) {
+      const { applyIdentityVerificationEvent } = await import("./age-verification.server.ts");
+      await applyIdentityVerificationEvent(
+        sql,
+        stripeId(remote, "vs"),
+        event.type.endsWith("verified") ? "verified" : "failed",
+      );
+      await sql`update billing_webhook_events set status='processed',processed_at=now() where event_id=${lease.eventId} and claim_token=${lease.claim}`;
+      return { duplicate: false };
+    }
     if (
       ["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(
         event.type,
@@ -300,14 +335,14 @@ export async function applyStripeEvent(
     ) {
       await fulfillCheckout(
         sql,
-        await api(`/v1/checkout/sessions/${stripeId(remote, "cs_test")}`),
+        await api(`/v1/checkout/sessions/${stripeId(remote, lease.livemode ? "cs_live" : "cs_test")}`),
         api,
         lease,
       );
     } else if (
       ["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)
     ) {
-      const session = await api(`/v1/checkout/sessions/${stripeId(remote, "cs_test")}`),
+      const session = await api(`/v1/checkout/sessions/${stripeId(remote, lease.livemode ? "cs_live" : "cs_test")}`),
         row = await orderById(sql, object(session.metadata).kamino_order_id);
       if (row && row.stripe_session_id === session.id && row.status === "pending") {
         assertCheckoutMatches(session, snapshot(row));
@@ -361,6 +396,7 @@ export async function checkoutUrl(
   offer: { title: string },
   api = stripeRequest(config),
 ) {
+  const live = config.mode === "live";
   if (!config.enabled || config.mode !== "test") throw new Error("Payments are disabled.");
   const body = new URLSearchParams({
     mode: order.mode,
@@ -389,7 +425,7 @@ export async function checkoutUrl(
     body.set("line_items[0][price_data][recurring][interval]", "month");
   const session = await api("/v1/checkout/sessions", "POST", body, `kamino-order-${order.id}`);
   assertCheckoutMatches(session, order);
-  return { sessionId: stripeId(session, "cs_test"), url: trustedStripeRedirect(session.url) };
+  return { sessionId: stripeId(session, live ? "cs_live" : "cs_test"), url: trustedStripeRedirect(session.url) };
 }
 
 /** An open provider session remains the only checkout, regardless of the local order's age. */
@@ -398,8 +434,9 @@ export async function resumeCheckout(
   config: BillingConfig,
   row: Row,
   api = stripeRequest(config),
-): Promise<{ expired: true } | { expired: false; orderId: string; url: string; testMode: true }> {
-  if (!config.enabled || config.mode !== "test") throw new Error("Payments are disabled.");
+): Promise<{ expired: true } | { expired: false; orderId: string; url: string; testMode: boolean }> {
+  if (!config.enabled) throw new Error("Payments are disabled.");
+  const live = config.mode === "live";
   if (row.status !== "pending") throw new Error("Check your purchase history before trying again.");
   const order = snapshot(row);
   if (row.stripe_session_id) {
@@ -421,7 +458,7 @@ export async function resumeCheckout(
       expired: false,
       orderId: order.id,
       url: trustedStripeRedirect(session.url),
-      testMode: true,
+      testMode: !live,
     };
   }
   // A lost provider response older than its guaranteed idempotency retention needs review,
@@ -433,5 +470,5 @@ export async function resumeCheckout(
   const changed =
     await sql`update billing_orders set stripe_session_id=${checkout.sessionId},updated_at=now(),billing_revision=billing_revision+case when stripe_session_id is null then 1 else 0 end where id=${order.id} and status='pending' and (stripe_session_id is null or stripe_session_id=${checkout.sessionId}) returning id`;
   if (!changed.length) throw new Error("This checkout changed. Check your purchase history.");
-  return { expired: false, orderId: order.id, url: checkout.url, testMode: true };
+  return { expired: false, orderId: order.id, url: checkout.url, testMode: !live };
 }

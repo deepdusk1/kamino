@@ -11,6 +11,7 @@ import { GradientButton, IconButton } from "./buttons";
 import { BellIcon } from "./nav-icons";
 import { NAV_ITEMS, activeNav, navHref } from "./nav-items";
 import { useShellData } from "./use-shell-data";
+import { useT } from "@/lib/i18n";
 
 const noSubscribe = () => () => {};
 const noGateOnServer = () => false;
@@ -36,6 +37,7 @@ export function AppHeader({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { user, isPending, profile, unreadNotifications, unreadChats, profileHref } =
     useShellData();
+  const t = useT();
   const active = activeNav(pathname, profileHref);
 
   function goBack() {
@@ -95,7 +97,7 @@ export function AppHeader({
                 )}
               >
                 <Icon active={isActive} className="size-[22px]" />
-                {item.label}
+                {t(`nav.${item.key}`)}
                 {item.key === "chats" && unreadChats > 0 && (
                   <span
                     className="absolute top-2 left-8 size-2.5 rounded-full bg-red ring-2 ring-bg"

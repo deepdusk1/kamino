@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, View } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
 import { api } from "@/api/endpoints";
 import type { ChatMessage } from "@/api/types";
 import { ChatBanner, ChatHeader, ChatInputBar, TypingBubble } from "@/components/chat/ChatChrome";
@@ -25,6 +25,7 @@ import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 import { font, radius, useTheme } from "@/theme";
 import { ChatContentTools, ChatMessageContent } from "@/components/content/ChatContentTools";
 import { StageControlsV9 } from "@/components/StageControlsV9";
+import { enqueueMessage } from "@/lib/offline-queue";
 
 const REACTIONS = ["❤️", "😂", "✨", "🔥", "👏", "😮"];
 type Media = { kind: "image" | "audio" | "video"; dataUrl: string };
@@ -104,15 +105,29 @@ export default function ChatRoom() {
     const body = text.trim();
     if (sending || (!body && !media)) return;
     setSending(true);
+    let queued = false;
     try {
-      tellIfHeld(editing ? await api.editMessage(roomId, editing.id, body) : await api.send({ roomId, body, replyTo: replyTo?.id ?? null, media }));
+      try {
+        tellIfHeld(editing ? await api.editMessage(roomId, editing.id, body) : await api.send({ roomId, body, replyTo: replyTo?.id ?? null, media }));
+      } catch (error) {
+        // Offline or the network dropped: keep the words and replay them automatically on reconnect.
+        if (!editing && !media) {
+          await enqueueMessage({ roomId, body, replyTo: replyTo?.id ?? null });
+          queued = true;
+          showError(error, "No connection — it will send when you're back online");
+        } else {
+          showError(error, "Message not sent");
+        }
+        throw error;
+      }
       setText("");
       setReplyTo(null);
       setEditing(null);
       typingSent.current = 0;
       await refresh();
-    } catch (error) {
-      showError(error, "Message not sent");
+    } catch {
+      if (queued) return; // already reported with the offline explanation
+      showError(new Error("Message not sent"), "Message not sent");
     } finally {
       setSending(false);
     }
@@ -301,7 +316,7 @@ export default function ChatRoom() {
         />
       ) : null}
       {info.kind === "screening" && info.watchUrl ? (
-        <ChatBanner icon="film-outline" tone="violet" text={`Watching together: ${info.watchTitle || info.watchUrl}`} action="Open" onPress={() => void Linking.openURL(info.watchUrl)} />
+        <ChatBanner icon="film-outline" tone="violet" text={`Watching together: ${info.watchTitle || info.watchUrl}`} action="Watch" onPress={() => void router.push(`/chat/watch/${roomId}`)} />
       ) : null}
 
       <FlatList

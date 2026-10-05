@@ -117,8 +117,8 @@ export const api = {
   room: (roomId: number, afterId?: number) => rpc<M.RoomPage>("getRoom", { roomId, afterId }),
   olderMessages: (roomId: number, beforeId: number) => rpc<{ messages: import("./types").ChatMessage[]; hasMore: boolean }>("getOlderMessages", { roomId, beforeId }),
   searchMessages: (roomId: number, query: string) => rpc<import("./types").ChatMessage[]>("searchRoomMessages", { roomId, query }),
-  send: (input: { roomId: number; body: string; replyTo?: number | null; media?: { kind: "image" | "audio" | "video"; dataUrl: string } }) =>
-    rpc<{ id: number; held: boolean }>("sendMessage", input),
+  send: (input: { roomId: number; body: string; replyTo?: number | null; clientTag?: string; media?: { kind: "image" | "audio" | "video"; dataUrl: string } }) =>
+    rpc<{ id: number; held?: boolean; duplicate?: boolean }>("sendMessage", input),
   editMessage: (roomId: number, messageId: number, body: string) => rpc<{ ok: boolean; held: boolean }>("editMessage", { roomId, messageId, body }),
   deleteMessage: (roomId: number, messageId: number) => rpc<unknown>("deleteMessage", { roomId, messageId }),
   react: (roomId: number, messageId: number, emoji: string) => rpc<unknown>("toggleMessageReaction", { roomId, messageId, emoji }),

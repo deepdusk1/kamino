@@ -17,7 +17,9 @@ import {
   removeProfileContent,
 } from "@/lib/kamino/content-v9";
 import { checkedContentMedia } from "@/lib/kamino/content-rules";
+import { detectDuplicatePostsV10 } from "@/lib/kamino/search-v10";
 import { MediaLibraryPicker } from "@/components/media-v10-library";
+import { GifPicker } from "@/components/gif-picker";
 
 export const Route = createFileRoute("/content-studio")({ component: ContentStudio });
 const KINDS = [
@@ -29,7 +31,7 @@ const KINDS = [
   { key: "story", icon: "🌈", name: "Story" },
 ] as const;
 type Kind = (typeof KINDS)[number]["key"];
-type Media = {
+export type Media = {
   kind: "image" | "video" | "short" | "audio" | "gif";
   dataUrl: string;
   filename: string;
@@ -66,6 +68,24 @@ function ContentStudio() {
     [workTitle, setWorkTitle] = useState(""),
     [description, setDescription] = useState(""),
     [url, setUrl] = useState("");
+  const [dupes, setDupes] = useState<{ kind: string; id: string; title: string; excerpt: string; href: string; score: number }[] | null>(null),
+    [dupeNote, setDupeNote] = useState(""),
+    [dupeBusy, setDupeBusy] = useState(false);
+  async function checkOriginality() {
+    if (!slug) { setDupeNote("Pick a community first — the check compares against that community."); return; }
+    if (body.trim().length < 10) { setDupeNote("Write a little more first (at least 10 characters)."); return; }
+    setDupeBusy(true); setDupeNote("");
+    try {
+      const result = await detectDuplicatePostsV10({ data: { communityId: slug, text: body, consent: true } });
+      setDupes(result.matches);
+      if (!result.matches.length) setDupeNote("No close matches — this looks original for this community.");
+    } catch (error) {
+      setDupeNote(error instanceof Error ? error.message : "Originality check is unavailable right now.");
+      setDupes(null);
+    } finally {
+      setDupeBusy(false);
+    }
+  }
   const library = useQuery({
     queryKey: ["profileContent", user?.id],
     queryFn: () => profileContent({ data: { userId: user!.id } }),
@@ -254,6 +274,37 @@ function ContentStudio() {
                 }
               />
             </label>
+            {scope === "community" && (kind === "article" || kind === "video" || kind === "audio") && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => void checkOriginality()}
+                  disabled={dupeBusy}
+                  className="k-focus rounded-full bg-surface-alt px-4 py-2 text-[13px] font-bold text-ink disabled:opacity-50"
+                >
+                  {dupeBusy ? "Checking…" : "Check originality"}
+                </button>
+                {dupeNote ? <p className="text-xs text-muted">{dupeNote}</p> : null}
+                {dupes && dupes.length > 0 && (
+                  <div className="rounded-tile border border-warn/40 bg-tint-warn/30 p-3 text-sm">
+                    <p className="font-bold text-ink">
+                      {dupes.length} similar {dupes.length === 1 ? "post" : "posts"} already in this
+                      community — consider commenting there instead:
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {dupes.slice(0, 5).map((d) => (
+                        <li key={`${d.kind}-${d.id}`}>
+                          <a href={d.href} className="font-semibold text-accent underline">
+                            {d.title}
+                          </a>{" "}
+                          <span className="text-muted">({Math.round(d.score * 100)}% similar)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
             <label className="k-focus flex min-h-[90px] cursor-pointer flex-col justify-center rounded-card border-2 border-dashed border-border p-4 text-center">
               <span className="font-bold text-accent">
                 {media
@@ -290,6 +341,7 @@ function ContentStudio() {
             </label>
             {kind==="article"?images.map((image,index)=><div key={`${image.filename}-${index}`} className="space-y-2 rounded-xl border border-border p-3"><img src={image.dataUrl} alt={image.altText||`Article image ${index+1}`} className="max-h-40 w-full object-contain"/><p className="text-sm font-bold">Image {index+1}: [image:{index+1}]</p><label className="block text-sm">Describe this image<input className={fieldClass} value={image.altText} maxLength={600} onChange={e=>setImages(previous=>previous.map((item,i)=>i===index?{...item,altText:e.target.value}:item))}/></label><OutlineButton onClick={()=>{setImages(previous=>previous.filter((_,i)=>i!==index));setBody(previous=>previous.replace(/\[image:(\d+)\]/g,(marker,n)=>Number(n)===index+1?"":Number(n)>index+1?`[image:${Number(n)-1}]`:marker));}}>Remove image {index+1}</OutlineButton></div>):null}
             {kind==="gif"?<MediaLibraryPicker kind="gif" onSelect={setMedia}/>:null}
+            {kind==="gif"?<GifPicker onSelect={setMedia}/>:null}
             {kind==="audio"?<MediaLibraryPicker kind="audio" onSelect={setMedia}/>:null}
             {media ? (
               <div className="space-y-3">

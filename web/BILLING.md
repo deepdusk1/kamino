@@ -83,3 +83,25 @@ A configured Stripe test-account end-to-end run has not been performed in this i
 Account deletion closes pending local orders, revokes that account's benefits, removes personal uploads and replaces retained accounting identities with a deletion pseudonym. Other members keep already-paid gifts with their existing expiry; creator-owned shared resources remain, with offers unpublished. Privacy-closed orders reject late fulfillment/refund writes. Retained sandbox order rows have no personal email/name.
 
 This flow does not cancel a subscription at the external payment provider. Operators must cancel the associated test subscription in Stripe and reconcile any refund separately before removing an account with recurring payments. The app currently accepts test-mode payments only; live checkout remains refused. Complete provider cancellation, financial retention policy and store billing review before enabling real purchases.
+
+## Live mode and creator payouts (added October 5, 2026)
+
+The sandbox described above is unchanged and remains the default. A second, explicitly separate
+switch turns on **real money**:
+
+1. `STRIPE_SECRET_KEY` must be a `sk_live_…` key and `STRIPE_WEBHOOK_SECRET` the matching live
+   webhook secret, `KAMINO_BILLING_ORIGIN` the canonical https origin, and
+2. `KAMINO_PAYMENTS_ENABLED=true` **and** `KAMINO_BILLING_MODE=live` must both be set. A pasted
+   live key alone never enables real charging.
+
+In live mode every completed order also credits **creator earnings**
+(`creator_earnings`: gross, platform fee, net). The platform fee is `KAMINO_PLATFORM_FEE_PERCENT`
+(default 10, clamped 0–50). Creators connect a Stripe Express account from the Creator page
+("Set up payouts"), then "Request payout" transfers the whole available balance via Stripe
+Connect and records it in `creator_payouts`. Payouts refuse outside live mode; sandbox orders
+never credit a payable balance.
+
+Before enabling live mode: taxes, invoicing, terms of service, refunds and dispute handling are
+operator responsibilities; have counsel review them for your jurisdictions. The webhook path
+also accepts `identity.verification_session.*` events for the independent age-verification
+feature (see IDENTITY_SECURITY.md).

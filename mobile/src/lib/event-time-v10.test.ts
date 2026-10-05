@@ -19,7 +19,7 @@ test('quarter-hour zones and monthly end-of-month clamping are handled without h
   assert.equal(localToInstant('2026-04-01T12:00','Asia/Kathmandu'),'2026-04-01T06:15:00.000Z');
   const events=zonedOccurrences('2026-01-31T18:00:00Z','2026-01-31T19:00:00Z','monthly',3,'UTC');
   assert.deepEqual(events.map(e=>e.startsAt),['2026-01-31T18:00:00.000Z','2026-02-28T18:00:00.000Z','2026-03-31T18:00:00.000Z']);
-  assert.equal(events[1].endsAt,'2026-02-28T19:00:00.000Z');
+  assert.equal(events[1]!.endsAt,'2026-02-28T19:00:00.000Z');
 });
 test('editing a whole series changes local clock time and calendar displacement rather than adding UTC hours',()=>{
   const next=shiftedSeriesTime('2026-11-02T01:00:00Z','2026-10-26T00:00:00Z','2026-10-26T02:30:00Z','America/Los_Angeles','reject');

@@ -12,7 +12,7 @@ export const CHECKOUT_KINDS = [
 ] as const;
 export type BillingConfig = {
   enabled: boolean;
-  mode: "disabled" | "test";
+  mode: "disabled" | "test" | "live";
   origin: string;
   secretKey: string;
   webhookSecret: string;
@@ -54,20 +54,31 @@ export function billingConfig(env: Record<string, string | undefined>): BillingC
   } catch {
     /* An absent origin keeps billing disabled. */
   }
-  const enabled =
+  // Live mode requires the explicit opt-in flag on top of a live key: a pasted sk_live_ key alone
+  // must never switch the whole platform to real money.
+  const live =
+    env.KAMINO_PAYMENTS_ENABLED === "true" &&
+    env.KAMINO_BILLING_MODE === "live" &&
+    /^sk_live_[A-Za-z0-9]{16,}$/.test(secretKey) &&
+    /^whsec_[A-Za-z0-9]{16,}$/.test(webhookSecret) &&
+    Boolean(origin);
+  const test =
     env.KAMINO_PAYMENTS_ENABLED === "true" &&
     /^sk_test_[A-Za-z0-9]{16,}$/.test(secretKey) &&
     /^whsec_[A-Za-z0-9]{16,}$/.test(webhookSecret) &&
     Boolean(origin);
+  const enabled = test || live;
   return {
     enabled,
-    mode: enabled ? "test" : "disabled",
+    mode: enabled ? (live ? "live" : "test") : "disabled",
     origin,
     secretKey,
     webhookSecret,
     reason: enabled
-      ? "Stripe test mode only. No real money or creator payouts."
-      : "Payments are disabled until the Stripe test checkout and signed webhook are configured. No charge was made.",
+      ? live
+        ? "Live Stripe mode: real money. Creator payouts are enabled."
+        : "Stripe test mode only. No real money or creator payouts."
+      : "Payments are disabled until the Stripe checkout and signed webhook are configured. No charge was made.",
   };
 }
 

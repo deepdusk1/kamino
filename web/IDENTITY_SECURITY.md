@@ -42,3 +42,14 @@ The peer-to-peer audio stage enforces entry, membership, room locks, removed use
 `src/lib/auth/mobile-oauth-state.test.ts` checks the actual SQL handoff claim against isolated PGlite, including missing/wrong proofs, expiry, callback rebinding, replay and concurrent claims. `safe-redirect.test.ts` verifies invitations survive sign-in and external/ambiguous redirects are refused. These tests do not substitute for provider and physical-device checks.
 
 `scripts/smoke-paid-access.mjs` prepares local disposable accounts and actual posts, media, private attachments and events; with the app stopped it seeds explicitly scoped test entitlements into an isolated `.test-*` directory. Its API check verifies expired/wrong-offer denial, post/repost/feed/favorite protection, private-room fulfillment, event calendars/RSVPs/attendees, linked room entry, real media retrieval, owner/moderator exceptions and discoverable purchase metadata. It makes no checkout or payment-provider request. `paid-post-policy.test.ts` also exercises recursive source protection, deleted originals and cycles against PGlite. These tests establish local authorization behavior; real provider webhooks, native permissions and deployment remain separate launch checks.
+
+## Independent age verification (added October 5, 2026)
+
+Declared birthdays remain the baseline gate (13+). An optional document check can be offered on
+top: set `KAMINO_AGE_VERIFICATION_ENABLED=true` alongside a configured Stripe billing key. The
+member starts the check from Account security; the server mints a Stripe Identity
+`verification_session` and the member completes it on Stripe's hosted page. Kamino never receives
+or stores the document. When the `identity.verification_session.verified` webhook arrives (same
+webhook endpoint as billing), the account is stamped (`age_verifications` +
+`profiles.age_verified_at`). A failed check can be retried. Operator-verified accounts (the
+existing admin flow) remain equally valid.

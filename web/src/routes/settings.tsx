@@ -11,6 +11,7 @@ import {
   Grid3x3,
   Heart,
   Info,
+  UserPlus,
   Lock,
   Mail,
   MessageCircleMore,
@@ -34,6 +35,7 @@ import { SUPPORT_EMAIL } from "@/components/legal-page";
 import { Avatar, GradientButton, ScreenTitle, TONE_STYLE, type Tone } from "@/components/k";
 import { hourLabel, normalizeWebsite, toggleLimited } from "@/components/profile/helpers";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
+import { getMyReferral } from "@/lib/kamino/referrals";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BUBBLE_STYLE_LABELS } from "@/lib/kamino/cosmetics";
@@ -399,10 +401,13 @@ function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Pr
         </p>
       </Card>
 
+      <ReferralCard />
+
       <Card title="Help & legal" icon={<Info />} tone="green">
         <LinkRow icon={<Shield />} label="Safety and house rules" to="/safety" />
         <LinkRow icon={<Shield />} label="Privacy policy" href="/privacy" />
         <LinkRow icon={<FileText />} label="Terms of use" href="/terms" />
+        <LinkRow icon={<FileText />} label="Copyright & takedown policy" href="/copyright" />
         <LinkRow icon={<Mail />} label="Contact support" href={`mailto:${SUPPORT_EMAIL}`} />
       </Card>
 
@@ -667,6 +672,41 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
 }
 
 /** A white card with a tinted icon circle and a title (the redesign's section look). */
+function ReferralCard() {
+  const referral = useQuery({ queryKey: ["myReferral"], queryFn: () => getMyReferral(), staleTime: 30_000 });
+  if (!referral.data) return null;
+  const link = `${window.location.origin}${referral.data.path}`;
+  return (
+    <Card title="Invite friends" icon={<UserPlus />} tone="orange">
+      <p className="text-[13px] text-muted">
+        Share your link. When a friend joins and claims it, you earn <strong>{referral.data.repPerInvite} reputation</strong>{" "}
+        and they start with <strong>{referral.data.repForFriend}</strong>. Reputation is earned, never bought.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="rounded-full bg-surface-alt px-3 py-1.5 text-[13px] font-extrabold tracking-[0.12em] text-ink">
+          {referral.data.code}
+        </code>
+        <button
+          type="button"
+          className="k-focus rounded-full bg-grad-primary px-4 py-1.5 text-[13px] font-bold text-white"
+          onClick={() => {
+            void navigator.clipboard.writeText(link).then(
+              () => toast.success("Invite link copied"),
+              () => toast.error("Could not copy — your code is " + referral.data!.code),
+            );
+          }}
+        >
+          Copy invite link
+        </button>
+      </div>
+      <p className="text-[12px] text-muted">
+        {referral.data.invited} {referral.data.invited === 1 ? "friend" : "friends"} joined through your link ·{" "}
+        {referral.data.repEarned} reputation earned
+      </p>
+    </Card>
+  );
+}
+
 function Card({
   id,
   title,

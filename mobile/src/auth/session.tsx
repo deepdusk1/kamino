@@ -150,3 +150,8 @@ export function useSession(): Session {
   if (!ctx) throw new Error("useSession must be used inside <SessionProvider>");
   return ctx;
 }
+
+/** The raw session token, for surfaces that need to hand the sign-in to a WebView (watch party). */
+export async function readSessionToken(): Promise<string | null> {
+  return readSecret(TOKEN_KEY);
+}

@@ -139,7 +139,7 @@ export const platform = {
   billingStatus: () =>
     rpc<{
       enabled: boolean;
-      mode: "disabled" | "test";
+      mode: "disabled" | "test" | "live";
       reason: string;
       mobilePaymentsEnabled: boolean;
       creatorPayoutsEnabled: boolean;

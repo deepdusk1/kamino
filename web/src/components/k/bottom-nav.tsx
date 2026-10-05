@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, activeNav, navHref } from "./nav-items";
 import { useShellData } from "./use-shell-data";
+import { useT } from "@/lib/i18n";
 
 /**
  * Phone bottom navigation: Home · Communities · (+) · Chats · Profile.
@@ -13,6 +14,7 @@ import { useShellData } from "./use-shell-data";
 export function BottomNav({ className }: { className?: string }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { unreadChats, profileHref } = useShellData();
+  const t = useT();
   const active = activeNav(pathname, profileHref);
   return (
     <nav
@@ -60,7 +62,7 @@ export function BottomNav({ className }: { className?: string }) {
                     />
                   )}
                 </span>
-                {item.label}
+                {t(`nav.${item.key}`)}
               </Link>
             </li>
           );

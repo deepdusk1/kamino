@@ -1,13 +1,32 @@
-import { ChevronDown, Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
-import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, Mic, MicOff, Phone, PhoneOff, Play, Plus, ThumbsUp, Trash2, Video, VideoOff, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Face } from "@/components/face";
 import { KAMINO_CALL_EVENT } from "@/components/incoming-call";
-import { parseWatchInput, SHELF, youtubeId, type ShelfKind } from "@/lib/kamino/shelf";
+import {
+  parseWatchInput,
+  SHELF,
+  twitchSource,
+  vimeoId,
+  youtubeId,
+  type ShelfKind,
+} from "@/lib/kamino/shelf";
+import {
+  addWatchQueueItem,
+  clearWatchQueue,
+  listWatchQueue,
+  listWatchReady,
+  playWatchQueueItem,
+  removeWatchQueueItem,
+  setWatchReady,
+  startWatchReadyCheck,
+  voteWatchQueueItem,
+} from "@/lib/kamino/watch";
 import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-room";
 import { cn } from "@/lib/utils";
 import { getLiveStage } from '@/lib/kamino/community-v9';
+import { getLiveKitJoin } from '@/lib/kamino/livekit';
 
 type WatchWire = {
   t: "watch";
@@ -18,6 +37,15 @@ type WatchWire = {
   at: number;
   ts: number;
   by: string;
+};
+
+/** What the deck needs from any embedded player, whatever the source. */
+type PlayerControl = {
+  play: () => void;
+  pause: () => void;
+  seek: (t: number) => void;
+  /** Current playback position in seconds (0 for live channels). */
+  now: () => number;
 };
 
 type YtPlayer = {
@@ -63,6 +91,50 @@ function loadYt(): Promise<void> {
       document.head.appendChild(s);
     }
   });
+}
+
+type TwitchEmbedPlayer = {
+  play: () => void;
+  pause: () => void;
+  seek: (t: number) => void;
+  getCurrentTime: () => number;
+  getPlaybackState: () => "idle" | "loading" | "playing" | "paused" | "ended";
+  addEventListener: (event: string, fn: () => void) => void;
+  destroy: () => void;
+};
+
+declare global {
+  interface Window {
+    Twitch?: {
+      Player: (new (el: HTMLElement, opts: Record<string, unknown>) => TwitchEmbedPlayer) & {
+        READY: string;
+      };
+    };
+  }
+}
+
+let twitchLoading: Promise<void> | null = null;
+
+function loadTwitch(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.Twitch?.Player) return Promise.resolve();
+  twitchLoading ??= new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>("script[src*='embed.twitch.tv']");
+    const s = existing ?? document.createElement("script");
+    const done = () => resolve();
+    if (existing?.dataset.loaded === "1") return done();
+    s.addEventListener("load", () => {
+      s.dataset.loaded = "1";
+      done();
+    });
+    s.addEventListener("error", () => reject(new Error("Twitch player failed to load.")));
+    if (!existing) {
+      s.src = "https://embed.twitch.tv/embed/v1.js";
+      s.async = true;
+      document.head.appendChild(s);
+    }
+  });
+  return twitchLoading;
 }
 
 async function openMic(video: boolean): Promise<MediaStream> {
@@ -181,6 +253,17 @@ export function LiveStage({
   const maySpeak=kind==='dm'||!!stage.data&&!!mine&&!mine.muted&&(!stage.data.enabled||mine.role==='host'||mine.role==='speaker');
   const speakingRef=useRef(maySpeak);speakingRef.current=maySpeak;
 
+  // When the server has LiveKit configured, media flows through the SFU with server-enforced
+  // publish rights; the peer-to-peer room stays up for watch-party sync and the roster.
+  const [liveKit, setLiveKit] = useState<{ room: import("livekit-client").Room; role: string } | null>(null);
+  const [liveKitStreams, setLiveKitStreams] = useState<Record<string, MediaStream>>({});
+  useEffect(() => {
+    return () => {
+      liveKit?.room.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const enabled = screening || onCall;
   const live = useLiveRoom({
     roomKey: rtcRoomKey(roomId),
@@ -207,6 +290,35 @@ export function LiveStage({
       if(current?.scheduledAt&&new Date(current.scheduledAt)>new Date())throw new Error('This live room has not started yet.');
       if(current?.locked&&!current.host)throw new Error('This room is locked.');
       const allowed=kind==='dm'||!!current&&!!self&&!self.muted&&(!current.enabled||self.role==='host'||self.role==='speaker');
+      const joinInfo = kind==='dm' ? null : await getLiveKitJoin({ data: roomId }).catch(() => null);
+      if (joinInfo?.enabled) {
+        const { Room } = await import("livekit-client");
+        const room = new Room({ adaptiveStream: true });
+        room.on("trackSubscribed", (track, publication, participant) => {
+          if (track.kind === "video" || track.kind === "audio") {
+            const stream = new MediaStream([track.mediaStreamTrack]);
+            setLiveKitStreams((prev) => ({ ...prev, [participant.identity]: stream }));
+          }
+        });
+        room.on("trackUnsubscribed", (_track, _publication, participant) => {
+          setLiveKitStreams((prev) => {
+            const next = { ...prev };
+            delete next[participant.identity];
+            return next;
+          });
+        });
+        await room.connect(joinInfo.url, joinInfo.token);
+        if (allowed) await room.localParticipant.setMicrophoneEnabled(true);
+        if (allowed && withCam) await room.localParticipant.setCameraEnabled(true);
+        setLiveKit({ room, role: joinInfo.role });
+        localRef.current = null;
+        setMuted(!allowed);
+        setCam(false);
+        startedAt.current = Date.now();
+        setOnCall(true);
+        onVoice?.(true);
+        return;
+      }
       const stream = allowed?await openMic(withCam):new MediaStream();
       localRef.current?.getTracks().forEach((t) => t.stop());
       localRef.current = stream;
@@ -225,6 +337,9 @@ export function LiveStage({
   function hangUp() {
     localRef.current?.getTracks().forEach((t) => t.stop());
     localRef.current = null;
+    liveKit?.room.disconnect();
+    setLiveKit(null);
+    setLiveKitStreams({});
     live.setLocalStream(null);
     setOnCall(false);
     setCam(false);
@@ -238,6 +353,7 @@ export function LiveStage({
     if(!speakingRef.current){setErr('You are listening. Ask the host for permission to speak.');return;}
     const next = !muted;
     setMuted(next);
+    if (liveKit) void liveKit.room.localParticipant.setMicrophoneEnabled(!next);
     localRef.current?.getAudioTracks().forEach((t) => {
       t.enabled = !next;
     });
@@ -326,7 +442,10 @@ export function LiveStage({
   const failed = live.peers.filter((p) => p.connectionState === "failed");
   const otherName = live.peers[0]?.name ?? peerName ?? "Member";
   const otherHue = peerHue ?? 265;
-  const remoteEntries = Object.entries(live.streams).filter(([peerId])=>{
+  const remoteEntries = [
+    ...Object.entries(live.streams),
+    ...Object.entries(liveKitStreams),
+  ].filter(([peerId])=>{
     if(kind==='dm')return true;
     const person=stage.data?.participants.find(p=>rtcPeerId(p.userId)===peerId);
     return !!person&&!person.muted&&(!stage.data?.enabled||person.role==='host'||person.role==='speaker');
@@ -384,6 +503,8 @@ export function LiveStage({
           initialUrl={watchUrl ?? ""}
           initialTitle={watchTitle ?? ""}
           onWatchSaved={onWatchSaved}
+          roomId={roomId}
+          isHost={!!stage.data?.host || mine?.role === "host" || !!mine?.cohost}
         />
       )}
 
@@ -579,31 +700,193 @@ export function LiveStage({
   );
 }
 
+type EmbeddedPlayerProps = {
+  url: string;
+  /** Hands the deck a control handle once the player is ready (null on teardown). */
+  register: (control: PlayerControl | null) => void;
+  /** User-driven play/pause/seek inside the player itself (the deck ignores these while applying synced state). */
+  onLocalState: (paused: boolean, at: number) => void;
+};
+
+/**
+ * Vimeo playback via the player's postMessage protocol ("player.js"): no extra SDK script, the
+ * iframe speaks JSON over postMessage both ways once it has loaded.
+ */
+function VimeoFrame({ url, register, onLocalState }: EmbeddedPlayerProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const timeRef = useRef(0);
+  const pausedRef = useRef(true);
+
+  const post = useCallback((message: Record<string, unknown>) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify(message),
+      "https://player.vimeo.com",
+    );
+  }, []);
+
+  useEffect(() => {
+    pausedRef.current = true;
+    timeRef.current = 0;
+    return () => register(null);
+  }, [register, url]);
+
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== "https://player.vimeo.com") return;
+      if (e.source !== iframeRef.current?.contentWindow) return;
+      let data: {
+        event?: string;
+        method?: string;
+        value?: number;
+        data?: { seconds?: number; duration?: number };
+      };
+      try {
+        data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+      } catch {
+        return;
+      }
+      if (data.method === "getCurrentTime" && typeof data.value === "number")
+        timeRef.current = data.value;
+      if (data.event === "timeupdate" && typeof data.data?.seconds === "number")
+        timeRef.current = data.data.seconds;
+      if (data.event === "play") {
+        pausedRef.current = false;
+        onLocalState(false, timeRef.current);
+      }
+      if (data.event === "pause") {
+        pausedRef.current = true;
+        onLocalState(true, timeRef.current);
+      }
+      if (data.event === "seeked" && typeof data.data?.seconds === "number") {
+        timeRef.current = data.data.seconds;
+        onLocalState(pausedRef.current, data.data.seconds);
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [onLocalState]);
+
+  useEffect(() => {
+    register({
+      play: () => post({ method: "play" }),
+      pause: () => post({ method: "pause" }),
+      seek: (t) => post({ method: "seekTo", value: Math.max(0, t) }),
+      now: () => {
+        post({ method: "getCurrentTime" });
+        return timeRef.current;
+      },
+    });
+  }, [register, post, url]);
+
+  const id = vimeoId(url);
+  if (!id)
+    return (
+      <div className="grid h-full w-full place-items-center text-sm text-muted">
+        This Vimeo video can’t be embedded.
+      </div>
+    );
+  return (
+    <iframe
+      key={url}
+      ref={iframeRef}
+      src={`https://player.vimeo.com/video/${id}?controls=1&autoplay=0`}
+      title="Vimeo player"
+      allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+      onLoad={() => {
+        for (const event of ["play", "pause", "seeked", "timeupdate"])
+          post({ method: "addEventListener", value: event });
+      }}
+      className="h-full w-full"
+    />
+  );
+}
+
+/** Twitch channels and VODs via the official embed SDK (the `parent` domain is required by Twitch). */
+function TwitchFrame({ url, register, onLocalState }: EmbeddedPlayerProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<TwitchEmbedPlayer | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    let cancelled = false;
+    const source = twitchSource(url);
+    if (!source || !host) return;
+    void loadTwitch()
+      .then(() => {
+        if (cancelled || !window.Twitch?.Player) return;
+        host.replaceChildren();
+        const player = new window.Twitch.Player(host, {
+          width: "100%",
+          height: "100%",
+          autoplay: false,
+          parent: window.location.hostname,
+          ...("channel" in source ? { channel: source.channel } : { video: source.video }),
+        });
+        playerRef.current = player;
+        player.addEventListener(window.Twitch.Player.READY, () => {
+          if (cancelled) return;
+          register({
+            play: () => player.play(),
+            pause: () => player.pause(),
+            seek: (t) => player.seek(Math.max(0, t)),
+            now: () => player.getCurrentTime?.() ?? 0,
+          });
+        });
+        player.addEventListener("playing", () => {
+          if (cancelled) return;
+          onLocalState(false, player.getCurrentTime?.() ?? 0);
+        });
+        player.addEventListener("pause", () => {
+          if (cancelled) return;
+          onLocalState(true, player.getCurrentTime?.() ?? 0);
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      playerRef.current = null;
+      host?.replaceChildren();
+      register(null);
+    };
+  }, [url, register, onLocalState]);
+
+  return <div ref={hostRef} className="h-full w-full" />;
+}
+
 function WatchDeck({
   live,
   selfId,
   initialUrl,
   initialTitle,
   onWatchSaved,
+  roomId,
+  isHost,
 }: {
   live: ReturnType<typeof useLiveRoom>;
   selfId: string;
   initialUrl: string;
   initialTitle: string;
   onWatchSaved?: (url: string, title: string) => void;
+  roomId: number;
+  isHost: boolean;
 }) {
+  const queryClient = useQueryClient();
   const first = SHELF[0]!;
   const [url, setUrl] = useState(initialUrl || first.url);
   const [title, setTitle] = useState(initialTitle || first.title);
-  const [kind, setKind] = useState<ShelfKind>(youtubeId(initialUrl) ? "youtube" : "mp4");
+  const [kind, setKind] = useState<ShelfKind>(
+    youtubeId(initialUrl) ? "youtube" : vimeoId(initialUrl) ? "vimeo" : twitchSource(initialUrl) ? "twitch" : "mp4",
+  );
   const [paused, setPaused] = useState(true);
   const [paste, setPaste] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [readyPrompt, setReadyPrompt] = useState<number | null>(null);
   const controller = useRef(selfId);
   const applying = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const ytHost = useRef<HTMLDivElement>(null);
   const yt = useRef<YtPlayer | null>(null);
+  const control = useRef<PlayerControl | null>(null);
   const atRef = useRef(0);
   const emitRef = useRef<(next?: Partial<WatchWire>) => void>(() => undefined);
   const snapped = useRef(new Set<string>());
@@ -636,6 +919,11 @@ function WatchDeck({
         if (controller.current === selfId) emitRef.current({ at: atRef.current });
         return;
       }
+      if (raw.t === "ready-check") {
+        const round = Number((raw as { round?: unknown }).round ?? 0);
+        if (Number.isFinite(round) && round > 0) setReadyPrompt(round);
+        return;
+      }
       const msg = data as WatchWire | undefined;
       if (!msg || msg.t !== "watch") return;
       controller.current = msg.by;
@@ -659,6 +947,12 @@ function WatchDeck({
         if (Math.abs(now - driftClock) > 1.2) yt.current.seekTo(Math.max(0, driftClock), true);
         if (msg.paused) yt.current.pauseVideo();
         else yt.current.playVideo();
+      }
+      if ((msg.kind === "vimeo" || msg.kind === "twitch") && control.current) {
+        const now = control.current.now();
+        if (Math.abs(now - driftClock) > 1.5) control.current.seek(Math.max(0, driftClock));
+        if (msg.paused) control.current.pause();
+        else control.current.play();
       }
       window.setTimeout(() => {
         applying.current = false;
@@ -733,6 +1027,8 @@ function WatchDeck({
       if (kind === "mp4" && videoRef.current) atRef.current = videoRef.current.currentTime;
       if (kind === "youtube" && yt.current)
         atRef.current = yt.current.getCurrentTime() ?? atRef.current;
+      if ((kind === "vimeo" || kind === "twitch") && control.current)
+        atRef.current = control.current.now();
       emitRef.current({ at: atRef.current, paused });
     }, 2000);
     return () => window.clearInterval(id);
@@ -747,6 +1043,85 @@ function WatchDeck({
     onWatchSaved?.(next.url, next.title);
     emit({ ...next, paused: false, at: 0, ts: Date.now(), by: selfId });
   }
+
+  // Stable callbacks for the embedded players: they register a control handle once ready and
+  // report local play/pause/seek, which is ignored while synced state is being applied.
+  const localStateRef = useRef<(paused: boolean, at: number) => void>(() => undefined);
+  localStateRef.current = (nextPaused, at) => {
+    if (applying.current) return;
+    setPaused(nextPaused);
+    atRef.current = at;
+    emitRef.current({ paused: nextPaused, at });
+  };
+  const onPlayerState = useCallback((p: boolean, at: number) => localStateRef.current(p, at), []);
+  const registerControl = useCallback((c: PlayerControl | null) => {
+    control.current = c;
+  }, []);
+
+  const queue = useQuery({
+    queryKey: ["watch-queue", roomId],
+    queryFn: () => listWatchQueue({ data: roomId }),
+    refetchInterval: 5000,
+  });
+  const readyCheck = useQuery({
+    queryKey: ["watch-ready", roomId],
+    queryFn: () => listWatchReady({ data: roomId }),
+    refetchInterval: readyPrompt === null ? 8000 : 2500,
+  });
+
+  const refreshQueue = () => void queryClient.invalidateQueries({ queryKey: ["watch-queue", roomId] });
+  const addToQueue = useMutation({
+    mutationFn: (value: string) => addWatchQueueItem({ data: { roomId, url: value } }),
+    onSuccess: () => {
+      setPaste("");
+      setNote(null);
+      refreshQueue();
+    },
+    onError: (e) => setNote(e instanceof Error ? e.message : "Could not add that video."),
+  });
+  const voteItem = useMutation({
+    mutationFn: (id: number) => voteWatchQueueItem({ data: id }),
+    onSuccess: refreshQueue,
+  });
+  const removeItem = useMutation({
+    mutationFn: (id: number) => removeWatchQueueItem({ data: id }),
+    onSuccess: refreshQueue,
+  });
+  const playItem = useMutation({
+    mutationFn: (id: number) => playWatchQueueItem({ data: id }),
+    onSuccess: (played) => {
+      refreshQueue();
+      loadFilm({ url: played.url, title: played.title, kind: played.kind as ShelfKind });
+    },
+    onError: (e) => setNote(e instanceof Error ? e.message : "Could not play that item."),
+  });
+  const emptyQueue = useMutation({
+    mutationFn: () => clearWatchQueue({ data: roomId }),
+    onSuccess: refreshQueue,
+  });
+  const startReady = useMutation({
+    mutationFn: () => startWatchReadyCheck({ data: roomId }),
+    onSuccess: (started) => {
+      setReadyPrompt(started.round);
+      live.send({ t: "ready-check", round: started.round });
+    },
+  });
+  const markReady = useMutation({
+    mutationFn: (round: number) => setWatchReady({ data: { roomId, round } }),
+    onSuccess: () => {
+      setReadyPrompt(null);
+      void queryClient.invalidateQueries({ queryKey: ["watch-ready", roomId] });
+    },
+  });
+
+  const readyRound = readyCheck.data?.round ?? 0;
+  const readyEntries = readyCheck.data?.entries ?? [];
+  const myReady = readyEntries.find((e) => e.mine)?.ready ?? false;
+  const readyCount = readyEntries.filter((e) => e.ready).length;
+  const waiting = readyEntries.filter((e) => !e.ready).map((e) => e.name);
+
+  const smallPill =
+    "k-focus k-hit inline-flex h-7 items-center gap-1 rounded-full bg-surface-alt px-2.5 text-xs font-bold text-ink transition-colors hover:brightness-[0.97] disabled:opacity-50";
 
   return (
     <section className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
@@ -777,8 +1152,12 @@ function WatchDeck({
               emit({ at: atRef.current });
             }}
           />
-        ) : (
+        ) : kind === "youtube" ? (
           <div ref={ytHost} className="h-full w-full" />
+        ) : kind === "vimeo" ? (
+          <VimeoFrame url={url} register={registerControl} onLocalState={onPlayerState} />
+        ) : (
+          <TwitchFrame url={url} register={registerControl} onLocalState={onPlayerState} />
         )}
         <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-bg/80 to-transparent px-4 py-3">
           <p className="text-[11px] font-extrabold tracking-[0.16em] text-violet uppercase">
@@ -790,7 +1169,7 @@ function WatchDeck({
       <div className="space-y-3 p-4">
         <p className="text-xs text-muted">
           Play, pause, and seek stay in lockstep. Netflix’s catalog can’t stream here — pick an open
-          film or paste YouTube.
+          film, or paste YouTube, Vimeo, or Twitch.
         </p>
         <div className="flex gap-3 overflow-x-auto pb-1 k-scroll">
           {SHELF.map((film) => (
@@ -830,19 +1209,144 @@ function WatchDeck({
           <input
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
-            placeholder="Paste a YouTube link"
-            aria-label="YouTube link"
+            placeholder="Paste a YouTube, Vimeo, or Twitch link"
+            aria-label="Video link"
             className="k-focus h-11 flex-1 rounded-full bg-surface-alt px-4 text-[16px] text-ink outline-none placeholder:text-[14px] placeholder:text-subtle lg:text-[15px]"
           />
+          <button
+            type="button"
+            onClick={() => {
+              if (!paste.trim()) return;
+              addToQueue.mutate(paste.trim());
+            }}
+            disabled={addToQueue.isPending || !paste.trim()}
+            className="k-focus h-11 rounded-full bg-surface-alt px-4 text-[14px] font-bold text-ink disabled:opacity-50"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Plus className="size-4" aria-hidden />
+              Queue
+            </span>
+          </button>
           <button
             type="submit"
             className="k-focus h-11 rounded-full bg-grad-primary px-5 text-[14px] font-bold text-white shadow-glow"
           >
-            Play
+            <span className="inline-flex items-center gap-1.5">
+              <Play className="size-4" aria-hidden />
+              Play
+            </span>
           </button>
         </form>
         {note ? <p className="text-sm text-warn">{note}</p> : null}
+
+        {(queue.data?.items.length ?? 0) > 0 && (
+          <div className="rounded-tile border border-border bg-surface-alt/60 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[11px] font-extrabold tracking-[0.14em] text-muted uppercase">
+                Up next · voted by everyone
+              </p>
+              {isHost && (
+                <button
+                  type="button"
+                  onClick={() => emptyQueue.mutate()}
+                  className="text-xs font-bold text-subtle hover:text-danger"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <ul className="space-y-1.5">
+              {queue.data?.items.map((item) => (
+                <li key={item.id} className="flex items-center gap-2 rounded-2xl bg-surface px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => voteItem.mutate(item.id)}
+                    aria-label={item.mine ? "Remove your vote" : "Vote for this"}
+                    aria-pressed={item.mine}
+                    className={cn(
+                      "k-focus flex h-8 flex-col items-center justify-center rounded-xl px-2 text-[11px] font-extrabold leading-none",
+                      item.mine ? "bg-grad-primary text-white" : "bg-surface-alt text-muted",
+                    )}
+                  >
+                    <ThumbsUp className="mb-0.5 size-3" aria-hidden />
+                    {item.votes}
+                  </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-extrabold text-ink">
+                      {item.title}
+                    </span>
+                    <span className="block truncate text-[11px] text-subtle">
+                      {item.kind} · added by {item.mineAdded ? "you" : item.addedName}
+                    </span>
+                  </span>
+                  {isHost && (
+                    <button
+                      type="button"
+                      onClick={() => playItem.mutate(item.id)}
+                      disabled={playItem.isPending}
+                      className={smallPill}
+                    >
+                      <Play className="size-3.5" aria-hidden />
+                      Play
+                    </button>
+                  )}
+                  {(item.mineAdded || isHost) && (
+                    <button
+                      type="button"
+                      onClick={() => removeItem.mutate(item.id)}
+                      aria-label="Remove from queue"
+                      className="k-focus grid size-7 place-items-center rounded-full text-subtle hover:text-danger"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => startReady.mutate()}
+            disabled={startReady.isPending}
+            className={smallPill}
+          >
+            Ready check
+          </button>
+          {readyRound > 0 && readyEntries.length > 0 && (
+            <span className="text-xs font-bold text-muted">
+              {readyCount}/{readyEntries.length} ready
+              {waiting.length > 0 ? ` · waiting on ${waiting.join(", ")}` : " · everyone is set"}
+            </span>
+          )}
+        </div>
       </div>
+
+      {readyPrompt !== null && !myReady && (
+        <div className="flex items-center gap-3 border-t border-border bg-tint-violet px-4 py-3">
+          <p className="min-w-0 flex-1 text-sm font-extrabold text-ink">
+            Ready check! Everyone set to press play?
+          </p>
+          <button
+            type="button"
+            onClick={() => markReady.mutate(readyPrompt)}
+            disabled={markReady.isPending}
+            className="k-focus h-9 rounded-full bg-grad-primary px-4 text-[13px] font-bold text-white shadow-glow"
+          >
+            I’m ready
+          </button>
+          <button
+            type="button"
+            onClick={() => setReadyPrompt(null)}
+            aria-label="Dismiss ready check"
+            className="k-focus grid size-9 place-items-center rounded-full text-muted hover:text-ink"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+      )}
     </section>
   );
 }
