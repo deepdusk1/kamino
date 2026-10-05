@@ -1,6 +1,6 @@
 # Kamino: App Store and Google Play listing (copy and paste)
 
-> Release 9 note: this store kit predates the new contact matching, provider sign-in, analytics and billing sandbox. Treat the copy, privacy answers and screenshots below as drafts. Review the actual configured services and native permissions, update the declarations and replace device screenshots before submission. Mobile purchases and creator payouts remain unavailable. Do not advertise a feature as live solely because its configuration screen exists.
+> Release 9 note: refresh this kit before submission — the app now includes watch parties with a voting queue, interface translation (Spanish), referrals, offline messaging and a tablet layout. Paid features run through the website's Stripe checkout (sandbox until the operator enables live billing); there are no native in-app purchases, so do not advertise one. Update the privacy answers for the configured providers, replace device screenshots with current captures, and do not advertise a feature as live solely because its configuration screen exists.
 
 Everything below is ready to paste into App Store Connect and the Google Play Console.
 Replace `https://YOUR-SERVER` with the public address of your Kamino server (see `DEPLOY.md`).

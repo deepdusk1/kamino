@@ -45,11 +45,11 @@ Approved public wiki pages can be pinned to profiles. Community members can copy
 
 Community leaders can show, hide, and reorder the main community tabs from the moderation screen. This changes navigation presentation; it does not grant or revoke access to the underlying pages.
 
-See `QA-NOTES.md` for the tested changes and remaining verification limits.
+See `../FEATURE-STATUS.md` for the current feature status and verification summary.
 
 ## Amino feature review
 
-The companion `Amino-vs-Kamino.html` and `Amino-vs-Kamino.md` files in the download folder compare 69 capabilities. The original 2022 Amino APK and captured entry screens are kept separately under `Amino-reference`, outside the Kamino source ZIP. Video attachments and native push (via the companion `mobile` app) are now covered. The wallet and fan-club economy is intentionally not offered in the phone app (Kamino's house rules: no coins, ads or paid cosmetics), and a production hosting setup is still yours to provision. This source package does not claim full Amino parity.
+The companion `Amino-vs-Kamino.html` and `Amino-vs-Kamino.md` files in the download folder compare 69 capabilities. The original 2022 Amino APK and captured entry screens are kept separately under `Amino-reference`, outside the Kamino source ZIP. Video attachments and native push (via the companion `mobile` app) are now covered. Paid features run through the website's Stripe checkout — a sandbox by default, with live billing and creator payouts behind an explicit operator switch (see `BILLING.md`) — and a production hosting setup is still yours to provision. This source package does not claim full Amino parity; see `../Amino-vs-Kamino.md` for the capability-by-capability comparison.
 
 ## Mobile app and API
 

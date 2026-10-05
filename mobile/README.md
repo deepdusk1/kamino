@@ -21,10 +21,12 @@ animated polls, streaks and loading states. Light and dark mode follow the phone
 respects the phone's **Reduce Motion** setting, and the text colours were checked for WCAG AA contrast
 on both the background and the glass.
 
-**Release 9:** content/story tools, group chats/files, community roles/policies/quests, expanded events,
-privacy/security/tutorial/contact matching, discovery, creator analytics and administration share the web server.
-Offer and access management exists, but mobile purchase buttons stay disabled. Stripe web checkout is test-only;
-App Store/Google Play billing and creator payouts remain unfinished. See `../RELEASE-9.md` and `../web/BILLING.md`.
+**Current build:** everything shares the web server — content/story tools, group chats with
+moderators, community roles/policies/quests, events, watch parties in-app (the website's watch
+deck in a WebView), an offline message queue that replays on reconnect, a tablet navigation rail,
+GIF search, and interface translation. Paid features are managed on the web (purchases are
+sandbox until the operator enables live billing; native store purchases are not built). See
+`../FEATURE-STATUS.md` and `../web/BILLING.md`.
 
 ---
 

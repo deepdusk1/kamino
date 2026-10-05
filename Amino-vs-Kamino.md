@@ -65,9 +65,9 @@ The earlier review was written from a web-only build. These claims are now wrong
 | | Leaderboards | Built |
 | | Events, RSVPs, challenges with judging | Built |
 | | Notifications and push (you choose which) | Built; push delivery needs a first real-phone test |
-| Economy | Coins, coin purchases, tipping | **Not built yet** (allowed under the updated house rules; an older earned-coins wallet with tipping exists on the website) |
+| Economy | Coins, coin purchases, tipping | **Built** (subscriptions, tips, gifts, tickets and creator payouts; sandbox by default, live billing behind an explicit operator switch) |
 | | Rewarded ads / offer walls | **Not built** (ads are allowed later only if carefully limited) |
-| | Paid fan clubs / VIP tiers | **Not built yet** (a Kamino+ plan or creator subscriptions may come later) |
+| | Paid fan clubs / VIP tiers | **Built**: creator subscriptions, exclusive posts and subscriber spaces (sandbox by default) |
 | | Amino+ style subscription, paid cosmetics or stickers | **Excluded** |
 | Moderation | Reports, hide/remove, strikes, timed mutes, bans | Built |
 | | Automatic safety checks (illegal trades, exploitation, threats) on posts, comments, chat, DMs, walls, stories and pictures, with a review queue | Built: free built-in rules always; free AI check when the key is set; held items wait for a person, no automatic bans. **Not tested against the real AI service** |
@@ -75,7 +75,7 @@ The earlier review was written from a web-only build. These claims are now wrong
 | | Join screening, broadcasts | Built |
 | | Someone actually watching your community | **Yours to provide** |
 | Accounts | Email sign-up, password reset, sign-in on web and phone | Built; email delivery needs your Resend key |
-| | Phone-number or social sign-in | Not built (configuration only, needs provider accounts) |
+| | Phone-number or social sign-in | **Built**: phone (Twilio Verify), Google and Apple — active once the provider keys are set |
 | | 13+ birthday gate | Built |
 | | Export and import of your data | Built |
 | | Delete my account in the app | Built |
@@ -90,16 +90,14 @@ The earlier review was written from a web-only build. These claims are now wrong
 2. **Accounts and money for hosting and stores** (Render, Expo, Apple US$99/year, Google US$25 once).
 3. **People.** Appoint leaders and curators. Kamino gives them every tool but does not replace them.
 4. **A lawyer's look** at the Privacy Policy and Terms, which are drafts, not legal advice.
-5. **Paid features, when you want them.** The house rules now allow them. Selling anything digital inside the phone apps must use Apple's and Google's in-app purchases (they take a cut), which is its own project. The website's older earned-coins wallet can stay as it is until then.
+5. **Paid features, when you want them.** The house rules allow them, and the code is ready: web checkout runs as a sandbox by default, and live billing with creator payouts activates behind an explicit operator switch (see `web/BILLING.md`). Selling digital goods inside the native apps would additionally require Apple's and Google's in-app purchases, which is its own project.
 
 ## Not done in this release
 
-A phone-number or social sign-in (needs provider accounts), a speaker/earpiece switch for phone calls, picture hash-matching for child-abuse imagery (PhotoDNA-style, for when you grow), and the removal of the old website Coins wallet (waiting for your decision).
+Native in-app purchases (needs Apple/Google enrollment and native billing libraries), picture hash-matching for child-abuse imagery (PhotoDNA-style, for when you grow), a speaker/earpiece switch for phone calls, and a professional accessibility audit. Phone, Google and Apple sign-in are built and activate with provider keys.
 
 ## What was verified
 
-- 151 website and 50 phone unit tests; TypeScript and lint with no errors on web and phone; production web build; iOS and Android JavaScript bundles.
-- Integration suites against a running server: 27 core, 15 writing, 10 chat-media, 2 wallet, 25 phone-API groups (also on real PostgreSQL, all 23 migrations), 10 AI groups against a pretend AI service (also on PostgreSQL), 9 object-storage groups, 3 rate-limit groups.
-- A check that the phone app's expectations match what the server sends (75 calls), and a browser run through the new website pages.
+Current totals: 304 web and 87 phone unit/integration checks, TypeScript and lint with no errors on web and phone, a production web build, and a phone/server contract check (214 typed responses, 323 RPC operations). See `FEATURE-STATUS.md` for the full current list.
 
 Not verified here: the real OpenAI and Groq services, how well the AI judges real content, calls between physical devices, a real S3/R2 bucket, real email and push delivery, how the screens feel on a real phone, store submission, and staffed moderation.

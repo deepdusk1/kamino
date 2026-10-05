@@ -1,6 +1,6 @@
 # Billing sandbox
 
-Billing is **disabled by default**. The implementation supports Stripe test checkout, a purchase ledger, signed webhooks and access entitlements. It cannot charge real money: live keys and live webhook events are rejected. Native App Store / Google Play purchases and creator payouts are not implemented.
+Billing is **disabled by default**. The implementation supports Stripe checkout, a purchase ledger, signed webhooks and access entitlements. It runs as a **test sandbox** by default: without an explicit operator switch it cannot charge real money and rejects live keys and live events. With `KAMINO_BILLING_MODE=live` and a live key it charges real money and enables creator payouts (see the live-mode section below). Native App Store / Google Play purchases are not implemented.
 
 ## Configure a sandbox
 
@@ -38,7 +38,7 @@ charge.dispute.created
 
 Local forwarding can use the Stripe CLI. Its forwarded endpoint has its own signing secret; use that secret for local development. A Dashboard endpoint secret and a CLI forwarding secret are different. Signature verification uses the exact raw request body, with a five-minute timestamp tolerance and a one-megabyte payload limit. See [Stripe signature verification](https://docs.stripe.com/webhooks/signature).
 
-When billing is disabled the webhook returns `503`, checkout refuses to open, and paid requirements cannot be added. Free content continues to use the normal visibility rules. An enabled sandbox is shown as test mode in the app; native purchase buttons remain disabled.
+When billing is disabled the webhook returns `503`, checkout refuses to open, and paid requirements cannot be added. Free content continues to use the normal visibility rules. An enabled sandbox is shown as test mode in the app; native purchase buttons remain disabled (purchases happen on the web checkout).
 
 ## Offers and fulfillment
 
@@ -82,7 +82,7 @@ A configured Stripe test-account end-to-end run has not been performed in this i
 
 Account deletion closes pending local orders, revokes that account's benefits, removes personal uploads and replaces retained accounting identities with a deletion pseudonym. Other members keep already-paid gifts with their existing expiry; creator-owned shared resources remain, with offers unpublished. Privacy-closed orders reject late fulfillment/refund writes. Retained sandbox order rows have no personal email/name.
 
-This flow does not cancel a subscription at the external payment provider. Operators must cancel the associated test subscription in Stripe and reconcile any refund separately before removing an account with recurring payments. The app currently accepts test-mode payments only; live checkout remains refused. Complete provider cancellation, financial retention policy and store billing review before enabling real purchases.
+This flow does not cancel a subscription at the external payment provider. Operators must cancel the associated subscription in Stripe and reconcile any refund separately before removing an account with recurring payments. In sandbox mode the app accepts test-mode payments only. Complete provider cancellation, financial retention policy and store billing review before enabling live mode.
 
 ## Live mode and creator payouts (added October 5, 2026)
 

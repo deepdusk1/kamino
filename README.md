@@ -3,17 +3,26 @@
 Kamino is a calm community app and a replacement for Amino. It ships as a **website plus
 native iPhone and Android apps**, all from this one folder.
 
-House rules: **the core app stays free**, reputation and moderation cannot be bought, members control notifications, ages 13+, and humans review held content. Release 9 adds optional offers and a Stripe sandbox. Payments are disabled by default; real-money purchases, creator payouts and native store billing remain unavailable.
+House rules: **the core app stays free**, reputation and moderation cannot be bought, members control notifications, ages 13+, and humans review held content. Billing ships as a disabled-by-default Stripe sandbox; live charging and creator payouts activate only behind an explicit operator switch.
 
-## Release 9: community, creator and safety expansion
+## What this build adds (October 2026)
 
-This release adds shared web/native tools for richer posts and stories, reply threads, group chats and files, community boards/FAQs/roles/policies, events, live stages, quests and earned cosmetics. It also adds privacy/security screens, real authenticator login, configurable provider sign-in, a tutorial, native contact matching, discovery tools, creator analytics, collaboration briefs, support and verified administration.
+Beyond the redesign below, this build completes the feature set: watch parties with Vimeo/Twitch
+sources, a voting queue and ready checks; a referral program with reputation rewards; interface
+translation (Spanish shipped, more drop-in); live billing with creator earnings and Stripe Connect
+payouts; independent age verification (Stripe Identity); a LiveKit media server for large stages
+with server-enforced publish rights and room recordings; automatic captions and 720p transcoding
+for uploads; GIF search; an offline message queue on the phone; a tablet navigation rail; a
+marketing landing page; and a published copyright/takedown policy.
 
-Paid offers have test checkout, a signed-webhook ledger, subscriptions, gifts, tickets and server-enforced access to mapped communities/posts/rooms/events. Active premium test access raises Content Studio/file attachment quotas and enables GIF avatars. Live billing is deliberately rejected. Read `web/BILLING.md` before configuring a sandbox, and `web/IDENTITY_SECURITY.md` before configuring authentication.
+Every provider-dependent feature is dormant-safe: it activates only when you set its keys, and
+refuses cleanly otherwise. `FEATURE-STATUS.md` is the current, complete status document — what is
+built, the exact keys each feature needs, and the short list of things that need a person (device
+testing, store enrollment, an accessibility audit).
 
-The website can be installed from a supporting desktop/mobile browser. Its offline screen keeps private member data out of the cache. This is an installable web app; no separate Windows/macOS executable is included.
-
-The remaining feature and launch limits are recorded in `RELEASE-9.md`. This release does **not** represent all 490 checklist items as complete.
+The website can be installed from a supporting desktop/mobile browser. Its offline screen keeps
+private member data out of the cache. This is an installable web app; no separate Windows/macOS
+executable is included.
 
 ## What's new in release 8: the redesign
 
@@ -99,7 +108,6 @@ cd mobile && npm run typecheck && npm run lint && npm test && npm run export:che
 - Photos, videos and voice notes are stored in the database unless you set the `KAMINO_S3_*` variables (see `web/.env.example`) to use an S3-compatible bucket such as Cloudflare R2. That was tested against a pretend bucket that checks request signatures and against AWS's published signing examples, **not against a real provider**. With a bucket, keep it private and turn on the bucket's own versioning/backup: `npm run backup` saves the database only, not the bucket's files.
 - Backups are a command you run (`npm run backup` in `web`), not something Kamino schedules for you: use your host's paid-database backups too.
 - Moderation is by people. Kamino gives leaders every tool, but nobody is watching your community unless you appoint them.
-- The website still has an older Coins wallet (tipping). It is not in the phone app and it goes against the "no coins" rule above; ask for it to be removed if you agree.
 - The AI is free but basic. It will sometimes pause a harmless post or miss a bad one, which is why a person always makes the final decision. It needs two free keys (see `DEPLOY.md`, step 4b); it was tested against a pretend AI service here, not against OpenAI or Groq themselves, and their free limits can change.
 - Role-play with characters from films and books is fan fiction. The storyteller is told to write original words and never copy lines or lyrics, but fan fiction of commercial characters still carries some legal risk if Kamino grows; ask a lawyer before promoting it.
 - The Privacy Policy and Terms are sensible drafts, **not legal advice**. Have them reviewed. The privacy page now explains the AI services (content is sent to OpenAI and Groq for checking and storytelling); make sure your lawyer sees that part too.
