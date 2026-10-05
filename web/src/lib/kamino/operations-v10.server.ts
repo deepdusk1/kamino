@@ -34,7 +34,7 @@ export async function seasonProgress(sql: Sql,userId: string,seasonId: number) {
   const rows=await sql.query<{points:number}>(`with activity as (
     select (p.created_at at time zone 'UTC')::date as day,'post' as kind,count(*)::int as count
       from posts p where p.author_user_id=$1 and coalesce(p.hidden,false)=false and p.type not in ('story','wiki')
-      and p.created_at>=$2::timestamptz and p.created_at<least($3::timestamptz,now()) group by day
+      and (p.publish_at is null or p.publish_at<=now()) and p.created_at>=$2::timestamptz and p.created_at<least($3::timestamptz,now()) group by day
     union all select (c.created_at at time zone 'UTC')::date,'comment',count(*)::int from comments c join posts p on p.id=c.post_id
       where c.author_user_id=$1 and coalesce(p.hidden,false)=false and c.created_at>=$2::timestamptz and c.created_at<least($3::timestamptz,now()) group by 1
     union all select d.day,'checkin',count(*)::int from community_checkin_days d
@@ -66,6 +66,8 @@ export async function decideCase(sql: Sql,actorId: string,input: {id:number;deci
     if(item.assigned_to && item.assigned_to!==actorId)throw new Error("Assign this case to yourself before deciding it.");
     let revision:unknown=null;
     if(input.decision==="suspended" || input.decision==="banned") {
+      const existing=(await tx.query<OperationRow>("select * from identity_account_status where user_id=$1 for update",[item.subject_id]))[0];
+      if(existing && (existing.status==='banned' || existing.status==='suspended' && (!existing.until || new Date(String(existing.until)).getTime()>Date.now())))throw new Error('This account already has an active sanction. Review that action before issuing another.');
       const until=input.decision==="suspended"?new Date(Date.now()+input.days*86400000).toISOString():null;
       const state=await tx.query<OperationRow>(`insert into identity_account_status(user_id,status,reason,until,actor_id)
         values($1,$2,$3,$4,$5) on conflict(user_id) do update set status=excluded.status,reason=excluded.reason,until=excluded.until,actor_id=excluded.actor_id,updated_at=now() returning revision`,[item.subject_id,input.decision,input.reason,until,actorId]);

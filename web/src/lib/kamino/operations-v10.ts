@@ -20,14 +20,15 @@ async function seasonRows(sql:Sql,userId:string){
 }
 export const getOperationsCenter=createServerFn({method:'GET'}).middleware([authMiddleware]).handler(async({context})=>{
   const sql=await internals.db(),userId=uid(context);
-  await internals.ensureProfile(sql,userId);
+  await internals.ensureProfile(sql,{userId,email:null,name:null});
   const p=(await sql`select email_digest from profiles where user_id=${userId}`)[0];
   const cases=jsonRows(await sql`select id,status,decision,public_reason,decided_at,created_at from moderation_cases where subject_id=${userId} order by id desc limit 100`);
   const appeals=jsonRows(await sql`select id,case_id,message,status,decision_note,created_at,decided_at from moderation_case_appeals where user_id=${userId} order by id desc limit 100`);
-  return {emailDigest:p?.email_digest===true,emailConfigured:Boolean(process.env.RESEND_API_KEY&&process.env.MAIL_FROM),pushConfigured:process.env.KAMINO_PUSH_ENABLED==='true',cases,appeals,seasons:await seasonRows(sql,userId),deliveries:jsonRows(await sql`select id,week_start,status,attempts,created_at,completed_at,last_error from email_digest_queue where user_id=${userId} order by id desc limit 12`),isAdmin:await isSiteAdmin(sql,userId)};
+  const events=jsonRows(await sql`select e.case_id,e.kind,e.note,e.created_at from moderation_case_events e join moderation_cases c on c.id=e.case_id where c.subject_id=${userId} and e.member_visible=true order by e.id desc limit 200`);
+  return {emailDigest:p?.email_digest===true,emailConfigured:Boolean(process.env.RESEND_API_KEY&&process.env.MAIL_FROM),pushConfigured:process.env.KAMINO_PUSH_ENABLED==='true',cases,appeals,events,seasons:await seasonRows(sql,userId),deliveries:jsonRows(await sql`select id,week_start,status,attempts,created_at,completed_at,last_error from email_digest_queue where user_id=${userId} order by id desc limit 12`),isAdmin:await isSiteAdmin(sql,userId)};
 });
 export const setEmailDigest=createServerFn({method:'POST'}).middleware([authMiddleware]).validator((value:boolean)=>z.boolean().parse(value)).handler(async({context,data})=>{
-  const sql=await internals.db(),userId=uid(context);await internals.ensureProfile(sql,userId);
+  const sql=await internals.db(),userId=uid(context);await internals.ensureProfile(sql,{userId,email:null,name:null});
   if(data){const u=(await sql`select "emailVerified" from "user" where id=${userId}`)[0];if(u?.emailVerified!==true)throw new Error('Verify your email address before enabling digests.');}
   await sql`update profiles set email_digest=${data} where user_id=${userId}`;
   if(!data)await sql`update email_digest_queue set status='cancelled',completed_at=now(),lease_token=null,lease_until=null where user_id=${userId} and status='pending'`;
@@ -127,12 +128,13 @@ export const createProgressionSeason=createServerFn({method:'POST'}).middleware(
 export const endProgressionSeason=createServerFn({method:'POST'}).middleware([authMiddleware]).validator((id:number)=>positive.parse(id)).handler(async({context,data})=>{const sql=await internals.db(),userId=uid(context);await admin(sql,userId);await sql`update progression_seasons set status='ended',ends_at=greatest(starts_at+interval '1 second',least(ends_at,now())) where id=${data}`;await sql`insert into platform_audit(actor_id,action,detail) values(${userId},'season.end',${String(data)})`;return {ok:true};});
 
 /** Signed-out sanctioned members can verify their email without opening general account access. */
-export const requestCaseAppealLink=createServerFn({method:'POST'}).validator((input:unknown)=>z.object({caseId:positive,email:z.email().max(254)}).parse(input)).handler(async({data})=>{
+export const requestCaseAppealLink=createServerFn({method:'POST'}).validator((input:unknown)=>z.object({caseId:positive.optional(),email:z.email().max(254)}).parse(input)).handler(async({data})=>{
   const {assertSameSiteRequest}=await import('@/lib/auth/isolation.server');assertSameSiteRequest();
   const {getRequest}=await import('@tanstack/react-start/server');const request=getRequest();await guard(`case-appeal:${request?.headers.get('x-forwarded-for')??'local'}`,'invite');
-  if(!process.env.RESEND_API_KEY||!process.env.MAIL_FROM)throw new Error('Email appeal links are not configured. Contact Kamino support.');
-  const sql=await internals.db();const row=(await sql`select c.subject_id from moderation_cases c join "user" u on u.id=c.subject_id where c.id=${data.caseId} and lower(u.email)=${data.email.toLowerCase()} and u."emailVerified"=true`)[0];
-  if(row){const expires=(Math.floor(Date.now()/3600000)+1)*3600000,proof=makeAppealProof({caseId:data.caseId,userId:String(row.subject_id),expires},process.env.BETTER_AUTH_SECRET??'');const origin=process.env.BETTER_AUTH_URL?.replace(/\/+$/,'');if(!origin)throw new Error('Email appeal links are not configured.');const {sendMailStrict}=await import('@/lib/auth/mailer.server');await sendMailStrict({to:data.email,subject:`Kamino case #${data.caseId}: review and appeal`,text:`Review your case and submit an appeal: ${origin}/appeal#proof=${proof}\n\nThis link expires within one hour. Do not share it.`},`kamino-case-${data.caseId}-${expires}`);}
+  const origin=process.env.BETTER_AUTH_URL?.replace(/\/+$/,'');
+  if(!process.env.RESEND_API_KEY||!process.env.MAIL_FROM||!origin||(process.env.BETTER_AUTH_SECRET??'').length<32)throw new Error('Email appeal links are not configured. Contact Kamino support.');
+  const sql=await internals.db();const row=(await sql`select c.id,c.subject_id from moderation_cases c join "user" u on u.id=c.subject_id where (${data.caseId??null}::bigint is null or c.id=${data.caseId??null}) and lower(u.email)=${data.email.toLowerCase()} and u."emailVerified"=true order by c.id desc limit 1`)[0];
+  if(row){const expires=(Math.floor(Date.now()/3600000)+1)*3600000,proof=makeAppealProof({caseId:Number(row.id),userId:String(row.subject_id),expires},process.env.BETTER_AUTH_SECRET??'');const {sendMailStrict}=await import('@/lib/auth/mailer.server');try{await sendMailStrict({to:data.email,subject:`Kamino case #${row.id}: review and appeal`,text:`Review your case and submit an appeal: ${origin}/appeal#proof=${proof}\n\nThis link expires within one hour. Do not share it.`},`kamino-case-${row.id}-${expires}`);}catch{console.warn('[case-appeal] Email provider did not accept the appeal link.');}}
   return {ok:true,message:'If the verified email matches this case, an appeal link has been sent.'};
 });
 export const getVerifiedCaseAppeal=createServerFn({method:'POST'}).validator((proof:string)=>z.string().max(1000).parse(proof)).handler(async({data})=>{

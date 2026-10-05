@@ -23,6 +23,8 @@ export const searchMediaLibrary = createServerFn({method:"GET"})
     const query=`%${data.query.replace(/[\\%_]/g,"\\$&")}%`;
     const rows=await sql`select id,kind,title,artist,tags,filename,alt_text,licensed,license_url,owner_id from media_library
       where kind=${data.kind} and (owner_id=${context.userId} or licensed=true)
+      and not exists(select 1 from identity_account_status a where a.user_id=media_library.owner_id and a.status<>'active' and (a.until is null or a.until>now()))
+      and not exists(select 1 from blocks b where (b.blocker_id=${context.userId} and b.blocked_id=media_library.owner_id) or (b.blocked_id=${context.userId} and b.blocker_id=media_library.owner_id))
       and (title ilike ${query} or tags ilike ${query} or artist ilike ${query}) order by id desc limit 60`;
     return {items:rows.map(r=>({id:Number(r.id),kind:String(r.kind),title:String(r.title),artist:String(r.artist),tags:String(r.tags),filename:String(r.filename),altText:String(r.alt_text),licensed:asBool(r.licensed),mine:r.owner_id===context.userId,licenseUrl:String(r.license_url),url:`/api/v1/library-media/${r.id}`}))};
   });
@@ -42,16 +44,16 @@ export const saveMediaLibraryItem = createServerFn({method:"POST"})
     }
     const verdict=await checkContent({text:`${data.title}\n${data.artist}\n${data.tags}\n${data.altText}`,images:data.kind==="gif"?[data.dataUrl]:[],ageGate:13});
     if(verdict.action)throw new Error("Edit this library item before saving it; it did not pass the safety checks.");
-    return withStoryOwnerLock(sql,userId,async tx=>{
+    let ref:string|null=null;
+    try{return await withStoryOwnerLock(sql,userId,async tx=>{
+      await internals.requireMinAge(tx,userId);
       const total=Number((await tx`select count(*)::int as total from media_library where owner_id=${userId}`)[0]!.total);
       if(total>=100)throw new Error("Your library holds up to 100 files. Remove an old file first.");
-      const ref=await storeMedia("content",data.dataUrl);
-      try{
+      ref=await storeMedia("content",data.dataUrl);
         const row=(await tx`insert into media_library(owner_id,kind,title,artist,tags,storage_ref,mime,byte_size,filename,alt_text,licensed,license_url)
           values(${userId},${data.kind},${data.title},${data.artist},${data.tags},${ref},${checked.mime},${checked.bytes},${safeFilename(data.filename)},${data.altText},${data.licensed},${data.licensed?data.licenseUrl:""}) returning id`)[0]!;
         return {id:Number(row.id)};
-      }catch(error){await deleteMedia([ref]);throw error;}
-    });
+    });}catch(error){if(ref)await deleteMedia([ref]);throw error;}
   });
 
 export const getMediaLibraryFile = createServerFn({method:"GET"})
@@ -84,19 +86,19 @@ export const shortVideoFeed = createServerFn({method:"GET"})
   .handler(async({context,data})=>{
     const sql=await internals.db(),viewer=context.userId;
     await internals.requireMinAge(sql,viewer);
-    const candidates=await sql`select p.id,p.title,p.body,p.community_id,p.author_user_id,p.content_warning,
+    const candidates=await sql.query(`select p.id,p.title,p.body,p.community_id,p.author_user_id,p.content_warning,
       m.id as media_id,m.filename,m.alt_text,m.captions,pr.handle,pr.display_name
       from posts p join content_media m on m.post_id=p.id and m.kind='short'
       join profiles pr on pr.user_id=p.author_user_id
-      where p.id<${data.before??Number.MAX_SAFE_INTEGER} and (${data.slug??null}::text is null or p.community_id=${data.slug??""})
-      and not exists(select 1 from post_personal_settings ps where ps.post_id=p.id and ps.user_id=${viewer} and ps.hidden=true)
-      order by p.id desc limit 100`;
+      where p.id<$2 and ($3::text is null or p.community_id=$3) and p.hidden=false
+      and (p.expires_at is null or p.expires_at>now()) and (${internals.visiblePosts("$1","p")})
+      order by p.id desc limit 100`,[viewer,data.before??Number.MAX_SAFE_INTEGER,data.slug??null]);
     const settings=(await sql`select sensitive_content from profiles where user_id=${viewer}`)[0];
     const items:{id:number;title:string;body:string;slug:string;handle:string;displayName:string;warning:string;blur:boolean;media:{id:number;kind:string;filename:string;altText:string;captions:string;url:string}}[]=[];
     let scanned=0;
     for(const row of candidates){
       scanned++;
-      try{await internals.requirePostAccess(sql,viewer,Number(row.id));}
+      try{await internals.requirePostAccess(sql,viewer,Number(row.id));await internals.assertAccountAllowed(sql,String(row.author_user_id));}
       catch{continue;}
       items.push({id:Number(row.id),title:String(row.title),body:String(row.body),slug:String(row.community_id),handle:String(row.handle),displayName:String(row.display_name),warning:String(row.content_warning),blur:!!row.content_warning&&settings?.sensitive_content!=="show",media:{id:Number(row.media_id),kind:"short",filename:String(row.filename),altText:String(row.alt_text),captions:String(row.captions),url:`/api/v1/content-media/${row.media_id}`}});
       if(items.length===12)break;

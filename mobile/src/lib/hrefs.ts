@@ -4,6 +4,11 @@
  */
 export function appHrefFromServerHref(href: string): string {
   if(href==='/') return '/';
+  if(href==='/admin/operations') return '/admin-operations';
+  if(['/connections','/media-library','/short-videos','/smart-search','/operations','/admin-analytics'].includes(href)) return href;
+  if(href.startsWith('/appeal#proof=')) return '/appeal?proof='+encodeURIComponent(href.slice('/appeal#proof='.length));
+  const group = /^\/groups\/(\d+)$/.exec(href);
+  if(group) return `/groups/${group[1]}`;
   if(href==='/support') return '/tools?tab=support';
   if(href==='/creator') return '/tools?tab=creator';
   if(href==='/discover-plus') return '/tools?tab=discovery';

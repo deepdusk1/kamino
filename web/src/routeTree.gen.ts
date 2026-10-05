@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin-analytics'
+import { Route as AppealRouteImport } from './routes/appeal'
 import { Route as CaptchaRouteImport } from './routes/captcha'
 import { Route as ChatsRouteImport } from './routes/chats'
+import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as ContentStudioRouteImport } from './routes/content-studio'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
@@ -25,9 +27,11 @@ import { Route as KitRouteImport } from './routes/kit'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MarketplaceRouteImport } from './routes/marketplace'
 import { Route as MeRouteImport } from './routes/me'
+import { Route as MediaLibraryRouteImport } from './routes/media-library'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PrivacyDashboardRouteImport } from './routes/privacy-dashboard'
 import { Route as ProfileStoriesRouteImport } from './routes/profile-stories'
@@ -36,17 +40,21 @@ import { Route as SafetyRouteImport } from './routes/safety'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ShortVideosRouteImport } from './routes/short-videos'
+import { Route as SmartSearchRouteImport } from './routes/smart-search'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TutorialRouteImport } from './routes/tutorial'
 import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as ApiRtcRouteImport } from './routes/api/rtc'
 import { Route as CSlugRouteImport } from './routes/c/$slug'
 import { Route as ChatsIndexRouteImport } from './routes/chats/index'
 import { Route as ChatsRoomIdRouteImport } from './routes/chats/$roomId'
+import { Route as GroupsRoomIdRouteImport } from './routes/groups/$roomId'
 import { Route as InviteCodeRouteImport } from './routes/invite/$code'
 import { Route as UHandleRouteImport } from './routes/u/$handle'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -64,6 +72,7 @@ import { Route as ApiV1AuthMobileCallbackRouteImport } from './routes/api/v1/aut
 import { Route as ApiV1AuthMobileStartRouteImport } from './routes/api/v1/auth/mobile-start'
 import { Route as ApiV1BillingStripeWebhookRouteImport } from './routes/api/v1/billing/stripe-webhook'
 import { Route as ApiV1ContentMediaMediaIdRouteImport } from './routes/api/v1/content-media/$mediaId'
+import { Route as ApiV1LibraryMediaLibraryIdRouteImport } from './routes/api/v1/library-media/$libraryId'
 import { Route as ApiV1ProfileStoryMediaStoryIdRouteImport } from './routes/api/v1/profile-story-media/$storyId'
 import { Route as ApiV1RpcNameRouteImport } from './routes/api/v1/rpc/$name'
 import { Route as CSlugPPostIdRouteImport } from './routes/c/$slug/p/$postId'
@@ -90,6 +99,11 @@ const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   path: '/admin-analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppealRoute = AppealRouteImport.update({
+  id: '/appeal',
+  path: '/appeal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CaptchaRoute = CaptchaRouteImport.update({
   id: '/captcha',
   path: '/captcha',
@@ -98,6 +112,11 @@ const CaptchaRoute = CaptchaRouteImport.update({
 const ChatsRoute = ChatsRouteImport.update({
   id: '/chats',
   path: '/chats',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConnectionsRoute = ConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContentStudioRoute = ContentStudioRouteImport.update({
@@ -155,6 +174,11 @@ const MeRoute = MeRouteImport.update({
   path: '/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MediaLibraryRoute = MediaLibraryRouteImport.update({
+  id: '/media-library',
+  path: '/media-library',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -168,6 +192,11 @@ const NotificationsRoute = NotificationsRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsRoute = OperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -210,6 +239,16 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShortVideosRoute = ShortVideosRouteImport.update({
+  id: '/short-videos',
+  path: '/short-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SmartSearchRoute = SmartSearchRouteImport.update({
+  id: '/smart-search',
+  path: '/smart-search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
@@ -234,6 +273,11 @@ const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminOperationsRoute = AdminOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminReportsRoute = AdminReportsRouteImport.update({
   id: '/reports',
@@ -264,6 +308,11 @@ const ChatsRoomIdRoute = ChatsRoomIdRouteImport.update({
   id: '/$roomId',
   path: '/$roomId',
   getParentRoute: () => ChatsRoute,
+} as any)
+const GroupsRoomIdRoute = GroupsRoomIdRouteImport.update({
+  id: '/groups/$roomId',
+  path: '/groups/$roomId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const InviteCodeRoute = InviteCodeRouteImport.update({
   id: '/invite/$code',
@@ -352,6 +401,12 @@ const ApiV1ContentMediaMediaIdRoute =
     path: '/api/v1/content-media/$mediaId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1LibraryMediaLibraryIdRoute =
+  ApiV1LibraryMediaLibraryIdRouteImport.update({
+    id: '/api/v1/library-media/$libraryId',
+    path: '/api/v1/library-media/$libraryId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1ProfileStoryMediaStoryIdRoute =
   ApiV1ProfileStoryMediaStoryIdRouteImport.update({
     id: '/api/v1/profile-story-media/$storyId',
@@ -411,8 +466,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin-analytics': typeof AdminAnalyticsRoute
+  '/appeal': typeof AppealRoute
   '/captcha': typeof CaptchaRoute
   '/chats': typeof ChatsRouteWithChildren
+  '/connections': typeof ConnectionsRoute
   '/content-studio': typeof ContentStudioRoute
   '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
@@ -424,9 +481,11 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/marketplace': typeof MarketplaceRoute
   '/me': typeof MeRoute
+  '/media-library': typeof MediaLibraryRoute
   '/new': typeof NewRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
+  '/operations': typeof OperationsRoute
   '/privacy': typeof PrivacyRoute
   '/privacy-dashboard': typeof PrivacyDashboardRoute
   '/profile-stories': typeof ProfileStoriesRoute
@@ -435,16 +494,20 @@ export interface FileRoutesByFullPath {
   '/saved': typeof SavedRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/short-videos': typeof ShortVideosRoute
+  '/smart-search': typeof SmartSearchRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/tutorial': typeof TutorialRoute
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
+  '/groups/$roomId': typeof GroupsRoomIdRoute
   '/invite/$code': typeof InviteCodeRoute
   '/u/$handle': typeof UHandleRoute
   '/chats/': typeof ChatsIndexRoute
@@ -463,6 +526,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/auth/mobile-start': typeof ApiV1AuthMobileStartRoute
   '/api/v1/billing/stripe-webhook': typeof ApiV1BillingStripeWebhookRoute
   '/api/v1/content-media/$mediaId': typeof ApiV1ContentMediaMediaIdRoute
+  '/api/v1/library-media/$libraryId': typeof ApiV1LibraryMediaLibraryIdRoute
   '/api/v1/profile-story-media/$storyId': typeof ApiV1ProfileStoryMediaStoryIdRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
@@ -478,7 +542,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin-analytics': typeof AdminAnalyticsRoute
+  '/appeal': typeof AppealRoute
   '/captcha': typeof CaptchaRoute
+  '/connections': typeof ConnectionsRoute
   '/content-studio': typeof ContentStudioRoute
   '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
@@ -490,9 +556,11 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/marketplace': typeof MarketplaceRoute
   '/me': typeof MeRoute
+  '/media-library': typeof MediaLibraryRoute
   '/new': typeof NewRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
+  '/operations': typeof OperationsRoute
   '/privacy': typeof PrivacyRoute
   '/privacy-dashboard': typeof PrivacyDashboardRoute
   '/profile-stories': typeof ProfileStoriesRoute
@@ -501,15 +569,19 @@ export interface FileRoutesByTo {
   '/saved': typeof SavedRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/short-videos': typeof ShortVideosRoute
+  '/smart-search': typeof SmartSearchRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/tutorial': typeof TutorialRoute
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/chats/$roomId': typeof ChatsRoomIdRoute
+  '/groups/$roomId': typeof GroupsRoomIdRoute
   '/invite/$code': typeof InviteCodeRoute
   '/u/$handle': typeof UHandleRoute
   '/chats': typeof ChatsIndexRoute
@@ -528,6 +600,7 @@ export interface FileRoutesByTo {
   '/api/v1/auth/mobile-start': typeof ApiV1AuthMobileStartRoute
   '/api/v1/billing/stripe-webhook': typeof ApiV1BillingStripeWebhookRoute
   '/api/v1/content-media/$mediaId': typeof ApiV1ContentMediaMediaIdRoute
+  '/api/v1/library-media/$libraryId': typeof ApiV1LibraryMediaLibraryIdRoute
   '/api/v1/profile-story-media/$storyId': typeof ApiV1ProfileStoryMediaStoryIdRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
@@ -544,8 +617,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin-analytics': typeof AdminAnalyticsRoute
+  '/appeal': typeof AppealRoute
   '/captcha': typeof CaptchaRoute
   '/chats': typeof ChatsRouteWithChildren
+  '/connections': typeof ConnectionsRoute
   '/content-studio': typeof ContentStudioRoute
   '/creator': typeof CreatorRoute
   '/delete-account': typeof DeleteAccountRoute
@@ -557,9 +632,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/marketplace': typeof MarketplaceRoute
   '/me': typeof MeRoute
+  '/media-library': typeof MediaLibraryRoute
   '/new': typeof NewRoute
   '/notifications': typeof NotificationsRoute
   '/onboarding': typeof OnboardingRoute
+  '/operations': typeof OperationsRoute
   '/privacy': typeof PrivacyRoute
   '/privacy-dashboard': typeof PrivacyDashboardRoute
   '/profile-stories': typeof ProfileStoriesRoute
@@ -568,16 +645,20 @@ export interface FileRoutesById {
   '/saved': typeof SavedRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/short-videos': typeof ShortVideosRoute
+  '/smart-search': typeof SmartSearchRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/tutorial': typeof TutorialRoute
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
+  '/groups/$roomId': typeof GroupsRoomIdRoute
   '/invite/$code': typeof InviteCodeRoute
   '/u/$handle': typeof UHandleRoute
   '/chats/': typeof ChatsIndexRoute
@@ -596,6 +677,7 @@ export interface FileRoutesById {
   '/api/v1/auth/mobile-start': typeof ApiV1AuthMobileStartRoute
   '/api/v1/billing/stripe-webhook': typeof ApiV1BillingStripeWebhookRoute
   '/api/v1/content-media/$mediaId': typeof ApiV1ContentMediaMediaIdRoute
+  '/api/v1/library-media/$libraryId': typeof ApiV1LibraryMediaLibraryIdRoute
   '/api/v1/profile-story-media/$storyId': typeof ApiV1ProfileStoryMediaStoryIdRoute
   '/api/v1/rpc/$name': typeof ApiV1RpcNameRoute
   '/c/$slug/p/$postId': typeof CSlugPPostIdRoute
@@ -613,8 +695,10 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/admin-analytics'
+    | '/appeal'
     | '/captcha'
     | '/chats'
+    | '/connections'
     | '/content-studio'
     | '/creator'
     | '/delete-account'
@@ -626,9 +710,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/marketplace'
     | '/me'
+    | '/media-library'
     | '/new'
     | '/notifications'
     | '/onboarding'
+    | '/operations'
     | '/privacy'
     | '/privacy-dashboard'
     | '/profile-stories'
@@ -637,16 +723,20 @@ export interface FileRouteTypes {
     | '/saved'
     | '/security'
     | '/settings'
+    | '/short-videos'
+    | '/smart-search'
     | '/support'
     | '/terms'
     | '/tutorial'
     | '/wallet'
     | '/welcome'
+    | '/admin/operations'
     | '/admin/reports'
     | '/admin/safety'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
+    | '/groups/$roomId'
     | '/invite/$code'
     | '/u/$handle'
     | '/chats/'
@@ -665,6 +755,7 @@ export interface FileRouteTypes {
     | '/api/v1/auth/mobile-start'
     | '/api/v1/billing/stripe-webhook'
     | '/api/v1/content-media/$mediaId'
+    | '/api/v1/library-media/$libraryId'
     | '/api/v1/profile-story-media/$storyId'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
@@ -680,7 +771,9 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/admin-analytics'
+    | '/appeal'
     | '/captcha'
+    | '/connections'
     | '/content-studio'
     | '/creator'
     | '/delete-account'
@@ -692,9 +785,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/marketplace'
     | '/me'
+    | '/media-library'
     | '/new'
     | '/notifications'
     | '/onboarding'
+    | '/operations'
     | '/privacy'
     | '/privacy-dashboard'
     | '/profile-stories'
@@ -703,15 +798,19 @@ export interface FileRouteTypes {
     | '/saved'
     | '/security'
     | '/settings'
+    | '/short-videos'
+    | '/smart-search'
     | '/support'
     | '/terms'
     | '/tutorial'
     | '/wallet'
     | '/welcome'
+    | '/admin/operations'
     | '/admin/reports'
     | '/admin/safety'
     | '/api/rtc'
     | '/chats/$roomId'
+    | '/groups/$roomId'
     | '/invite/$code'
     | '/u/$handle'
     | '/chats'
@@ -730,6 +829,7 @@ export interface FileRouteTypes {
     | '/api/v1/auth/mobile-start'
     | '/api/v1/billing/stripe-webhook'
     | '/api/v1/content-media/$mediaId'
+    | '/api/v1/library-media/$libraryId'
     | '/api/v1/profile-story-media/$storyId'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
@@ -745,8 +845,10 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/admin-analytics'
+    | '/appeal'
     | '/captcha'
     | '/chats'
+    | '/connections'
     | '/content-studio'
     | '/creator'
     | '/delete-account'
@@ -758,9 +860,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/marketplace'
     | '/me'
+    | '/media-library'
     | '/new'
     | '/notifications'
     | '/onboarding'
+    | '/operations'
     | '/privacy'
     | '/privacy-dashboard'
     | '/profile-stories'
@@ -769,16 +873,20 @@ export interface FileRouteTypes {
     | '/saved'
     | '/security'
     | '/settings'
+    | '/short-videos'
+    | '/smart-search'
     | '/support'
     | '/terms'
     | '/tutorial'
     | '/wallet'
     | '/welcome'
+    | '/admin/operations'
     | '/admin/reports'
     | '/admin/safety'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
+    | '/groups/$roomId'
     | '/invite/$code'
     | '/u/$handle'
     | '/chats/'
@@ -797,6 +905,7 @@ export interface FileRouteTypes {
     | '/api/v1/auth/mobile-start'
     | '/api/v1/billing/stripe-webhook'
     | '/api/v1/content-media/$mediaId'
+    | '/api/v1/library-media/$libraryId'
     | '/api/v1/profile-story-media/$storyId'
     | '/api/v1/rpc/$name'
     | '/c/$slug/p/$postId'
@@ -813,8 +922,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  AppealRoute: typeof AppealRoute
   CaptchaRoute: typeof CaptchaRoute
   ChatsRoute: typeof ChatsRouteWithChildren
+  ConnectionsRoute: typeof ConnectionsRoute
   ContentStudioRoute: typeof ContentStudioRoute
   CreatorRoute: typeof CreatorRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
@@ -826,9 +937,11 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MarketplaceRoute: typeof MarketplaceRoute
   MeRoute: typeof MeRoute
+  MediaLibraryRoute: typeof MediaLibraryRoute
   NewRoute: typeof NewRoute
   NotificationsRoute: typeof NotificationsRoute
   OnboardingRoute: typeof OnboardingRoute
+  OperationsRoute: typeof OperationsRoute
   PrivacyRoute: typeof PrivacyRoute
   PrivacyDashboardRoute: typeof PrivacyDashboardRoute
   ProfileStoriesRoute: typeof ProfileStoriesRoute
@@ -837,6 +950,8 @@ export interface RootRouteChildren {
   SavedRoute: typeof SavedRoute
   SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRoute
+  ShortVideosRoute: typeof ShortVideosRoute
+  SmartSearchRoute: typeof SmartSearchRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
   TutorialRoute: typeof TutorialRoute
@@ -844,6 +959,7 @@ export interface RootRouteChildren {
   WelcomeRoute: typeof WelcomeRoute
   ApiRtcRoute: typeof ApiRtcRoute
   CSlugRoute: typeof CSlugRouteWithChildren
+  GroupsRoomIdRoute: typeof GroupsRoomIdRoute
   InviteCodeRoute: typeof InviteCodeRoute
   UHandleRoute: typeof UHandleRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -852,6 +968,7 @@ export interface RootRouteChildren {
   ApiV1AuthMobileStartRoute: typeof ApiV1AuthMobileStartRoute
   ApiV1BillingStripeWebhookRoute: typeof ApiV1BillingStripeWebhookRoute
   ApiV1ContentMediaMediaIdRoute: typeof ApiV1ContentMediaMediaIdRoute
+  ApiV1LibraryMediaLibraryIdRoute: typeof ApiV1LibraryMediaLibraryIdRoute
   ApiV1ProfileStoryMediaStoryIdRoute: typeof ApiV1ProfileStoryMediaStoryIdRoute
   ApiV1RpcNameRoute: typeof ApiV1RpcNameRoute
   ApiV1MediaAvatarUserIdRoute: typeof ApiV1MediaAvatarUserIdRoute
@@ -884,6 +1001,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/appeal': {
+      id: '/appeal'
+      path: '/appeal'
+      fullPath: '/appeal'
+      preLoaderRoute: typeof AppealRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/captcha': {
       id: '/captcha'
       path: '/captcha'
@@ -896,6 +1020,13 @@ declare module '@tanstack/react-router' {
       path: '/chats'
       fullPath: '/chats'
       preLoaderRoute: typeof ChatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/connections': {
+      id: '/connections'
+      path: '/connections'
+      fullPath: '/connections'
+      preLoaderRoute: typeof ConnectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/content-studio': {
@@ -975,6 +1106,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/media-library': {
+      id: '/media-library'
+      path: '/media-library'
+      fullPath: '/media-library'
+      preLoaderRoute: typeof MediaLibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/new': {
       id: '/new'
       path: '/new'
@@ -994,6 +1132,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations': {
+      id: '/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof OperationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1052,6 +1197,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/short-videos': {
+      id: '/short-videos'
+      path: '/short-videos'
+      fullPath: '/short-videos'
+      preLoaderRoute: typeof ShortVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/smart-search': {
+      id: '/smart-search'
+      path: '/smart-search'
+      fullPath: '/smart-search'
+      preLoaderRoute: typeof SmartSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/support': {
       id: '/support'
       path: '/support'
@@ -1086,6 +1245,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/operations': {
+      id: '/admin/operations'
+      path: '/operations'
+      fullPath: '/admin/operations'
+      preLoaderRoute: typeof AdminOperationsRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/reports': {
       id: '/admin/reports'
@@ -1128,6 +1294,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/chats/$roomId'
       preLoaderRoute: typeof ChatsRoomIdRouteImport
       parentRoute: typeof ChatsRoute
+    }
+    '/groups/$roomId': {
+      id: '/groups/$roomId'
+      path: '/groups/$roomId'
+      fullPath: '/groups/$roomId'
+      preLoaderRoute: typeof GroupsRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/invite/$code': {
       id: '/invite/$code'
@@ -1248,6 +1421,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ContentMediaMediaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/library-media/$libraryId': {
+      id: '/api/v1/library-media/$libraryId'
+      path: '/api/v1/library-media/$libraryId'
+      fullPath: '/api/v1/library-media/$libraryId'
+      preLoaderRoute: typeof ApiV1LibraryMediaLibraryIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/profile-story-media/$storyId': {
       id: '/api/v1/profile-story-media/$storyId'
       path: '/api/v1/profile-story-media/$storyId'
@@ -1322,11 +1502,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminOperationsRoute: typeof AdminOperationsRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSafetyRoute: typeof AdminSafetyRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminOperationsRoute: AdminOperationsRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminSafetyRoute: AdminSafetyRoute,
 }
@@ -1381,8 +1563,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   AdminAnalyticsRoute: AdminAnalyticsRoute,
+  AppealRoute: AppealRoute,
   CaptchaRoute: CaptchaRoute,
   ChatsRoute: ChatsRouteWithChildren,
+  ConnectionsRoute: ConnectionsRoute,
   ContentStudioRoute: ContentStudioRoute,
   CreatorRoute: CreatorRoute,
   DeleteAccountRoute: DeleteAccountRoute,
@@ -1394,9 +1578,11 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MarketplaceRoute: MarketplaceRoute,
   MeRoute: MeRoute,
+  MediaLibraryRoute: MediaLibraryRoute,
   NewRoute: NewRoute,
   NotificationsRoute: NotificationsRoute,
   OnboardingRoute: OnboardingRoute,
+  OperationsRoute: OperationsRoute,
   PrivacyRoute: PrivacyRoute,
   PrivacyDashboardRoute: PrivacyDashboardRoute,
   ProfileStoriesRoute: ProfileStoriesRoute,
@@ -1405,6 +1591,8 @@ const rootRouteChildren: RootRouteChildren = {
   SavedRoute: SavedRoute,
   SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRoute,
+  ShortVideosRoute: ShortVideosRoute,
+  SmartSearchRoute: SmartSearchRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
   TutorialRoute: TutorialRoute,
@@ -1412,6 +1600,7 @@ const rootRouteChildren: RootRouteChildren = {
   WelcomeRoute: WelcomeRoute,
   ApiRtcRoute: ApiRtcRoute,
   CSlugRoute: CSlugRouteWithChildren,
+  GroupsRoomIdRoute: GroupsRoomIdRoute,
   InviteCodeRoute: InviteCodeRoute,
   UHandleRoute: UHandleRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
@@ -1420,6 +1609,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1AuthMobileStartRoute: ApiV1AuthMobileStartRoute,
   ApiV1BillingStripeWebhookRoute: ApiV1BillingStripeWebhookRoute,
   ApiV1ContentMediaMediaIdRoute: ApiV1ContentMediaMediaIdRoute,
+  ApiV1LibraryMediaLibraryIdRoute: ApiV1LibraryMediaLibraryIdRoute,
   ApiV1ProfileStoryMediaStoryIdRoute: ApiV1ProfileStoryMediaStoryIdRoute,
   ApiV1RpcNameRoute: ApiV1RpcNameRoute,
   ApiV1MediaAvatarUserIdRoute: ApiV1MediaAvatarUserIdRoute,

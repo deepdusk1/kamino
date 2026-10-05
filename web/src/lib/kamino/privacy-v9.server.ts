@@ -62,8 +62,22 @@ export async function exportV9PersonalData(sql: Sql, userId: string, readMedia: 
     mutes: "select * from member_mutes where user_id=$1",
     appeals: "select * from appeals where user_id=$1",
     activityDays: "select active_on from daily_member_activity where user_id=$1 order by active_on",
-    profileStories: "select id,caption,background,audience,minimum_age,content_warning,highlighted,hidden,kind,filename,mime,byte_size,alt_text,captions,question,poll_options,created_at,expires_at from profile_stories where owner_id=$1",
+    profileStories: "select id,caption,background,audience,minimum_age,content_warning,highlighted,hidden,kind,filename,mime,byte_size,alt_text,captions,question,poll_options,layers,created_at,expires_at from profile_stories where owner_id=$1",
     profileStoryResponses: "select * from profile_story_responses where user_id=$1",
+    friendships: "select * from friend_requests where sender_id=$1 or recipient_id=$1",
+    groupInvitations: "select * from group_invitations where user_id=$1 or invited_by=$1",
+    eventUpdates: "select * from event_timeline where author_id=$1",
+    attendancePasses: "select * from event_passes where user_id=$1",
+    emailDigestPreference: "select email_digest from profiles where user_id=$1",
+    pushDeliveryHistory: "select notification_id,status,attempts,receipt_checks,created_at,completed_at from push_delivery_queue where user_id=$1",
+    emailDigestHistory: "select week_start,status,attempts,post_count,reply_count,created_at,completed_at from email_digest_queue where user_id=$1",
+    moderationCases: "select id,priority,status,decision,public_reason,created_at,decided_at from moderation_cases where subject_id=$1",
+    moderationCaseUpdates: "select e.case_id,e.kind,e.note,e.created_at from moderation_case_events e join moderation_cases c on c.id=e.case_id where c.subject_id=$1 and e.member_visible=true",
+    moderationCaseAppeals: "select case_id,message,status,decision_note,created_at,decided_at from moderation_case_appeals where user_id=$1",
+    experimentAssignments: "select experiment_id,variant,exposed_at,converted_at from experiment_assignments where user_id=$1",
+    collectibles: "select a.set_id,a.awarded_at,s.title,s.description,s.cosmetic from collectible_awards a join collectible_sets s on s.id=a.set_id where a.user_id=$1",
+    semanticPreferences: "select namespace,embedding,enabled,updated_at from semantic_preferences where user_id=$1",
+    semanticIndex: "select kind,target_id,revision,chunk_index,embedding,indexed_at from semantic_documents where owner_id=$1",
   };
   const entries = await Promise.all(Object.entries(queries).map(async ([key, query]) => [key, await sql.query<Row>(query, [userId])] as const));
   const contentRows = await sql.query<Row>(`select cm.* from content_media cm
@@ -75,6 +89,11 @@ export async function exportV9PersonalData(sql: Sql, userId: string, readMedia: 
     catch { return { ...metadata, data_url: "", unavailable: true }; }
   }));
   const pictures: Record<string, Row[]> = {};
+  const mediaLibrary = await Promise.all((await sql.query<Row>('select * from media_library where owner_id=$1', [userId])).map(async row => {
+    const {storage_ref: reference,...metadata}=row;
+    try{return {...metadata,data_url:await readMedia(String(reference)),unavailable:false};}
+    catch{return {...metadata,data_url:'',unavailable:true};}
+  }));
   const storyMedia = await Promise.all((await sql.query<Row>('select id,media_ref from profile_stories where owner_id=$1 and media_ref is not null', [userId])).map(async row => {
     try { return { storyId:Number(row.id),data_url:await readMedia(String(row.media_ref)),unavailable:false }; }
     catch { return { storyId:Number(row.id),data_url:'',unavailable:true }; }
@@ -85,7 +104,7 @@ export async function exportV9PersonalData(sql: Sql, userId: string, readMedia: 
       catch { return { ...row, data_url: "", unavailable: true }; }
     }));
   }
-  const result = { version: 9, ...Object.fromEntries(entries), contentMedia, storyMedia, profilePictures: pictures };
+  const result = { version: 10, ...Object.fromEntries(entries), contentMedia, storyMedia, mediaLibrary, profilePictures: pictures };
   return result as typeof result & Record<string, unknown>;
 }
 
@@ -97,12 +116,33 @@ export async function prepareV9AccountDeletion(sql: Sql, userId: string, options
   const media = await sql.query<{ storage_ref: string }>(`select cm.storage_ref from content_media cm
     left join posts p on p.id=cm.post_id left join messages m on m.id=cm.message_id
     where p.author_user_id=$1 or m.author_user_id=$1
-    union all select media_ref as storage_ref from profile_stories where owner_id=$1 and media_ref is not null`, [userId]);
+    union all select media_ref as storage_ref from profile_stories where owner_id=$1 and media_ref is not null
+    union all select storage_ref from media_library where owner_id=$1`, [userId]);
   await stageMediaDeletion(sql, media.map(row => row.storage_ref));
   await sql.query(`delete from content_media where post_id in(select id from posts where author_user_id=$1)
     or message_id in(select id from messages where author_user_id=$1)`, [userId]);
   await sql.query(`delete from post_view_events where viewer_key=$1 or post_id in(select id from posts where author_user_id=$1)`, [userId]);
   await sql`delete from profile_stories where owner_id=${userId}`;
+  await sql`delete from media_library where owner_id=${userId}`;
+  await sql`delete from semantic_documents where owner_id=${userId}`;
+  await sql`delete from semantic_preferences where user_id=${userId}`;
+  // Case records survive for accountable decisions, with personal text and identity removed.
+  await sql`update moderation_case_events set actor_id=case when actor_id=${userId} then ${pseudonym} else actor_id end,
+    note='[Redacted after account deletion]' where actor_id=${userId} or case_id in(select id from moderation_cases where subject_id=${userId})`;
+  await sql`update moderation_case_appeals set user_id=case when user_id=${userId} then ${pseudonym} else user_id end,
+    decided_by=case when decided_by=${userId} then ${pseudonym} else decided_by end,
+    message=case when user_id=${userId} then '[Redacted after account deletion]' else message end,
+    decision_note=case when user_id=${userId} then '[Redacted after account deletion]' else decision_note end
+    where user_id=${userId} or decided_by=${userId}`;
+  await sql`update moderation_cases set subject_id=case when subject_id=${userId} then ${pseudonym} else subject_id end,
+    opened_by=case when opened_by=${userId} then ${pseudonym} else opened_by end,
+    assigned_to=case when assigned_to=${userId} then null else assigned_to end,
+    decided_by=case when decided_by=${userId} then ${pseudonym} else decided_by end,
+    summary=case when subject_id=${userId} then '[Redacted after account deletion]' else summary end,
+    public_reason=case when subject_id=${userId} then '[Redacted after account deletion]' else public_reason end
+    where subject_id=${userId} or opened_by=${userId} or assigned_to=${userId} or decided_by=${userId}`;
+  await sql`update platform_experiments set created_by=${pseudonym} where created_by=${userId}`;
+  await sql`update progression_seasons set created_by=${pseudonym} where created_by=${userId}`;
 
   // Close pending slots before replacing identities, avoiding uniqueness collisions and late fulfillment.
   await sql`update billing_orders set status='cancelled',privacy_closed=true,billing_revision=billing_revision+1,updated_at=now()
@@ -138,11 +178,11 @@ export async function prepareV9AccountDeletion(sql: Sql, userId: string, options
   // A surviving group needs a real owner for member management and message pinning.
   await sql.query(`update chat_rooms room set created_by=(
     select member.user_id from chat_members member join profiles p on p.user_id=member.user_id
-    where member.room_id=room.id and member.user_id<>$1
-    order by member.user_id limit 1)
+    where member.room_id=room.id and member.user_id<>$1 and member.room_removed=false
+    order by case member.group_role when 'coadmin' then 0 when 'moderator' then 1 else 2 end,member.user_id limit 1)
     where room.kind='group' and room.created_by=$1
       and exists(select 1 from chat_members member join profiles p on p.user_id=member.user_id
-        where member.room_id=room.id and member.user_id<>$1)`, [userId]);
+        where member.room_id=room.id and member.user_id<>$1 and member.room_removed=false)`, [userId]);
   for (const [table, column] of [["community_faqs", "updated_by"], ["community_boards", "created_by"], ["community_quests", "created_by"], ["events", "created_by"], ["chat_rooms", "created_by"], ["communities", "created_by"]] as const)
     await sql.query(`update ${table} set ${column}=$2 where ${column}=$1`, [userId, pseudonym]);
   for (const table of ["audit_log", "platform_audit"] as const)

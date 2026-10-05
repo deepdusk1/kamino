@@ -28,7 +28,7 @@ export function localToInstant(local:string,zone:string,choice:Disambiguation='r
   const candidates=[...offsets].map(offset=>wanted-offset).filter(value=>stamp(partsAt(new Date(value),zone))===wanted).sort((a,b)=>a-b);
   if(!candidates.length)throw new Error(`The time ${local} does not exist in ${zone} because clocks move forward. Choose another time.`);
   if(candidates.length>1&&choice==='reject')throw new Error(`The time ${local} occurs twice in ${zone}. Choose the earlier or later occurrence.`);
-  return new Date(choice==='later'?candidates[candidates.length-1]:candidates[0]).toISOString();
+  return new Date((choice==='later'?candidates[candidates.length-1]:candidates[0])!).toISOString();
 }
 export function zonedOccurrences(startsAt:string,endsAt:string|undefined,recurrence:Recurrence,count=1,zone='UTC',choice:Disambiguation='reject') {
   const start=new Date(startsAt),end=endsAt?new Date(endsAt):null;

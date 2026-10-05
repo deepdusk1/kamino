@@ -12,6 +12,9 @@ import {
   Loading,
 } from "@/components/ui";
 import { ContentMedia } from "@/components/content/ContentMedia";
+import { StoryLayerEditor, StoryLayers } from "@/components/content/StoryLayerEditor";
+import { MediaLibraryPicker } from "@/components/content/MediaLibraryPicker";
+import type { StoryLayer } from "@/api/media-v10-types";
 import { stories, type ProfileStory } from "@/api/profile-stories";
 import type { MediaInput } from "@/lib/content-v9";
 import { pickContentFile } from "@/lib/content-media";
@@ -68,6 +71,7 @@ function Composer() {
     [warning, setWarning] = useState(""),
     [question, setQuestion] = useState(""),
     [poll, setPoll] = useState(""),
+    [layers,setLayers]=useState<StoryLayer[]>([]),
     [media, setMedia] = useState<MediaInput | null>(null),
     [busy, setBusy] = useState(false);
   async function pick(kind: "image" | "gif" | "video" | "audio") {
@@ -99,11 +103,13 @@ function Composer() {
           .map((p) => p.trim())
           .filter(Boolean),
         media: media ?? undefined,
+        layers,
       });
       setCaption("");
       setMedia(null);
       setQuestion("");
       setPoll("");
+      setLayers([]);
       await client.invalidateQueries({ queryKey: ["profileStories"] });
       notify("Story published", "Your story is live for 24 hours.");
     } catch (e) {
@@ -238,9 +244,12 @@ function Composer() {
       <Button
         label="Publish story"
         busy={busy}
-        disabled={!caption.trim() && !media}
+        disabled={!caption.trim() && !media && !layers.length}
         onPress={() => void publish()}
       />
+      <StoryLayerEditor layers={layers} onChange={setLayers} background={backgroundColors[background]!}/>
+      <MediaLibraryPicker kind="gif" collapsed onSelect={setMedia}/>
+      <MediaLibraryPicker kind="audio" collapsed onSelect={setMedia}/>
     </Card>
   );
 }
@@ -303,12 +312,13 @@ function StoryCard({ story: s, mine }: { story: ProfileStory; mine: boolean }) {
           <Txt style={{ color: "#fff" }}>Content note: {s.contentWarning}</Txt>
         ) : null}
         {revealed ? (
-          <>
+          <View style={{position:"relative",width:"100%",aspectRatio:9/16,overflow:"hidden",justifyContent:"center",borderRadius:16}}>
             <Txt style={{ color: "#fff" }} variant="heading">
               {s.caption}
             </Txt>
             {s.media ? <ContentMedia media={s.media} /> : null}
-          </>
+            <StoryLayers layers={s.layers}/>
+          </View>
         ) : (
           <Button
             variant="secondary"

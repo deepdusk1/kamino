@@ -27,11 +27,16 @@ export function readStoryLayers(value: unknown): StoryLayer[] {
   catch { return []; }
 }
 export function positionStoryLayer(value: number) { return Math.max(5, Math.min(95, value)); }
+export function moderationTextSegments(value:string) {
+  const result:string[]=[];
+  for(let offset=0;offset<value.length;offset+=6500)result.push(value.slice(offset,offset+7500));
+  return result;
+}
 /** Each uploaded image has one stable marker; omitted markers are appended rather than lost. */
 export function articleWithImages(body: string, images: {id:number;altText:string}[]) {
   let result = body;
   images.forEach((image, index) => {
-    const alt = image.altText.replace(/[\[\]\\\r\n]/g, " ").slice(0, 600);
+    const alt = image.altText.replaceAll("[", " ").replaceAll("]", " ").replaceAll("\\", " ").replace(/[\r\n]/g, " ").slice(0, 600);
     const markdown = `![${alt}](/api/v1/content-media/${image.id})`;
     const marker = `[image:${index + 1}]`;
     if (result.includes(marker)) result = result.split(marker).join(markdown);

@@ -36,6 +36,7 @@ export function PlatformTools({ mode }: { mode: Mode }) {
   return (
     <AppShell padded back title={titles[mode]}>
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="More tools">
+        {Object.entries({'/connections':'Connections','/smart-search':'Smart search','/short-videos':'Short videos','/media-library':'Media library','/operations':'Activity & safety'}).map(([href,label])=><a key={href} className={secondary} href={href}>{label}</a>)}
         {Object.entries(titles).filter(([key]) => key !== "admin" || identity.data?.isAdmin === true).map(([key, title]) => (
           <a
             key={key}

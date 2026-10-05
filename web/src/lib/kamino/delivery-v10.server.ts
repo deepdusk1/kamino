@@ -15,7 +15,7 @@ export async function processPushDeliveries(sql: Sql, options: {
 }) {
   const result = { sent:0,delivered:0,failed:0,cancelled:0,deferred:0,configured:process.env.KAMINO_PUSH_ENABLED === "true" };
   if (!result.configured && !options.request) return result;
-  const now = options.now ?? new Date(), lease = randomUUID(), limit = Math.max(1,Math.min(100,options.limit ?? 50));
+  const now = options.now ?? new Date(), lease = randomUUID(), limit = Math.max(1,Math.min(24,options.limit ?? 12));
   const rows = await sql.query<Row>(`with due as (select id from push_delivery_queue
     where status in ('pending','receipt') and next_attempt_at<=$1 and (lease_until is null or lease_until<$1)
     order by id for update skip locked limit $2)
@@ -24,11 +24,14 @@ export async function processPushDeliveries(sql: Sql, options: {
   const request = options.request ?? fetch;
   const headers: Record<string,string> = { "content-type":"application/json",accept:"application/json" };
   if (process.env.EXPO_ACCESS_TOKEN?.trim()) headers.authorization = `Bearer ${process.env.EXPO_ACCESS_TOKEN.trim()}`;
-  for (const row of rows) {
+  let cursor=0;
+  const worker=async()=>{ for(let index; (index=cursor++)<rows.length;) {
+    const row=rows[index];
     const attempt = Number(row.attempts) + 1, receipt = row.status === "receipt";
-    const finish = async (status: string,error = "") => {
-      await sql.query(`update push_delivery_queue set status=$3,last_error=$4,lease_token=null,lease_until=null,completed_at=$5
-        where id=$1 and lease_token=$2`,[row.id,lease,status,error,now.toISOString()]);
+    let retrySend = !receipt;
+    const finish = async (status: string,error = "",attempts=Number(row.attempts)) => {
+      await sql.query(`update push_delivery_queue set status=$3,last_error=$4,lease_token=null,lease_until=null,completed_at=$5,attempts=$6
+        where id=$1 and lease_token=$2`,[row.id,lease,status,error,now.toISOString(),attempts]);
     };
     try {
       const n = (await sql.query<Row>(`select n.*,p.notify_prefs,p.quiet_start,p.quiet_end,p.timezone,t.token
@@ -47,7 +50,7 @@ export async function processPushDeliveries(sql: Sql, options: {
         method:"POST",headers,body:JSON.stringify(body),signal:AbortSignal.timeout(10_000),
       });
       if (!response.ok) {
-        if (response.status < 500 && response.status !== 429) { await finish("failed",`provider HTTP ${response.status}`);result.failed++;continue; }
+        if (response.status < 500 && response.status !== 429) { await finish("failed",`provider HTTP ${response.status}`,receipt?Number(row.attempts):attempt);result.failed++;continue; }
         throw new Error("temporary provider failure");
       }
       const json = await response.json() as { data?: ProviderReply[] | Record<string,ProviderReply> };
@@ -61,19 +64,25 @@ export async function processPushDeliveries(sql: Sql, options: {
       }
       const error = ticket?.details?.error ?? (receipt ? "receipt unavailable" : "invalid provider response");
       if (error === "DeviceNotRegistered") { await sql.query("delete from push_tokens where token=$1 and user_id=$2",[row.token,row.user_id]); result.cancelled++;continue; }
-      if (permanentPush.has(error)) { await finish("failed",error);result.failed++;continue; }
+      if (permanentPush.has(error)) { await finish("failed",error,receipt?Number(row.attempts):attempt);result.failed++;continue; }
       if (receipt && !ticket && Number(row.receipt_checks) < 8) {
         await sql.query(`update push_delivery_queue set receipt_checks=receipt_checks+1,next_attempt_at=$3::timestamptz+interval '30 minutes',lease_token=null,lease_until=null,last_error='receipt unavailable' where id=$1 and lease_token=$2`,[row.id,lease,now.toISOString()]);result.deferred++;continue;
       }
       if (receipt && !ticket) { await finish("failed","provider receipt remained unavailable");result.failed++;continue; }
+      if(receipt && ticket?.status==='error')retrySend=true;
       throw new Error(error);
     } catch {
-      if (attempt >= MAX_DELIVERY_ATTEMPTS) { await finish("failed","retry limit reached");result.failed++; }
+      if(receipt && !retrySend){
+        if(Number(row.receipt_checks)>=8){await finish('failed','receipt retry limit reached');result.failed++;}
+        else{await sql.query(`update push_delivery_queue set receipt_checks=receipt_checks+1,next_attempt_at=$3::timestamptz+interval '30 minutes',lease_token=null,lease_until=null,last_error='temporary receipt lookup failure' where id=$1 and lease_token=$2`,[row.id,lease,now.toISOString()]);result.deferred++;}
+      }
+      else if (attempt >= MAX_DELIVERY_ATTEMPTS) { await finish("failed","retry limit reached",attempt);result.failed++; }
       else {
         await sql.query(`update push_delivery_queue set status='pending',attempts=$3,ticket_id=null,next_attempt_at=$4::timestamptz+$5*interval '1 second',last_error='temporary delivery failure',lease_token=null,lease_until=null where id=$1 and lease_token=$2`,[row.id,lease,attempt,now.toISOString(),deliveryDelay(attempt)]);result.deferred++;
       }
     }
-  }
+  }};
+  await Promise.all(Array.from({length:Math.min(4,rows.length)},()=>worker()));
   await sql.query("delete from push_delivery_queue where completed_at < $1::timestamptz-interval '30 days'",[now.toISOString()]);
   return result;
 }
@@ -88,8 +97,10 @@ export async function processEmailDigests(sql: Sql, options: {
   const now = options.now ?? new Date(),lease=randomUUID();
   const rows = await sql.query<Row>(`with due as(select id from email_digest_queue where status='pending' and next_attempt_at<=$1 and (lease_until is null or lease_until<$1)
     order by id for update skip locked limit $2)
-    update email_digest_queue q set lease_token=$3,lease_until=$1::timestamptz+interval '2 minutes' from due where q.id=due.id returning q.*`,[now.toISOString(),Math.max(1,Math.min(50,options.limit??20)),lease]);
-  for (const row of rows) {
+    update email_digest_queue q set lease_token=$3,lease_until=$1::timestamptz+interval '2 minutes' from due where q.id=due.id returning q.*`,[now.toISOString(),Math.max(1,Math.min(24,options.limit??12)),lease]);
+  let cursor=0;
+  const worker=async()=>{for(let index;(index=cursor++)<rows.length;){
+    const row=rows[index];
     const attempt=Number(row.attempts)+1;
     try {
       const mail = await options.compose(String(row.user_id),String(row.week_start).slice(0,10));
@@ -105,7 +116,8 @@ export async function processEmailDigests(sql: Sql, options: {
       await sql.query(`update email_digest_queue set status=$3,attempts=$4,next_attempt_at=$5::timestamptz+$6*interval '1 second',last_error=$7,completed_at=$8,lease_token=null,lease_until=null where id=$1 and lease_token=$2`,[row.id,lease,exhausted?'failed':'pending',attempt,now.toISOString(),deliveryDelay(attempt),exhausted?'delivery requires review':'temporary delivery failure',exhausted?now.toISOString():null]);
       if(exhausted)result.failed++;else result.deferred++;
     }
-  }
+  }};
+  await Promise.all(Array.from({length:Math.min(4,rows.length)},()=>worker()));
   await sql.query("delete from email_digest_queue where completed_at<$1::timestamptz-interval '90 days'",[now.toISOString()]);
   return result;
 }

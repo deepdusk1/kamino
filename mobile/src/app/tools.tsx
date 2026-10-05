@@ -28,6 +28,9 @@ export default function Tools() {
   return (
     <Screen>
       <Txt variant="title">More from Kamino</Txt>
+      <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
+        {Object.entries({'/connections':'Connections','/smart-search':'Smart search','/short-videos':'Short videos','/media-library':'Media library','/operations':'Activity & safety'}).map(([href,label])=><Button key={href} small variant="secondary" label={label} onPress={()=>router.push(href as never)}/>)}
+      </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {tabs.filter(t => t !== "admin" || identity.data?.isAdmin === true).map((t) => (
           <Chip

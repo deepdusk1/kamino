@@ -34,6 +34,10 @@ const wrapperPaths = [
   ["siteReports", "../mobile/src/api/site-reports.ts"],
   ["analytics", "../mobile/src/api/platform-analytics.ts"],
   ["stories", "../mobile/src/api/profile-stories.ts"],
+  ["mediaV10", "../mobile/src/api/media-v10.ts"],
+  ["socialEventsV10", "../mobile/src/api/social-events-v10.ts"],
+  ["searchV10", "../mobile/src/api/search-v10.ts"],
+  ["operationsV10", "../mobile/src/api/operations-v10.ts"],
 ];
 const checked = [], allCalls = [];
 const imports = [];
@@ -115,8 +119,12 @@ const lines = [
   'import * as siteReports from "../src/lib/kamino/site-reports";',
   'import * as platformAnalytics from "../src/lib/kamino/platform-analytics";',
   'import * as profileStories from "../src/lib/kamino/profile-stories";',
+  'import * as mediaV10 from "../src/lib/kamino/media-v10";',
+  'import * as socialEventsV10 from "../src/lib/kamino/social-events-v10";',
+  'import * as operationsV10 from "../src/lib/kamino/operations-v10";',
+  'import * as searchV10 from "../src/lib/kamino/search-v10";',
   ...imports,
-  "const api = { ...core, ...extras, ...engagement, ...library, ...aiFeatures, ...social, ...identity, ...community, ...content, ...platform, ...billing, ...siteReports, ...platformAnalytics, ...profileStories };",
+  "const api = { ...core, ...extras, ...engagement, ...library, ...aiFeatures, ...social, ...identity, ...community, ...content, ...platform, ...billing, ...siteReports, ...platformAnalytics, ...profileStories, ...mediaV10, ...socialEventsV10, ...operationsV10, ...searchV10 };",
   "type Out<K extends keyof typeof api> = (typeof api)[K] extends (...args: never[]) => infer R ? Awaited<R> : never;",
   // The phone bridge sends ordinary JSON, whereas the web serializer preserves Date instances.
   "type Wire<T> = T extends Date ? string : T extends readonly (infer U)[] ? Wire<U>[] : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;",

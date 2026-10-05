@@ -1,14 +1,17 @@
-import { useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, View } from "react-native";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { PanResponder, Pressable, View, type GestureResponderEvent, type PanResponderGestureState } from "react-native";
 import { router } from "expo-router";
 import { Button, Field, Txt, Chip } from "@/components/ui";
 import type { StoryLayer } from "@/api/media-v10-types";
 const STICKERS=["✨","💜","🎉","🔥","🌈","🌙","⭐","🎵","☀️","💡","👏","🌸"];
 const clamp=(value:number)=>Math.min(95,Math.max(5,value));
 function Layer({layer,onChange,onSelect,selected=false,width,height}:{layer:StoryLayer;onChange?:(layer:StoryLayer)=>void;onSelect?:()=>void;selected?:boolean;width:number;height:number}){
-  const current=useRef({layer,onChange,onSelect});current.current={layer,onChange,onSelect};
+  const current=useRef({layer,onChange,onSelect});
+  useLayoutEffect(()=>{current.current={layer,onChange,onSelect};},[layer,onChange,onSelect]);
   const start=useRef({x:0,y:0}),[size,setSize]=useState({width:0,height:0});
-  const responder=useMemo(()=>PanResponder.create({onStartShouldSetPanResponder:()=>!!current.current.onChange,onMoveShouldSetPanResponder:()=>!!current.current.onChange,onPanResponderGrant:()=>{start.current={x:current.current.layer.x,y:current.current.layer.y};current.current.onSelect?.();},onPanResponderMove:(_,gesture)=>current.current.onChange?.({...current.current.layer,x:clamp(start.current.x+gesture.dx/width*100),y:clamp(start.current.y+gesture.dy/height*100)})}),[width,height]);
+  const grant=useCallback(()=>{start.current={x:current.current.layer.x,y:current.current.layer.y};current.current.onSelect?.();},[]);
+  const move=useCallback((_:GestureResponderEvent,gesture:PanResponderGestureState)=>current.current.onChange?.({...current.current.layer,x:clamp(start.current.x+gesture.dx/width*100),y:clamp(start.current.y+gesture.dy/height*100)}),[width,height]);
+  const responder=useMemo(()=>PanResponder.create({onStartShouldSetPanResponder:()=>true,onMoveShouldSetPanResponder:()=>true,onPanResponderGrant:grant,onPanResponderMove:move}),[grant,move]);
   return <View {...(onChange?responder.panHandlers:{})} onLayout={event=>setSize(event.nativeEvent.layout)} style={{position:"absolute",left:`${layer.x}%`,top:`${layer.y}%`,maxWidth:"80%",padding:8,borderRadius:10,backgroundColor:layer.backdrop?"rgba(0,0,0,.65)":"transparent",borderWidth:selected?2:0,borderColor:"#fff",transform:[{translateX:-size.width/2},{translateY:-size.height/2},{rotate:`${layer.rotation}deg`},{scale:layer.scale}]}}>
     <Pressable onPress={()=>onSelect?onSelect():layer.kind==="mention"?router.push(`/u/${layer.text}`):undefined} disabled={!onSelect&&layer.kind!=="mention"} accessibilityRole={onSelect||layer.kind==="mention"?"button":undefined} accessibilityLabel={`${layer.kind}: ${layer.text}`}><Txt style={{color:layer.color,fontSize:layer.kind==="sticker"?36:20,textAlign:"center",fontWeight:"700"}}>{layer.kind==="mention"?`@${layer.text}`:layer.text}</Txt></Pressable>
   </View>;
@@ -17,7 +20,7 @@ export function StoryLayers({layers}:{layers:StoryLayer[]}){const[size,setSize]=
 export function StoryLayerEditor({layers,onChange,background}:{layers:StoryLayer[];onChange:(layers:StoryLayer[])=>void;background:string}){
   const [selected,setSelected]=useState<string|null>(null),[size,setSize]=useState({width:280,height:498}),layer=layers.find(l=>l.id===selected);
   function patch(change:Partial<StoryLayer>){if(layer)onChange(layers.map(l=>l.id===layer.id?{...l,...change}:l));}
-  function add(kind:StoryLayer["kind"]){const next:StoryLayer={id:`layer-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,kind,text:kind==="sticker"?"✨":kind==="mention"?"member":"Your words",x:50,y:50,scale:1,rotation:0,color:"#ffffff",backdrop:true};onChange([...layers,next]);setSelected(next.id);}
+  function add(kind:StoryLayer["kind"]){let serial=1;while(layers.some(l=>l.id===`layer-${serial}`))serial++;const next:StoryLayer={id:`layer-${serial}`,kind,text:kind==="sticker"?"✨":kind==="mention"?"member":"Your words",x:50,y:50,scale:1,rotation:0,color:"#ffffff",backdrop:true};onChange([...layers,next]);setSelected(next.id);}
   return <View style={{gap:12}}><Txt variant="heading">Arrange story layers</Txt><Txt variant="small" tone="muted">Drag text, stickers and mentions. You can also use the position controls.</Txt><View style={{flexDirection:"row",flexWrap:"wrap",gap:8}}>{(["text","sticker","mention"] as const).map(kind=><Button small key={kind} label={`Add ${kind}`} disabled={layers.length>=12} onPress={()=>add(kind)}/>)}</View>
     <View onLayout={e=>setSize(e.nativeEvent.layout)} style={{width:"100%",maxWidth:280,aspectRatio:9/16,alignSelf:"center",backgroundColor:background,borderRadius:16,overflow:"hidden"}}>{layers.map(l=><Layer key={l.id} layer={l} selected={selected===l.id} width={size.width} height={size.height} onSelect={()=>setSelected(l.id)} onChange={changed=>onChange(layers.map(item=>item.id===changed.id?changed:item))}/>)}</View>
     {layer?<><Txt variant="small">Selected {layer.kind}</Txt>{layer.kind==="sticker"?<View style={{flexDirection:"row",flexWrap:"wrap",gap:8}}>{STICKERS.map(text=><Chip key={text} label={text} selected={text===layer.text} onPress={()=>patch({text})}/>)}</View>:<Field label={layer.kind==="mention"?"Member handle":"Layer text"} value={layer.text} maxLength={layer.kind==="mention"?30:200} onChangeText={text=>patch({text:layer.kind==="mention"?text.replace(/^@/,""):text})}/>}

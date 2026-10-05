@@ -13,6 +13,7 @@ import {
   updateGroupChat,
 } from "@/lib/kamino/content-v9";
 import { ContentMedia } from "./post-tools";
+import { MediaLibraryPicker } from "@/components/media-v10-library";
 
 export function useChatContent(roomId: number) {
   return useQuery({
@@ -115,6 +116,7 @@ export function ChatContentPanel({
         📌 Shared files, pins & people {d.pins.length ? `· ${d.pins.length} pinned` : ""}
       </summary>
       <div className="max-h-[45dvh] space-y-4 overflow-y-auto p-3 pt-0">
+        <details><summary className="min-h-11 cursor-pointer font-bold">Choose a GIF from your library</summary><MediaLibraryPicker kind="gif" onSelect={media=>void run(()=>sendChatAttachment({data:{roomId,media}}),"GIF sent")}/></details>
         {d.pins.map((p) => (
           <div
             key={p.id}
@@ -260,6 +262,7 @@ export function ChatContentPanel({
         </section>
         {d.kind === "group" ? (
           <div className="space-y-2">
+            <a href={`/groups/${roomId}`} className="text-sm font-bold text-accent">Group settings & roles →</a>
             {d.ownerId === myId ? (
               <div className="flex gap-2">
                 <input

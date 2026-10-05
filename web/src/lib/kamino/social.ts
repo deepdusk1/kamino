@@ -565,6 +565,8 @@ export const feed = createServerFn({ method: "GET" })
         [viewer],
       );
       const now = Date.now();
+      const semanticScores = ctx.userId && await (await import('./platform-flags.server')).platformFlagActive(sql,ctx.userId,'related_discovery',true)
+        ? await (await import('./search-v10.server')).cachedSemanticScores(sql,ctx.userId,rows.map(r=>Number(r.id))) : new Map<number,number>();
       const feedbackRows = ctx.userId ? await sql<Row>`select target_type,target_id,preference from discovery_feedback where user_id=${ctx.userId}` : [];
       const feedback = new Map(feedbackRows.map(r => [`${r.target_type}:${r.target_id}`, String(r.preference)]));
       const preferences = (r: Row) => [feedback.get(`community:${r.community_id}`), feedback.get(`creator:${r.author_user_id}`), feedback.get(`post:${r.id}`)];
@@ -583,7 +585,8 @@ export const feed = createServerFn({ method: "GET" })
             joined: ctx.joined.has(String(r.community_id)),
           });
           const factor = preferences(r).reduce((f, p) => f * (p === 'more' ? 1.7 : p === 'less' ? 0.25 : 1), 1);
-          return { r, score: score * factor };
+          const similarity=semanticScores.get(Number(r.id));
+          return { r, score: score * factor * (similarity===undefined?1:1+Math.max(0,similarity)*3) };
         })
         .sort((a, b) => b.score - a.score || Number(b.r.id) - Number(a.r.id));
       const page = scored.slice(offset, offset + PAGE).map((s) => s.r);

@@ -27,6 +27,7 @@ export async function assertGroupRemoval(sql:Sql,roomId:number,actor:string,targ
 export async function stageGroupInvitation(sql:Sql,roomId:number,actor:string,target:string) {
   if((await sql`select 1 from chat_members where room_id=${roomId} and user_id=${target} and room_removed=false`).length)throw new Error('This person is already in the group.');
   await sql`update group_invitations set state='cancelled',decided_at=now() where room_id=${roomId} and user_id=${target} and state='pending' and expires_at<=now()`;
+  if((await sql`select 1 from group_invitations where room_id=${roomId} and user_id=${target} and state='pending' and expires_at>now()`).length)return;
   const count=Number((await sql`select (select count(*) from chat_members where room_id=${roomId} and room_removed=false)+(select count(*) from group_invitations where room_id=${roomId} and state='pending' and expires_at>now()) as n`)[0]?.n??0);
   if(count>=20)throw new Error('Groups support up to 20 members, including pending invitations.');
   await sql`insert into group_invitations(room_id,invited_by,user_id) values(${roomId},${actor},${target}) on conflict do nothing`;

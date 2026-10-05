@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {Sql} from '@/lib/db';
-import {checkedEmbeddings,semanticChunks,semanticConfigFrom,type SemanticConfig} from './search-v10-rules';
+import {checkedEmbeddings,semanticChunks,semanticConfigFrom,type SemanticConfig} from './search-v10-rules.ts';
+export {semanticChunks} from './search-v10-rules.ts';
 type Row=Record<string,unknown>;
 export const semanticConfig=()=>semanticConfigFrom(process.env);
 export function semanticNamespace(c:SemanticConfig){return createHash('sha256').update(JSON.stringify([c.url,c.model,c.dimensions])).digest('hex');}
@@ -28,8 +29,8 @@ export function semanticSources(config:SemanticConfig):string {
     from posts p join communities c on c.id=p.community_id join profiles author on author.user_id=p.author_user_id
     where coalesce(p.hidden,false)=false and (p.expires_at is null or p.expires_at>now()) and (p.publish_at is null or p.publish_at<=now()) and author.search_visible=true and ${status('author.user_id')}
     ${config.includePrivate?'':"and c.visibility='public' and author.private_account=false and p.visibility='public'"}
-    union all select 'community',c.id,c.created_by,c.id,null,${textSql.community},md5(${textSql.community}) from communities c join profiles creator on creator.user_id=c.created_by
-    where ${status('creator.user_id')} ${config.includePrivate?'':"and c.visibility='public'"}
+    union all select 'community',c.id,creator.user_id,c.id,null,${textSql.community},md5(${textSql.community}) from communities c left join profiles creator on creator.user_id=c.created_by
+    where ${status('c.created_by')} ${config.includePrivate?'':"and c.visibility='public'"}
     union all select 'person',p.user_id,p.user_id,null,null,${textSql.person},md5(${textSql.person}) from profiles p
     where p.search_visible=true and ${status('p.user_id')} ${config.includePrivate?'':"and p.private_account=false"}`;
 }
@@ -48,6 +49,7 @@ export async function indexSemanticBatch(sql:Sql,options:{limit?:number;config?:
       const vectors=await embedTexts(sql,parts,config);
       if(!sql.transaction)throw Error('The database must support transactions for indexing.');
       await sql.transaction(async tx=>{
+        if(!(await tx.query('select 1 from semantic_index_leases where namespace=$1 and token=$2 and until_at>now() for update',[namespace,token])).length)return;
         // The source may have been edited, hidden or removed while its provider request was in flight.
         const stillCurrent=await tx.query(`select 1 from (${source}) s where s.kind=$1 and s.target_id=$2 and s.revision=$3`,[row.kind,row.target_id,row.revision]);
         if(!stillCurrent.length)return;
@@ -58,4 +60,23 @@ export async function indexSemanticBatch(sql:Sql,options:{limit?:number;config?:
     }
     return {indexed,busy:false,configured:true};
   }finally{await sql.query('delete from semantic_index_leases where namespace=$1 and token=$2',[namespace,token]);}
+}
+
+/** Ranks already-authorized feed candidates using consented interests and recent positive feedback. No provider call on feed reads. */
+export async function cachedSemanticScores(sql:Sql,userId:string,ids:number[]):Promise<Map<number,number>>{
+  const config=semanticConfig();if(!config||!ids.length)return new Map();
+  const namespace=semanticNamespace(config);
+  const prefs=(await sql.query<Row>('select embedding from semantic_preferences where user_id=$1 and namespace=$2 and enabled=true',[userId,namespace]))[0];
+  if(!prefs)return new Map();
+  const vector=[...(prefs.embedding as number[])];
+  const liked=await sql.query<Row>(`select d.embedding from likes l join semantic_documents d on d.post_id=l.post_id and d.kind='post'
+    join posts p on p.id=d.post_id where l.user_id=$1 and d.namespace=$2 and d.post_id=any($3::int[])
+    and d.chunk_index=0 and d.revision=md5(p.title||E'\\n'||p.body) order by l.created_at desc limit 20`,[userId,namespace,ids]);
+  const compatible=liked.map(r=>r.embedding as number[]).filter(v=>v.length===vector.length);
+  if(compatible.length)for(let i=0;i<vector.length;i++)vector[i]=vector[i]*0.75+compatible.reduce((sum,v)=>sum+v[i],0)/compatible.length*0.25;
+  const rows=await sql.query<Row>(`select d.post_id,max(kamino_cosine(d.embedding,$3::double precision[])) as score
+    from semantic_documents d join posts p on p.id=d.post_id
+    where d.namespace=$1 and d.kind='post' and d.post_id=any($2::int[]) and d.revision=md5(p.title||E'\\n'||p.body)
+    group by d.post_id`,[namespace,ids,vector]);
+  return new Map(rows.map(r=>[Number(r.post_id),Number(r.score)]));
 }

@@ -5,6 +5,7 @@ import { View } from "react-native";
 import { Button, Field, Sheet, Txt, PressableScale } from "@/components/ui";
 import { contentApi } from "@/lib/content-v9";
 import { pickContentFile } from "@/lib/content-media";
+import { MediaLibraryPicker } from "./MediaLibraryPicker";
 import { showError } from "@/lib/errors";
 import { confirmAction } from "@/components/community/platform";
 import { useTheme } from "@/theme";
@@ -179,6 +180,7 @@ export function ChatContentTools({
             onPress={() => void attach(true)}
           />
           <Txt variant="heading">Share a card</Txt>
+          <MediaLibraryPicker kind="gif" collapsed onSelect={media=>void run(()=>contentApi.attach(roomId,media))}/>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {(["post", "profile", "community"] as const).map((k) => (
               <Button
@@ -287,17 +289,18 @@ export function ChatContentTools({
           ))}
           {d.kind === "group" ? (
             <>
+              <Button small variant="secondary" label="Group settings & roles" onPress={()=>{setOpen(false);router.push(`/groups/${roomId}`);}}/>
               {d.ownerId === myId ? (
                 <>
                   <Field
-                    label="Add a mutual follower"
+                    label="Invite a member"
                     placeholder="@handle"
                     value={handle}
                     onChangeText={setHandle}
                   />
                   <Button
                     disabled={busy || !handle.trim()}
-                    label="Add to group"
+                    label="Send group invitation"
                     onPress={() =>
                       void run(() =>
                         contentApi.updateGroup(roomId, {

@@ -353,7 +353,7 @@ async function requireRoomAccess(sql: Sql, userId: string, roomId: number) {
   if (roomRow.community_id) await requireActiveMember(sql, userId, String(roomRow.community_id));
   if (["dm", "group"].includes(String(roomRow.kind))) {
     const blocked = await blockedSet(sql, userId);
-    const peers = await sql`select user_id from chat_members where room_id = ${roomId}`;
+    const peers = await sql`select user_id from chat_members where room_id = ${roomId} and room_removed=false`;
     if (peers.some((p) => blocked.has(String(p.user_id))))
       throw new Error("This conversation is unavailable.");
     for (const peer of peers) if (String(peer.user_id) !== userId) await assertPeerContactAllowed(sql, userId, String(peer.user_id));
@@ -4595,7 +4595,8 @@ export const deleteMessage = createServerFn({ method: "POST" })
     if (!row) throw new Error("Message not found.");
     const communityId = room.community_id ? String(room.community_id) : null;
     const m = communityId ? await membershipOf(sql, userId, communityId) : null;
-    if (row.author_user_id !== userId && !canModerate(m?.role))
+    const groupModerator = room.kind === 'group' && await (await import('./social-events-v10.server')).groupRoleAllows(sql,data.roomId,userId,'moderate');
+    if (row.author_user_id !== userId && !canModerate(m?.role) && !groupModerator)
       throw new Error("You can’t remove this.");
     await sql`update messages set deleted = true, body = '' where id = ${data.messageId}`;
     const gone = await sql<{ data_url: string }>`delete from message_media where message_id = ${data.messageId} returning data_url`;

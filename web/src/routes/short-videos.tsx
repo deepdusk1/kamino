@@ -15,13 +15,13 @@ function Shorts(){
 function ClipCard({clip}:{clip:Clip}){
   const ref=useRef<HTMLElement>(null),video=useRef<HTMLVideoElement>(null),[revealed,setRevealed]=useState(!clip.blur),[liked,setLiked]=useState(false),[busy,setBusy]=useState(false),[hidden,setHidden]=useState(false);
   useEffect(()=>{
-    const element=ref.current;if(!element||!revealed||hidden)return;
+    const element=ref.current,player=video.current;if(!element||!revealed||hidden)return;
     let active=false,recorded=false;
     const reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const play=()=>{if(!document.hidden&&active&&!reduce)void video.current?.play().catch(()=>undefined);else video.current?.pause();};
+    const play=()=>{if(!document.hidden&&active&&!reduce)void player?.play().catch(()=>undefined);else player?.pause();};
     const observer=new IntersectionObserver(entries=>{active=!!entries[0]?.isIntersecting;play();if(active&&!recorded){recorded=true;void recordPostView({data:{postId:clip.id}}).catch(()=>undefined);}},{threshold:.65});
     observer.observe(element);document.addEventListener("visibilitychange",play);
-    return ()=>{observer.disconnect();document.removeEventListener("visibilitychange",play);video.current?.pause();};
+    return ()=>{observer.disconnect();document.removeEventListener("visibilitychange",play);player?.pause();};
   },[clip.id,revealed,hidden]);
   async function action(fn:()=>Promise<unknown>){setBusy(true);try{await fn();}catch(e){toast.error(e instanceof Error?e.message:"Please try again.");}finally{setBusy(false);}}
   if(hidden)return <article className="flex h-full min-h-[460px] snap-start items-center justify-center p-5 text-white"><p>Clip hidden from your feeds.</p></article>;

@@ -57,7 +57,7 @@ test("v9 export resolves only own media and excludes auth, OAuth, webhook and pr
     return reference === ownReference ? "data:video/mp4;base64,T1JJR0lOQUw=" : reference;
   });
   const json = JSON.stringify(exported);
-  assert.equal(exported.version, 9);
+  assert.equal(exported.version, 10);
   assert.equal(exported.storyMedia.length, 1);
   assert.equal(exported.storyMedia[0].data_url, "data:video/mp4;base64,T1JJR0lOQUw=");
   assert.equal(exported.contentMedia.length, 1);
@@ -219,4 +219,34 @@ test("legacy FK retry savepoints recover the transaction before removing depende
   assert.equal((await sql`select * from deletion_test_parent`).length, 0);
   assert.equal((await sql`select * from deletion_test_child`).length, 0);
   assert.equal((await sql`select id from "user" where id=${owner}`).length, 0);
+});
+
+test('v10 export includes owned library bytes and consent state while excluding private moderation notes and device tokens',async()=>{
+ const owner=await person('v10-export'),other=await person('v10-export-other');
+ const ref='s3:library/export-owner|image/gif';
+ await sql`insert into media_library(owner_id,kind,title,storage_ref,mime,byte_size,filename)values(${owner},'gif','Own GIF',${ref},'image/gif',6,'own.gif'),(${other},'gif','OTHER_LIBRARY','s3:library/other|image/gif','image/gif',6,'other.gif')`;
+ const caseId=Number((await sql`insert into moderation_cases(subject_id,opened_by,summary,public_reason)values(${owner},${other},'SECRET_INTERNAL_SUMMARY','MEMBER_REASON') returning id`)[0].id);
+ await sql`insert into moderation_case_events(case_id,actor_id,kind,note,member_visible)values(${caseId},${other},'note','SECRET_STAFF_NOTE',false),(${caseId},${other},'update','MEMBER_UPDATE',true)`;
+ await sql.query('insert into semantic_preferences(user_id,namespace,embedding)values($1,$2,$3::double precision[])',[owner,'fixture',[1,0]]);
+ const result=await exportV9PersonalData(sql,owner,async reference=>{assert.equal(reference,ref);return 'data:image/gif;base64,R0lGODlh';});
+ const json=JSON.stringify(result);assert.equal(result.mediaLibrary.length,1);assert.ok(json.includes('MEMBER_REASON'));assert.ok(json.includes('MEMBER_UPDATE'));
+ assert.ok(!json.includes('SECRET_'));assert.ok(!json.includes('OTHER_LIBRARY'));assert.ok(!json.includes(ref));assert.equal((result.semanticPreferences as unknown[]).length,1);
+});
+test('v10 deletion queues library cleanup, removes vectors and friendships, redacts cases and chooses an active group owner',async()=>{
+ const owner=await person('v10-erase'),removed=await person('v10-removed'),active=await person('v10-active');const ref='s3:library/deletion-owner|image/gif';
+ await sql`insert into media_library(owner_id,kind,title,storage_ref,mime,byte_size,filename)values(${owner},'gif','Deleted GIF',${ref},'image/gif',6,'own.gif')`;
+ await sql`insert into friend_requests(sender_id,recipient_id,state)values(${owner},${active},'accepted')`;
+ await sql.query('insert into semantic_preferences(user_id,namespace,embedding)values($1,$2,$3::double precision[])',[owner,'fixture',[1,0]]);
+ const room=Number((await sql`insert into chat_rooms(name,kind,created_by)values('v10 privacy group','group',${owner})returning id`)[0].id);
+ await sql`insert into chat_members(room_id,user_id,room_removed,group_role)values(${room},${owner},false,'member'),(${room},${removed},true,'coadmin'),(${room},${active},false,'moderator')`;
+ const caseId=Number((await sql`insert into moderation_cases(subject_id,opened_by,summary,public_reason)values(${owner},${active},'OWN_PRIVATE_CASE','OWN_REASON')returning id`)[0].id);
+ await sql`insert into moderation_case_events(case_id,actor_id,kind,note)values(${caseId},${owner},'note','OWN_CASE_NOTE')`;
+ await sql`insert into moderation_case_appeals(case_id,user_id,message)values(${caseId},${owner},'OWN_APPEAL')`;
+ await eraseAccountAtomically(sql,owner,{pseudonym:'deleted:v10-fixture'});
+ assert.equal((await sql`select 1 from media_library where owner_id=${owner}`).length,0);assert.equal((await sql`select 1 from semantic_preferences where user_id=${owner}`).length,0);
+ assert.equal((await sql`select 1 from friend_requests where sender_id=${owner}`).length,0);
+ assert.equal((await sql`select created_by from chat_rooms where id=${room}`)[0].created_by,active);
+ assert.equal((await sql`select 1 from media_deletion_queue where media_ref=${ref}`).length,1);
+ const preserved=JSON.stringify(await sql`select * from moderation_cases where id=${caseId}`)+JSON.stringify(await sql`select * from moderation_case_events where case_id=${caseId}`)+JSON.stringify(await sql`select * from moderation_case_appeals where case_id=${caseId}`);
+ assert.ok(preserved.includes('deleted:v10-fixture'));assert.ok(!preserved.includes(owner));assert.ok(!preserved.includes('OWN_'));
 });

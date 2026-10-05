@@ -287,6 +287,7 @@ export const saveExpandedEvent=createServerFn({method:'POST'}).middleware([authM
   if(data.id){
     if(!sql.transaction)throw new Error('Transactional storage is required.');
     const ids=await sql.transaction(async tx=>{
+      await tx`select id from communities where id=${data.slug} for update`;
       const current=(await tx`select * from events where id=${data.id} and community_id=${data.slug} for update`)[0];if(!current)throw new Error('Event not found.');
       const me=await requireActiveMember(tx,uid,data.slug);
       const affected=current.series_id&&data.scope!=='single'?await tx`select * from events where community_id=${data.slug} and series_id=${String(current.series_id)} and (${data.scope}='all' or starts_at>=${iso(current.starts_at)}) order by id for update`:[current];
@@ -306,18 +307,21 @@ export const saveExpandedEvent=createServerFn({method:'POST'}).middleware([authM
     for(const eventId of ids){const attendees=await sql`select user_id from event_rsvps where event_id=${eventId}`;for(const attendee of attendees)await notify(sql,String(attendee.user_id),'event','Event updated',title,`/c/${data.slug}/events`,{targetType:'event',targetId:eventId});}
     return {id:data.id,ids};
   }
+  if(!sql.transaction)throw new Error('Transactional storage is required.');
+  return sql.transaction(async tx=>{
   const seriesId=data.recurrence==='none'?null:crypto.randomUUID();
   // One statement inserts a series atomically; each occurrence has an independent attendee list.
-  const rows=await sql.query(`insert into events(community_id,title,body,kind,starts_at,ends_at,created_by,venue_kind,online_url,location,image_url,recurrence,series_id,timezone,dst_disambiguation) select $1,$2,$3,$4,x.starts_at::timestamptz,x.ends_at::timestamptz,$5,$6,$7,$8,$9,$10,$11,$13,$14 from jsonb_to_recordset($12::jsonb) as x(starts_at text,ends_at text) returning id,starts_at`,[data.slug,title,body,data.kind,uid,data.venueKind,onlineUrl,location,imageUrl,data.recurrence,seriesId,JSON.stringify(dates.map(r=>({starts_at:r.startsAt,ends_at:r.endsAt}))),zone,data.dstDisambiguation]);
+  const rows=await tx.query(`insert into events(community_id,title,body,kind,starts_at,ends_at,created_by,venue_kind,online_url,location,image_url,recurrence,series_id,timezone,dst_disambiguation) select $1,$2,$3,$4,x.starts_at::timestamptz,x.ends_at::timestamptz,$5,$6,$7,$8,$9,$10,$11,$13,$14 from jsonb_to_recordset($12::jsonb) as x(starts_at text,ends_at text) returning id,starts_at`,[data.slug,title,body,data.kind,uid,data.venueKind,onlineUrl,location,imageUrl,data.recurrence,seriesId,JSON.stringify(dates.map(r=>({starts_at:r.startsAt,ends_at:r.endsAt}))),zone,data.dstDisambiguation]);
   for(const row of rows){
     if(data.createChat||data.createLive){
-      const linked=await sql`insert into chat_rooms(community_id,name,kind,created_by,scheduled_at) values(${data.slug},${title.slice(0,40)},${data.createLive?'voice':'public'},${uid},${data.createLive?iso(row.starts_at):null}) returning id`;
-      const roomId=Number(linked[0].id);await sql`insert into chat_members(room_id,user_id) select ${roomId},user_id from memberships where community_id=${data.slug} and status='active' on conflict do nothing`;
-      if(data.createLive)await sql`update chat_members set stage_role='speaker' where room_id=${roomId} and user_id=${uid}`;
-      await sql`update events set chat_room_id=${roomId},live_room_id=${data.createLive?roomId:null} where id=${Number(row.id)}`;
+      const linked=await tx`insert into chat_rooms(community_id,name,kind,created_by,scheduled_at) values(${data.slug},${title.slice(0,40)},${data.createLive?'voice':'public'},${uid},${data.createLive?iso(row.starts_at):null}) returning id`;
+      const roomId=Number(linked[0].id);await tx`insert into chat_members(room_id,user_id) select ${roomId},user_id from memberships where community_id=${data.slug} and status='active' on conflict do nothing`;
+      if(data.createLive)await tx`update chat_members set stage_role='speaker' where room_id=${roomId} and user_id=${uid}`;
+      await tx`update events set chat_room_id=${roomId},live_room_id=${data.createLive?roomId:null} where id=${Number(row.id)}`;
     }
   }
-  await audit(sql,data.slug,uid,'event:create',`${title}; ${rows.length} occurrence(s)`);return {id:Number(rows[0].id),ids:rows.map(r=>Number(r.id))};
+  await audit(tx,data.slug,uid,'event:create',`${title}; ${rows.length} occurrence(s)`);return {id:Number(rows[0].id),ids:rows.map(r=>Number(r.id))};
+  });
 });
 export const listExpandedEvents=createServerFn({method:'GET'}).middleware([optionalAuth]).validator((slug:string)=>slugSchema.parse(slug)).handler(async({context,data:slug})=>{
   const sql=await db(),uid=(context as unknown as Viewer).userId,community=await readable(sql,uid,slug),member=await membershipOf(sql,uid,slug);
@@ -330,6 +334,7 @@ export const manageExpandedEvent=createServerFn({method:'POST'}).middleware([aut
   const sql=await db(),uid=(context as Authed).userId,member=await requireActiveMember(sql,uid,data.slug);
   if(!sql.transaction)throw new Error('Transactional storage is required.');
   const changed=await sql.transaction(async tx=>{
+    await tx`select id from communities where id=${data.slug} for update`;
     const selected=(await tx`select * from events where id=${data.id} and community_id=${data.slug} for update`)[0];if(!selected)throw new Error('Event not found.');
     const events=selected.series_id&&data.scope!=='single'?await tx`select * from events where community_id=${data.slug} and series_id=${String(selected.series_id)} and (${data.scope}='all' or starts_at>=${iso(selected.starts_at)}) order by id for update`:[selected];
     const changed=[];

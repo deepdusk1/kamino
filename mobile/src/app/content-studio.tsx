@@ -18,6 +18,7 @@ import { pickPhoto, pickVideo } from "@/lib/media";
 import { showError } from "@/lib/errors";
 import { useTheme } from "@/theme";
 import { notify } from "@/components/community/platform";
+import { MediaLibraryPicker } from "@/components/content/MediaLibraryPicker";
 
 const KINDS = [
   { kind: "video", title: "🎬 Video" },
@@ -40,6 +41,7 @@ export default function ContentStudio() {
     [title, setTitle] = useState(""),
     [body, setBody] = useState(""),
     [media, setMedia] = useState<MediaInput | null>(null),
+    [images,setImages]=useState<(MediaInput&{kind:"image"})[]>([]),
     [busy, setBusy] = useState(false),
     [published, setPublished] = useState<{
       id: number;
@@ -92,14 +94,19 @@ export default function ContentStudio() {
           "library",
           allowance.data?.limits.image,
         );
-        if (dataUrl)
-          setMedia({
+        if (dataUrl){
+          const picture:MediaInput&{kind:"image"}={
             kind: "image",
             dataUrl,
             filename: "picture.jpg",
             altText: "",
             captions: "",
-          });
+          };
+          if(kind==="article"){
+            if(images.length>=6)throw new Error("Use up to six image blocks per article.");
+            setImages(previous=>[...previous,picture]);setBody(previous=>`${previous}\n\n[image:${images.length+1}]`);
+          }else setMedia(picture);
+        }
       } else if (target === "video" || target === "short") {
         const dataUrl = await pickVideo(
           "library",
@@ -134,6 +141,7 @@ export default function ContentStudio() {
         body,
         kind,
         media: media ?? undefined,
+        images:kind==="article"?images:[],
         visibility: audience,
         commentRule,
         sharingAllowed: sharing,
@@ -179,6 +187,8 @@ export default function ContentStudio() {
       <AppHeader back />
       <Screen>
         <Button variant="secondary" label="Profile stories · no community needed" onPress={()=>router.push("/profile-stories" as never)}/> 
+        <Button variant="secondary" label="Watch short videos" onPress={()=>router.push("/short-videos" as never)}/>
+        <Button variant="secondary" label="GIF & music library" onPress={()=>router.push("/media-library" as never)}/>
         <View
           style={{
             gap: 10,
@@ -205,6 +215,7 @@ export default function ContentStudio() {
               onPress={() => {
                 setKind(k.kind);
                 setMedia(null);
+                setImages([]);
                 setPublished(null);
               }}
             />
@@ -247,15 +258,18 @@ export default function ContentStudio() {
               style={{ minHeight: 150 }}
               hint={
                 kind === "article"
-                  ? "Use headings (#), ||spoiler text|| and [image] on its own line to place your uploaded picture."
+                  ? "Use headings (#), ||spoiler text|| and up to six images. Move [image:1] markers between paragraphs to place each picture."
                   : undefined
               }
             />
             <Button
               variant="secondary"
-              label={media ? `Replace ${media.filename}` : "Choose media"}
+              label={kind==="article"?`Add image block (${images.length}/6)`:media ? `Replace ${media.filename}` : "Choose media"}
               onPress={() => void pick()}
             />
+            {kind==="article"?images.map((image,index)=><View key={index} style={{gap:8}}><Txt variant="small">Image {index+1}: [image:{index+1}]</Txt><Field label={`Describe image ${index+1}`} value={image.altText??""} maxLength={600} onChangeText={altText=>setImages(previous=>previous.map((item,i)=>i===index?{...item,altText}:item))}/><Button small variant="danger" label={`Remove image ${index+1}`} onPress={()=>{setImages(previous=>previous.filter((_,i)=>i!==index));setBody(previous=>previous.replace(/\[image:(\d+)\]/g,(marker,n)=>Number(n)===index+1?"":Number(n)>index+1?`[image:${Number(n)-1}]`:marker));}}/></View>):null}
+            {kind==="gif"?<MediaLibraryPicker kind="gif" onSelect={setMedia}/>:null}
+            {kind==="audio"?<MediaLibraryPicker kind="audio" onSelect={setMedia}/>:null}
             {kind === "story" ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 <Button

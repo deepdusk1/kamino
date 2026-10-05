@@ -332,6 +332,7 @@ export const setDiscoveryFeedback = createServerFn({ method: "POST" })
     else
       await sql`insert into discovery_feedback(user_id,target_type,target_id,preference) values(${userId},${data.targetType},${data.targetId},${data.preference})
       on conflict(user_id,target_type,target_id) do update set preference=excluded.preference,updated_at=now()`;
+    await (await import('./operations-v10.server')).convertExperiment(sql,userId,'related_discovery');
     return { ok: true };
   });
 export const resetDiscovery = createServerFn({ method: "POST" })
@@ -342,6 +343,7 @@ export const resetDiscovery = createServerFn({ method: "POST" })
     await sql`delete from discovery_feedback where user_id=${userId}`;
     await sql`delete from recent_searches where user_id=${userId}`;
     await sql`delete from community_visits where user_id=${userId}`;
+    await sql`delete from semantic_preferences where user_id=${userId}`;
     return { ok: true };
   });
 
@@ -441,6 +443,7 @@ export const aiAssistant = createServerFn({ method: "POST" })
       ],
       { maxTokens: 1200 },
     );
+    await (await import('./operations-v10.server')).convertExperiment(sql,userId,'discovery_assistant');
     return { text, generated: true };
   });
 

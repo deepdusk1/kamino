@@ -9,7 +9,8 @@ import { reviewContent } from "./safety.server";
 import { guard } from "./guard";
 import { storeMedia, loadMedia, deleteMedia } from "./media-store.server";
 import { POST_EMOJI, CONTENT_LIMITS, checkedContentMedia, safeFilename } from "./content-rules";
-import { articleWithImages } from "./media-v10-rules";
+import { articleWithImages, moderationTextSegments } from "./media-v10-rules";
+import { withStoryOwnerLock } from "./profile-stories.server";
 
 type Sql = Awaited<ReturnType<typeof internals.db>>;
 type Authed = { userId: string };
@@ -79,6 +80,8 @@ async function profileReadable(sql: Sql, viewer: string | null, owner: string) {
 async function contentAccess(sql: Sql, viewer: string | null, postId: number) {
   const post = (await sql`select * from posts where id=${postId}`)[0];
   if (!post) throw new Error("Post unavailable.");
+  await internals.assertAccountAllowed(sql,String(post.author_user_id));
+  if(viewer&&post.content_warning&&(await sql`select 1 from profiles where user_id=${viewer} and sensitive_content='hide'`).length)throw new Error("Post unavailable.");
   if (!post.expires_at || new Date(String(post.expires_at)).getTime() > Date.now())
     return requirePostAccess(sql, viewer, postId);
   const highlighted =
@@ -435,9 +438,7 @@ export const createMediaPost = createServerFn({ method: "POST" })
       }
     ).assertCommunityReadable;
     if (readable) await readable(sql, userId, data.slug);
-    checkText(
-      `${data.title}\n${data.body}\n${data.story?.overlayText ?? ""}\n${data.story?.question ?? ""}`,
-    );
+    for(const segment of moderationTextSegments(`${data.title}\n${data.body}\n${data.story?.overlayText ?? ""}\n${data.story?.question ?? ""}`))checkText(segment);
     if (data.kind !== "article" && data.kind !== "story" && !data.media)
       throw new Error("Attach media first.");
     if (data.images.length && data.kind !== "article") throw new Error("Image blocks belong to articles.");
@@ -464,13 +465,17 @@ export const createMediaPost = createServerFn({ method: "POST" })
     if (files.length) await guard(userId, "upload");
     const stored:string[]=[];
     const type = data.kind === "story" ? "story" : "blog";
-    let postId: number | null = null;
     try {
+      return await withStoryOwnerLock(sql,userId,async sql=>{
+      await requireMinAge(sql,userId);
+      await requireActiveMember(sql,userId,data.slug);
+      await assertNotMuted(sql,userId,data.slug);
+      if(readable)await readable(sql,userId,data.slug);
       for(const file of files) stored.push(await storeMedia("content",file.dataUrl));
       const [post] = await sql<{
         id: number;
       }>`insert into posts(community_id,author_user_id,type,title,body,payload,hidden,content_warning,visibility,comments_disabled,publish_at,expires_at) values(${data.slug},${userId},${type},${data.title},${data.body},${JSON.stringify({ format: data.kind === "article" ? "markdown" : undefined, contentKind: data.kind })},true,${data.contentWarning},${data.visibility},${data.commentRule === "none"},${when?.toISOString() ?? null},${data.kind === "story" ? new Date((when?.getTime() ?? Date.now()) + 86400000).toISOString() : null}) returning id`;
-      postId = Number(post!.id);
+      const postId = Number(post!.id);
       await sql`insert into post_content_settings(post_id,sharing_allowed,comment_rule) values(${postId},${data.sharingAllowed},${data.commentRule})`;
       const articleImages:{id:number;altText:string}[]=[];
       for (const [index,file] of files.entries()) {
@@ -489,7 +494,7 @@ export const createMediaPost = createServerFn({ method: "POST" })
           targetId: postId,
           authorId: userId,
           communityId: data.slug,
-          text: `${data.title}\n${data.body}\n${data.story?.overlayText ?? ""}`,
+          text: `${data.title}\n${data.body}\n${data.story?.overlayText ?? ""}\n${files.map(file=>`${file.altText}\n${file.captions}`).join("\n")}`,
           images: files.filter(file=>file.kind==="image"||file.kind==="gif").map(file=>file.dataUrl),
           href: `/c/${data.slug}/p/${postId}`,
         },
@@ -497,8 +502,8 @@ export const createMediaPost = createServerFn({ method: "POST" })
       );
       if (!held) await sql`update posts set hidden=false where id=${postId}`;
       return { id: postId, held, slug: data.slug };
+      });
     } catch (error) {
-      if (postId) await sql`delete from posts where id=${postId}`;
       if (stored.length) await deleteMedia(stored);
       throw error;
     }
@@ -777,16 +782,11 @@ async function peerAllowed(sql: Sql, userId: string, target: string) {
   const p = (await sql`select dm_privacy from profiles where user_id=${target}`)[0];
   if (!p) throw new Error("Member not found.");
   if (p.dm_privacy === "none") throw new Error("This member has messaging closed.");
-  const mutual =
-    (
-      await sql`select 1 from profile_follows a join profile_follows b on b.follower_id=a.followee_id and b.followee_id=a.follower_id where a.follower_id=${userId} and a.followee_id=${target}`
-    ).length > 0;
   const shared =
     (
       await sql`select 1 from memberships a join memberships b on a.community_id=b.community_id where a.user_id=${userId} and b.user_id=${target} and a.status='active' and b.status='active' limit 1`
     ).length > 0;
-  // Consent is required before adding someone directly to a group.
-  if (!mutual) throw new Error("Group invitations are limited to mutual followers.");
+  // Membership is added only after the recipient accepts the invitation.
   if (p.dm_privacy === "members" && !shared)
     throw new Error("This member limits chats to shared communities.");
   const helper = (
@@ -872,7 +872,7 @@ export const updateGroupChat = createServerFn({ method: "POST" })
         if(current.created_by===userId){
           const next=(await tx`select user_id from chat_members where room_id=${data.roomId} and room_removed=false order by case group_role when 'coadmin' then 0 when 'moderator' then 1 else 2 end,user_id limit 1`)[0];
           if(next)await tx`update chat_rooms set created_by=${String(next.user_id)} where id=${data.roomId}`;
-          else await tx`delete from chat_rooms where id=${data.roomId}`;
+          else await tx`update chat_rooms set locked=true where id=${data.roomId}`;
         }
       });
       return { ok: true };

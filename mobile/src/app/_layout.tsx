@@ -138,12 +138,21 @@ function Navigation() {
           <Stack.Screen name="content-studio" options={{ title: "Content studio" }} />
           <Stack.Screen name="profile-stories" options={{ title: "Profile stories" }} />
           <Stack.Screen name="inbox-tools" options={{ title: "Chat tools" }} />
+          <Stack.Screen name="connections" options={{ title: "Connections" }} />
+          <Stack.Screen name="groups/[roomId]" options={{ title: "Group settings" }} />
+          <Stack.Screen name="media-library" options={{ title: "Media library" }} />
+          <Stack.Screen name="short-videos" options={{ title: "Short videos", headerShown: false }} />
+          <Stack.Screen name="smart-search" options={{ title: "Find your people" }} />
+          <Stack.Screen name="operations" options={{ title: "Activity & safety" }} />
+          <Stack.Screen name="admin-operations" options={{ title: "Operations dashboard" }} />
+          <Stack.Screen name="admin-analytics" options={{ title: "Platform analytics" }} />
           <Stack.Screen name="profile-content" options={{ title: "Profile content" }} />
           <Stack.Screen name="tutorial" options={{ title: "Welcome tour" }} />
           <Stack.Screen name="invite/[code]" options={{ title: "Invitation" }} />
         </Stack.Protected>
         {/* Dev-only component gallery for visual checks (see src/app/kit.tsx). Not linked from anywhere. */}
         <Stack.Screen name="kit" options={{ headerShown: false }} />
+        <Stack.Screen name="appeal" options={{ title: "Appeal a decision" }} />
       </Stack>
       {status === "signedIn" ? <IncomingCallBanner /> : null}
     </>

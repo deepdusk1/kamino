@@ -20,6 +20,10 @@ import * as billing from "./billing-v9";
 import * as siteReports from "./site-reports";
 import * as platformAnalytics from "./platform-analytics";
 import * as profileStories from "./profile-stories";
+import * as mediaV10 from "./media-v10";
+import * as socialEventsV10 from "./social-events-v10";
+import * as operationsV10 from "./operations-v10";
+import * as searchV10 from "./search-v10";
 
 type ServerFn = ((opts: { data?: unknown }) => Promise<unknown>) & { method?: string };
 
@@ -28,6 +32,6 @@ function isServerFn(value: unknown): value is ServerFn {
 }
 
 export const mobileApi: Record<string, ServerFn> = Object.fromEntries(
-  [core, extras, engagement, library, aiFeatures, social, identity, communityTools, contentTools, platformTools, billing, siteReports, platformAnalytics, profileStories]
+  [core, extras, engagement, library, aiFeatures, social, identity, communityTools, contentTools, platformTools, billing, siteReports, platformAnalytics, profileStories, mediaV10, socialEventsV10, operationsV10, searchV10]
     .flatMap(module => Object.entries(module)).filter(([, value]) => isServerFn(value)),
 );
