@@ -21,7 +21,7 @@ async function webhook({ request }: { request: Request }) {
   let event;
   try {
     const { verifyStripeEvent } = await import("@/lib/kamino/billing-rules");
-    event = verifyStripeEvent(body, request.headers.get("stripe-signature") ?? "", config.webhookSecret);
+    event = verifyStripeEvent(body, request.headers.get("stripe-signature") ?? "", config.webhookSecret, Math.floor(Date.now() / 1000), config.mode === "live");
   } catch { return new Response(JSON.stringify({ error: "Invalid signature or payment event." }), { status: 400, headers }); }
   try {
     const { internals } = await import("@/lib/kamino/server");

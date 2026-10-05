@@ -6,7 +6,7 @@ import { confirmMinimumAge } from "@/lib/kamino/extras";
 import { BirthdayFields, EMPTY_BIRTHDAY, judgeBirthday, YOUNG_MESSAGE, type Birthday } from "./birthday-fields";
 
 /**
- * Shown over the app to a signed-in person who has not passed the 13+ birthday check yet
+ * Shown over the app to a signed-in person who has not passed the 18+ birthday check yet
  * (for example, someone who signed up with a social account, which skips our sign-up form).
  */
 export function AgeGate({ onDone }: { onDone: () => void }) {
@@ -51,7 +51,7 @@ export function AgeGate({ onDone }: { onDone: () => void }) {
             One quick thing
           </h2>
           <p className="mt-1.5 text-[15px] leading-[1.45] text-muted">
-            Kamino is for people aged 13 and over. Tell us your birthday to continue.
+            Kamino is for adults aged 18 and over. Tell us your birthday to continue.
           </p>
         </div>
         <BirthdayFields value={birthday} onChange={setBirthday} />

@@ -45,7 +45,7 @@ export function useShellData() {
     unreadChats,
     /** Where "Profile" goes: own page when the handle is known, otherwise /me (which redirects). */
     profileHref: profile?.handle ? `/u/${encodeURIComponent(profile.handle)}` : "/me",
-    /** True when the 13+ birthday check is still missing. */
+    /** True when the 18+ birthday check is still missing. */
     needsAge: profile ? !profile.minAgeConfirmed : false,
     refetchBootstrap: boot.refetch,
   };

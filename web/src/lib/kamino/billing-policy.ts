@@ -13,5 +13,5 @@ export function paidResourceAccessSql(
       and (br.owner_id=${viewerSql}
         or exists(select 1 from memberships bm where bm.community_id=br.community_id and bm.user_id=${viewerSql} and bm.status='active' and bm.role in ('agent','leader','curator'))
         or exists(select 1 from billing_entitlements be where be.offer_id=br.offer_id and be.beneficiary_id=${viewerSql}
-          and be.state='active' and be.test_mode=true and (be.expires_at is null or be.expires_at>now())))))`;
+          and be.state='active' and (be.expires_at is null or be.expires_at>now())))))`;
 }

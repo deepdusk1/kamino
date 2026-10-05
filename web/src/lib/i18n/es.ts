@@ -15,7 +15,7 @@ export const es: Catalog = {
   "nav.search": "Buscar",
 
   // Landing (página de presentación sin sesión)
-  "landing.badge": "La app de comunidades tranquila · 13+",
+  "landing.badge": "La app de comunidades tranquila · 18+",
   "landing.hero.title": "Encuentra a tu gente. Crea tu comunidad.",
   "landing.hero.body":
     "Kamino reúne comunidades, chats, fiestas de cine y salas en directo en una app gratuita, con herramientas de verdad para quien las administra. Sin anuncios invasivos y sin reputación de pago.",
@@ -41,7 +41,7 @@ export const es: Catalog = {
     "Portafolio, analíticas, publicaciones exclusivas y espacios para suscriptores. La reputación y la moderación no se pueden comprar.",
   "landing.feature.safety.title": "Seguridad integrada",
   "landing.feature.safety.body":
-    "Moderación asistida por IA con revisión humana, apelaciones, silencios temporales, ajustes seguros para adolescentes y control de edad 13+.",
+    "Moderación asistida por IA con revisión humana, apelaciones, silencios temporales, plataforma solo para adultos y control de edad 18+.",
   "landing.banner.title": "Tu comunidad te espera",
   "landing.banner.body":
     "Elige tus intereses y Kamino te sugiere comunidades y personas que los comparten: en menos de un minuto, gratis, en iPhone, Android y la web.",
@@ -89,7 +89,7 @@ export const es: Catalog = {
   "login.terms": "Términos",
   "login.and": "y la",
   "login.privacy": "Política de privacidad",
-  "login.ageNote": "Para personas de 13 años o más.",
+  "login.ageNote": "Para adultos de 18 años o más.",
   "login.switch.toIn": "Ya tengo una cuenta",
   "login.switch.toUp": "¿Nuevo por aquí? Crea una cuenta",
   "login.looking": "¿Solo estás mirando?",

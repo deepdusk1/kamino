@@ -180,5 +180,11 @@ files inside `mobile/` (increase `version` in `app.config.ts` for a new store re
 | You changed the code and the app looks unchanged | Rebuild the app (step 7). Only website/server changes deploy automatically. |
 # Release 9 prerequisites
 
-Before deploying this build, read `web/IDENTITY_SECURITY.md`, `web/BILLING.md` and `FEATURE-STATUS.md`. Run all migrations, configure verified email delivery and administrator identities, and provide `KAMINO_JOB_SECRET` so background reminders/digests run. Payments ship as a disabled-by-default Stripe sandbox; live billing with creator payouts is a separate, explicit switch (`web/BILLING.md`). Native store purchases are not built. Update the store privacy declarations for the optional native contacts flow and configured providers. Physical-device calls, permissions and notification delivery still require verification.
+Before deploying this build, read `web/IDENTITY_SECURITY.md`, `web/BILLING.md` and `FEATURE-STATUS.md`. Run all migrations, configure verified email delivery and administrator identities, and provide `KAMINO_JOB_SECRET` so background reminders/digests run.
+
+**Back up before migrating.** Kamino is an adults-only (18+) platform: migration `0024` clears
+stored age confirmations so everyone re-confirms at 18+, and the app erases accounts that
+confirm as under 18. If you are migrating a database that predates that change, run
+`npm run backup` in `web` first and store the file outside the host. Fresh deploys are
+unaffected. Payments ship as a disabled-by-default Stripe sandbox; live billing with creator payouts is a separate, explicit switch (`web/BILLING.md`). Native store purchases are not built. Update the store privacy declarations for the optional native contacts flow and configured providers. Physical-device calls, permissions and notification delivery still require verification.
 

@@ -496,9 +496,9 @@ export const deleteMyAccount = createServerFn({ method: "POST" })
   });
 
 /**
- * The 13+ age check. The apps ask for a birthday when someone creates an account and send it here
+ * The 18+ age check. The apps ask for a birthday when someone creates an account and send it here
  * right after sign-up. We compare it with today's date and keep only the answer ("confirmed at ...").
- * Someone under 13 has their new account erased straight away, so nothing about them is kept.
+ * Someone under 18 has their new account erased straight away, so nothing about them is kept.
  */
 export const confirmMinimumAge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

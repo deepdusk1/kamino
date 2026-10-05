@@ -14,7 +14,7 @@ export const en = {
   "nav.search": "Search",
 
   // Landing (signed-out marketing page)
-  "landing.badge": "The calm community app · 13+",
+  "landing.badge": "The calm community app · 18+",
   "landing.hero.title": "Find your people. Build your community.",
   "landing.hero.body":
     "Kamino is communities, chats, watch parties and live rooms in one free app — with real tools for the people who run them. No ads in your face, no pay-to-win reputation.",
@@ -40,7 +40,7 @@ export const en = {
     "Portfolio, analytics, exclusive posts and subscriber spaces. Reputation and moderation can never be bought.",
   "landing.feature.safety.title": "Safety built in",
   "landing.feature.safety.body":
-    "AI-assisted moderation with human review, appeals, timed mutes, teen-safe defaults, and a 13+ birthday gate.",
+    "AI-assisted moderation with human review, appeals, timed mutes, adults-only 18+ birthday gate.",
   "landing.banner.title": "Your community is waiting",
   "landing.banner.body":
     "Pick your interests and Kamino suggests communities and people who share them — in under a minute, free, on iPhone, Android and the web.",
@@ -88,7 +88,7 @@ export const en = {
   "login.terms": "Terms",
   "login.and": "and",
   "login.privacy": "Privacy policy",
-  "login.ageNote": "For people aged 13 and older.",
+  "login.ageNote": "For adults aged 18 and older.",
   "login.switch.toIn": "I already have an account",
   "login.switch.toUp": "New here? Create an account",
   "login.looking": "Just looking around?",

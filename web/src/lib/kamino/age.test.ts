@@ -13,7 +13,7 @@ test("counts whole years and respects the birthday", () => {
 
 test("accepts real dates and reports the age", () => {
   assert.deepEqual(checkBirthDate(1990, 2, 28, today), { ok: true, age: 36 });
-  assert.deepEqual(checkBirthDate(2012, 9, 29, today), { ok: true, age: 14 });
+  assert.deepEqual(checkBirthDate(2008, 9, 29, today), { ok: true, age: 18 });
 });
 
 test("rejects impossible or future dates", () => {

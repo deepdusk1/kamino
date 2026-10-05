@@ -26,7 +26,7 @@ import {
 import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-room";
 import { cn } from "@/lib/utils";
 import { getLiveStage } from '@/lib/kamino/community-v9';
-import { getLiveKitJoin } from '@/lib/kamino/livekit';
+import { getLiveKitJoin, getRoomRecordingState } from '@/lib/kamino/livekit';
 
 type WatchWire = {
   t: "watch";
@@ -249,6 +249,7 @@ export function LiveStage({
   const previewRef = useRef<HTMLVideoElement>(null);
   const startedAt = useRef<number>(0);
   const stage=useQuery({queryKey:['live-stage',roomId],queryFn:()=>getLiveStage({data:{roomId}}),enabled:kind!=='dm'&&canCall,refetchInterval:2500});
+  const recording=useQuery({queryKey:['room-recording',roomId],queryFn:()=>getRoomRecordingState({ data: roomId }),enabled:kind==='screening'||kind==='voice',refetchInterval:10000});
   const mine=stage.data?.participants.find(p=>p.userId===userId);
   const maySpeak=kind==='dm'||!!stage.data&&!!mine&&!mine.muted&&(!stage.data.enabled||mine.role==='host'||mine.role==='speaker');
   const speakingRef=useRef(maySpeak);speakingRef.current=maySpeak;
@@ -496,6 +497,12 @@ export function LiveStage({
 
   return (
     <div className="space-y-3 px-3 pt-3 lg:px-4">
+      {recording.data?.recording ? (
+        <div role="status" className="flex items-center gap-2 rounded-card border border-red/40 bg-red/10 px-4 py-2.5 text-sm font-bold text-ink">
+          <span className="size-2 animate-pulse rounded-full bg-red-strong" aria-hidden />
+          This room is being recorded. By staying in the room you agree to it.
+        </div>
+      ) : null}
       {screening && (
         <WatchDeck
           live={live}
@@ -505,6 +512,7 @@ export function LiveStage({
           onWatchSaved={onWatchSaved}
           roomId={roomId}
           isHost={!!stage.data?.host || mine?.role === "host" || !!mine?.cohost}
+          participants={stage.data?.participants ?? []}
         />
       )}
 
@@ -853,6 +861,8 @@ function TwitchFrame({ url, register, onLocalState }: EmbeddedPlayerProps) {
   return <div ref={hostRef} className="h-full w-full" />;
 }
 
+type StageParticipant = { userId: string; role: string; cohost?: boolean };
+
 function WatchDeck({
   live,
   selfId,
@@ -861,6 +871,7 @@ function WatchDeck({
   onWatchSaved,
   roomId,
   isHost,
+  participants,
 }: {
   live: ReturnType<typeof useLiveRoom>;
   selfId: string;
@@ -869,6 +880,7 @@ function WatchDeck({
   onWatchSaved?: (url: string, title: string) => void;
   roomId: number;
   isHost: boolean;
+  participants: StageParticipant[];
 }) {
   const queryClient = useQueryClient();
   const first = SHELF[0]!;
@@ -881,7 +893,9 @@ function WatchDeck({
   const [paste, setPaste] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [readyPrompt, setReadyPrompt] = useState<number | null>(null);
-  const controller = useRef(selfId);
+  // Host-authoritative control: only hosts/co-hosts claim the controller seat. Everyone else
+  // starts as a follower and ignores watch state from anyone the server says is not a host.
+  const controller = useRef<string | null>(isHost ? selfId : null);
   const applying = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const ytHost = useRef<HTMLDivElement>(null);
@@ -893,6 +907,7 @@ function WatchDeck({
 
   const emit = useCallback(
     (next: Partial<WatchWire> = {}) => {
+      if (!isHost) return;
       const msg: WatchWire = {
         t: "watch",
         url,
@@ -907,12 +922,12 @@ function WatchDeck({
       controller.current = selfId;
       live.send(msg);
     },
-    [live, url, title, kind, paused, selfId],
+    [live, url, title, kind, paused, selfId, isHost],
   );
   emitRef.current = emit;
 
   useEffect(() => {
-    return live.onMessage((_from, data) => {
+    return live.onMessage((from, data) => {
       const raw = data as { t?: string } | undefined;
       if (!raw) return;
       if (raw.t === "watch-hello") {
@@ -926,7 +941,14 @@ function WatchDeck({
       }
       const msg = data as WatchWire | undefined;
       if (!msg || msg.t !== "watch") return;
-      controller.current = msg.by;
+      // The data channel gives us the real sender; the payload's `by` is a claim that must match
+      // it. Only senders the server says are hosts/co-hosts may drive everyone's player.
+      if (msg.by !== from) return;
+      const sender = participants.find((candidate) => rtcPeerId(candidate.userId) === from);
+      const senderMayControl =
+        !!sender && (sender.role === "host" || sender.role === "cohost" || !!sender.cohost);
+      if (!senderMayControl) return;
+      controller.current = from;
       applying.current = true;
       if (msg.url !== url) {
         setUrl(msg.url);
@@ -958,7 +980,7 @@ function WatchDeck({
         applying.current = false;
       }, 400);
     });
-  }, [live, url, selfId]);
+  }, [live, url, selfId, participants]);
 
   useEffect(() => {
     if (!live.joined) return;
@@ -1022,6 +1044,7 @@ function WatchDeck({
 
   useEffect(() => {
     if (!live.joined) return;
+    if (!isHost) return;
     const id = window.setInterval(() => {
       if (controller.current !== selfId) return;
       if (kind === "mp4" && videoRef.current) atRef.current = videoRef.current.currentTime;
@@ -1032,7 +1055,7 @@ function WatchDeck({
       emitRef.current({ at: atRef.current, paused });
     }, 2000);
     return () => window.clearInterval(id);
-  }, [live.joined, paused, kind, selfId]);
+  }, [live.joined, paused, kind, selfId, isHost]);
 
   function loadFilm(next: { url: string; title: string; kind: ShelfKind }) {
     setUrl(next.url);
@@ -1040,8 +1063,10 @@ function WatchDeck({
     setKind(next.kind);
     setPaused(false);
     atRef.current = 0;
-    onWatchSaved?.(next.url, next.title);
-    emit({ ...next, paused: false, at: 0, ts: Date.now(), by: selfId });
+    if (isHost) {
+      onWatchSaved?.(next.url, next.title);
+      emit({ ...next, paused: false, at: 0, ts: Date.now(), by: selfId });
+    }
   }
 
   // Stable callbacks for the embedded players: they register a control handle once ready and

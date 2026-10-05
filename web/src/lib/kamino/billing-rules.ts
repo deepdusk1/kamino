@@ -23,7 +23,7 @@ export type StripeEvent = {
   id: string;
   type: string;
   created: number;
-  livemode: false;
+  livemode: boolean;
   data: { object: StripeObject };
 };
 export type BillingOrderSnapshot = {
@@ -87,6 +87,7 @@ export function verifyStripeEvent(
   signature: string,
   secret: string,
   nowSeconds = Math.floor(Date.now() / 1000),
+  live = false,
 ): StripeEvent {
   if (
     Buffer.byteLength(rawBody) > 1024 * 1024 ||
@@ -111,12 +112,12 @@ export function verifyStripeEvent(
     !/^evt_[A-Za-z0-9]+$/.test(event.id ?? "") ||
     !/^[a-z_]+(?:\.[a-z_]+)+$/.test(event.type ?? "") ||
     !Number.isSafeInteger(event.created) ||
-    event.livemode !== false ||
+    event.livemode !== live ||
     !event.data?.object ||
     typeof event.data.object !== "object" ||
     Array.isArray(event.data.object)
   )
-    throw new Error("Invalid test-mode payment event.");
+    throw new Error(live ? "Invalid live payment event." : "Invalid test-mode payment event.");
   return event as StripeEvent;
 }
 
@@ -130,10 +131,10 @@ export function stripeId(value: unknown, prefix: string): string {
   return id;
 }
 
-function assertMetadata(remote: StripeObject, order: BillingOrderSnapshot) {
+function assertMetadata(remote: StripeObject, order: BillingOrderSnapshot, live = false) {
   const metadata = object(remote.metadata);
   if (
-    remote.livemode !== false ||
+    remote.livemode !== live ||
     metadata.kamino_order_id !== order.id ||
     metadata.kamino_buyer_id !== order.buyerId ||
     metadata.kamino_beneficiary_id !== order.beneficiaryId
@@ -141,8 +142,12 @@ function assertMetadata(remote: StripeObject, order: BillingOrderSnapshot) {
     throw new Error("Payment does not match this order.");
 }
 
-export function assertCheckoutMatches(remote: StripeObject, order: BillingOrderSnapshot): void {
-  assertMetadata(remote, order);
+export function assertCheckoutMatches(
+  remote: StripeObject,
+  order: BillingOrderSnapshot,
+  live = false,
+): void {
+  assertMetadata(remote, order, live);
   if (
     remote.client_reference_id !== order.id ||
     remote.mode !== order.mode ||
@@ -152,8 +157,12 @@ export function assertCheckoutMatches(remote: StripeObject, order: BillingOrderS
     throw new Error("Checkout does not match this order.");
 }
 
-export function assertPaidCheckout(remote: StripeObject, order: BillingOrderSnapshot): void {
-  assertCheckoutMatches(remote, order);
+export function assertPaidCheckout(
+  remote: StripeObject,
+  order: BillingOrderSnapshot,
+  live = false,
+): void {
+  assertCheckoutMatches(remote, order, live);
   if (remote.payment_status !== "paid" || remote.status !== "complete")
     throw new Error("Checkout has not been fully paid for this order.");
 }
@@ -161,8 +170,9 @@ export function assertPaidCheckout(remote: StripeObject, order: BillingOrderSnap
 export function assertPaymentIntentMatches(
   remote: StripeObject,
   order: BillingOrderSnapshot,
+  live = false,
 ): void {
-  assertMetadata(remote, order);
+  assertMetadata(remote, order, live);
   if (remote.amount !== order.priceMinor || remote.currency !== order.currency)
     throw new Error("Payment does not match this order's amount.");
 }
@@ -172,8 +182,9 @@ export function subscriptionAccessUntil(
   invoice: StripeObject,
   order: BillingOrderSnapshot,
   nowSeconds = Math.floor(Date.now() / 1000),
+  live = false,
 ): string | null {
-  assertMetadata(subscription, order);
+  assertMetadata(subscription, order, live);
   if (
     order.mode !== "subscription" ||
     subscription.status !== "active" ||
@@ -195,7 +206,7 @@ export function subscriptionAccessUntil(
   )
     throw new Error("Subscription price does not match this order.");
   if (
-    invoice.livemode !== false ||
+    invoice.livemode !== live ||
     invoice.id !== stripeId(subscription.latest_invoice, "in") ||
     invoice.status !== "paid" ||
     invoice.paid !== true ||

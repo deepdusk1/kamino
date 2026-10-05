@@ -10,7 +10,7 @@ import { errorMessage } from "@/lib/errors";
 import { font, radius, shadow, space, useTheme } from "@/theme";
 
 /**
- * Onboarding step 1 (part two): shown to a signed-in person who has not passed the 13+ birthday check yet
+ * Onboarding step 1 (part two): shown to a signed-in person who has not passed the 18+ birthday check yet
  * (for example an account created before the check existed, or through another sign-in method).
  */
 export default function AgeCheck() {
@@ -26,7 +26,7 @@ export default function AgeCheck() {
     setBusy(true);
     setError(null);
     try {
-      // Under-13 answers are sent too: the server then erases the account instead of keeping it.
+      // Under-18 answers are sent too: the server then erases the account instead of keeping it.
       const allowed = await confirmAge({ year: Number(birthday.year), month: Number(birthday.month), day: Number(birthday.day) });
       if (!allowed) setError(YOUNG_MESSAGE);
     } catch (e) {
@@ -45,7 +45,7 @@ export default function AgeCheck() {
           <GradientWord text="Thing" size={32} colors={VIOLET_GRADIENT} />
         </View>
         <Txt style={{ textAlign: "center", fontFamily: font.regular, fontSize: 15, lineHeight: 20, color: theme.muted, maxWidth: 320 }}>
-          Kamino is for people aged 13 and over. Tell us your birthday to continue.
+          Kamino is for adults aged 18 and over. Tell us your birthday to continue.
         </Txt>
       </Appear>
       <Appear index={1} style={{ padding: space.lg }}>

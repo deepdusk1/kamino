@@ -15,7 +15,7 @@ import { safeRedirect } from '@/lib/auth/safe-redirect';
 import { useT } from '@/lib/i18n';
 
 /**
- * Onboarding step 1: create an account (name, email, birthday 13+ check, password) or sign in.
+ * Onboarding step 1: create an account (name, email, birthday 18+ check, password) or sign in.
  * The Welcome screen opens it with `?mode=up` (Get Started) or `?mode=in` (I already have an account).
  * New accounts land on Home, which sends them to the rest of onboarding.
  */

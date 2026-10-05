@@ -5,6 +5,7 @@ import { sendPush } from "./push.server";
 import { processMediaDeletionQueue } from "./media-deletion.server";
 import { processPushDeliveries, processEmailDigests } from "./delivery-v10.server";
 import { enqueueDueMediaJobs, mediaJobConfig, processMediaJobs } from "./media-jobs.server";
+import { reconcileMissingEarnings } from "./money.server";
 type Row = Record<string, unknown>;
 type Sql = Awaited<ReturnType<typeof internals.db>>;
 
@@ -48,6 +49,10 @@ async function deliver(
 export async function runNotificationJobs() {
   const sql = await internals.db();
   const mediaDeletion = await processMediaDeletionQueue(sql);
+  let earningsReconciled: unknown = { credited: 0 };
+  try {
+    earningsReconciled = { credited: await reconcileMissingEarnings(sql) };
+  } catch { earningsReconciled = { credited: 0, unavailable: true }; }
   let mediaJobs: unknown = { processed: 0 };
   try {
     const config = mediaJobConfig();

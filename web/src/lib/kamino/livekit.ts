@@ -81,6 +81,10 @@ export const startRoomRecording = createServerFn({ method: "POST" })
     const inserted = await sql`
       insert into room_recordings(room_id, started_by, egress_id, state)
       values(${roomId}, ${userId}, ${String(result.egressId ?? "")}, 'recording') returning id`;
+    // Consent notice, in the transcript: everyone present is told, and late joiners can see it.
+    await sql`
+      insert into messages(room_id, author_user_id, body)
+      values(${roomId}, ${userId}, '⚠️ This room is now being recorded. By staying you agree to it.')`;
     return { id: Number(inserted[0]!.id) };
   });
 
@@ -105,7 +109,24 @@ export const stopRoomRecording = createServerFn({ method: "POST" })
       : "";
     await sql`update room_recordings set state = ${ref ? "ready" : "failed"}, storage_ref = ${ref}, ended_at = now()
       where id = ${Number(row.id)}`;
+    await sql`
+      insert into messages(room_id, author_user_id, body)
+      values(${roomId}, ${userId}, 'Recording ended.')`;
     return { ok: true, ready: Boolean(ref) };
+  });
+
+/** Whether the room is recording right now — the stage shows a consent banner while true. */
+export const getRoomRecordingState = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(idSchema)
+  .handler(async ({ context, data: roomId }) => {
+    const sql = await internals.db();
+    const { userId } = context as Authed;
+    await internals.requireRoomAccess(sql, userId, roomId);
+    const row = (
+      await sql`select 1 from room_recordings where room_id = ${roomId} and state = 'recording' limit 1`
+    )[0];
+    return { recording: Boolean(row) };
   });
 
 export const listRoomRecordings = createServerFn({ method: "GET" })

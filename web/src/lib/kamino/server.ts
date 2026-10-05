@@ -145,10 +145,10 @@ async function membershipOf(
   return rows[0] ? mapMembership(rows[0]) : null;
 }
 
-/** New accounts must pass the 13+ birthday check (see `confirmMinimumAge`) before they take part. */
+/** New accounts must pass the 18+ birthday check (see `confirmMinimumAge`) before they take part. */
 async function requireMinAge(sql: Sql, userId: string) {
   const row = (await sql`select min_age_confirmed_at from profiles where user_id = ${userId}`)[0];
-  if (!row?.min_age_confirmed_at) throw new Error("Please confirm your age first (Kamino is for people aged 13 and over).");
+  if (!row?.min_age_confirmed_at) throw new Error("Please confirm your age first (Kamino is for adults aged 18 and over).");
 }
 
 /**
@@ -4966,6 +4966,22 @@ export const setWatchMedia = createServerFn({ method: "POST" })
     const { userId } = context as Authed;
     const room = await requireRoomAccess(sql, userId, data.roomId);
     if (String(room.kind) !== "screening") throw new Error("Watch party is for screening rooms.");
+    // Only the host, co-hosts or community moderators choose what plays.
+    // Only the room creator, a co-host, or a community moderator chooses what plays.
+    let isHost = room.created_by === userId;
+    if (!isHost)
+      isHost =
+        (await sql`select 1 from room_cohosts where room_id=${data.roomId} and user_id=${userId}`).length > 0;
+    if (!isHost && room.community_id) {
+      const member = (
+        await sql`select role from memberships where community_id=${room.community_id} and user_id=${userId} and status='active'`
+      )[0];
+      if (member) {
+        const { canModerate } = await import("./safety");
+        isHost = canModerate(String(member.role));
+      }
+    }
+    if (!isHost) throw new Error("Only the host can choose what plays. Add it to the queue instead.");
     const parsed = parseWatchInput(data.url);
     if ("error" in parsed) throw new Error(parsed.error);
     const title = (data.title || parsed.title).slice(0, 80);

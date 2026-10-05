@@ -94,6 +94,16 @@ switch turns on **real money**:
 2. `KAMINO_PAYMENTS_ENABLED=true` **and** `KAMINO_BILLING_MODE=live` must both be set. A pasted
    live key alone never enables real charging.
 
+**Payout safety.** Earnings are credited with a refund hold period (`KAMINO_PAYOUT_HOLD_DAYS`,
+default 7) before they can be paid out. A payout reserves exactly the rows it settles before
+calling Stripe, uses a per-payout idempotency key (so retries can never create a second transfer),
+settles one currency at a time, and an interrupted payout is reconciled by the background worker
+and the next attempt instead of silently returning earnings to the pool. Refunds and chargebacks
+reverse earnings still in the pool directly; earnings already paid out are offset by a negative
+adjustment that blocks further payouts until the loss is recovered. Failed credits are retried by
+the worker. Financial records survive account deletion (pseudonymised), and deleting a room's
+recorder no longer fails.
+
 In live mode every completed order also credits **creator earnings**
 (`creator_earnings`: gross, platform fee, net). The platform fee is `KAMINO_PLATFORM_FEE_PERCENT`
 (default 10, clamped 0–50). Creators connect a Stripe Express account from the Creator page

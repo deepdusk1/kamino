@@ -55,7 +55,7 @@ export function mapCommunity(row: Record<string, unknown>): Community {
     themeStyle: THEME_STYLES.includes(row.theme_style as ThemeStyle) ? (row.theme_style as ThemeStyle) : "aurora",
     icon: String(row.icon ?? ""),
     visibility: (row.visibility as Community["visibility"]) ?? "public",
-    ageGate: Number(row.age_gate) || 13,
+    ageGate: Number(row.age_gate) || 18,
     contentWarnings: parseJson<string[]>(row.content_warnings, []),
     rules: String(row.rules ?? ""),
     modules: parseJson<Community["modules"]>(row.modules, [...COMMUNITY_MODULES]),

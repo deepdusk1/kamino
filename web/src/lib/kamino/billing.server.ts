@@ -136,9 +136,17 @@ async function persist(
     ],
   );
   if (status === "paid" && changed.length) {
+    // Failures are retried by the worker's reconcile pass (reconcileMissingEarnings), so a paid
+    // order can never silently end up owing nothing.
     const { creditCreatorEarnings } = await import("./money.server.ts");
     await creditCreatorEarnings(sql, String(row.id), testMode).catch((error) => {
-      console.error("[billing] earnings credit failed:", error);
+      console.error("[billing] earnings credit failed; the reconciliation pass will retry:", error);
+    });
+  }
+  if ((status === "refunded" || status === "disputed") && changed.length) {
+    const { reverseCreatorEarnings } = await import("./money.server.ts");
+    await reverseCreatorEarnings(sql, String(row.id)).catch((error) => {
+      console.error("[billing] earnings reversal failed; the reconciliation pass will retry:", error);
     });
   }
   if (!changed.length) {
@@ -173,14 +181,14 @@ async function updateSubscription(
         "The subscription checkout has not been linked yet. Retry the payment event.",
       );
     const session = await api(`/v1/checkout/sessions/${String(row.stripe_session_id)}`);
-    assertPaidCheckout(session, order);
+    assertPaidCheckout(session, order, lease.livemode === true);
     if (session.id !== row.stripe_session_id || stripeId(session.subscription, "sub") !== subId)
       throw new Error("Subscription does not match the stored checkout.");
   }
   const invoice = subscription.latest_invoice
     ? await api(`/v1/invoices/${stripeId(subscription.latest_invoice, "in")}`)
     : {};
-  const until = subscriptionAccessUntil(subscription, invoice, order);
+  const until = subscriptionAccessUntil(subscription, invoice, order, Math.floor(Date.now() / 1000), lease.livemode === true);
   const paymentIntent = invoice.payment_intent ? stripeId(invoice.payment_intent, "pi") : null;
   await persist(
     sql,
@@ -207,7 +215,7 @@ async function fulfillCheckout(
   if (row.stripe_session_id !== session.id)
     throw new Error("Checkout does not match the stored session.");
   if (session.payment_status !== "paid" || session.status !== "complete") return;
-  assertPaidCheckout(session, snapshot(row));
+  assertPaidCheckout(session, snapshot(row), lease.livemode === true);
   if (row.checkout_mode === "subscription") {
     await updateSubscription(
       sql,
@@ -246,7 +254,7 @@ async function revokeCharge(sql: Sql, charge: StripeObject, api: StripeRequest, 
           if (!row.stripe_session_id)
             throw new Error("The refunded subscription checkout is not linked yet.");
           const session = await api(`/v1/checkout/sessions/${String(row.stripe_session_id)}`);
-          assertPaidCheckout(session, snapshot(row));
+          assertPaidCheckout(session, snapshot(row), lease.livemode === true);
           if (
             session.id !== row.stripe_session_id ||
             stripeId(session.subscription, "sub") !== subId
@@ -262,10 +270,10 @@ async function revokeCharge(sql: Sql, charge: StripeObject, api: StripeRequest, 
     row = await orderById(sql, object(payment.metadata).kamino_order_id);
     if (row?.privacy_closed === true) return;
     if (row) {
-      assertPaymentIntentMatches(payment, snapshot(row));
+      assertPaymentIntentMatches(payment, snapshot(row), lease.livemode === true);
       if (!row.stripe_session_id) throw new Error("The refunded checkout is not linked yet.");
       const session = await api(`/v1/checkout/sessions/${String(row.stripe_session_id)}`);
-      assertPaidCheckout(session, snapshot(row));
+      assertPaidCheckout(session, snapshot(row), lease.livemode === true);
       if (
         session.id !== row.stripe_session_id ||
         stripeId(session.payment_intent, "pi") !== paymentId
@@ -345,7 +353,7 @@ export async function applyStripeEvent(
       const session = await api(`/v1/checkout/sessions/${stripeId(remote, lease.livemode ? "cs_live" : "cs_test")}`),
         row = await orderById(sql, object(session.metadata).kamino_order_id);
       if (row && row.stripe_session_id === session.id && row.status === "pending") {
-        assertCheckoutMatches(session, snapshot(row));
+        assertCheckoutMatches(session, snapshot(row), lease.livemode === true);
         if (session.status === "complete" && session.payment_status === "paid")
           await fulfillCheckout(sql, session, api, lease);
         else if (session.status === "expired") await persist(sql, row, "expired", null, lease);
@@ -397,7 +405,7 @@ export async function checkoutUrl(
   api = stripeRequest(config),
 ) {
   const live = config.mode === "live";
-  if (!config.enabled || config.mode !== "test") throw new Error("Payments are disabled.");
+  if (!config.enabled || config.mode === "disabled") throw new Error("Payments are disabled.");
   const body = new URLSearchParams({
     mode: order.mode,
     client_reference_id: order.id,
@@ -424,7 +432,7 @@ export async function checkoutUrl(
   if (order.mode === "subscription")
     body.set("line_items[0][price_data][recurring][interval]", "month");
   const session = await api("/v1/checkout/sessions", "POST", body, `kamino-order-${order.id}`);
-  assertCheckoutMatches(session, order);
+  assertCheckoutMatches(session, order, config.mode === "live");
   return { sessionId: stripeId(session, live ? "cs_live" : "cs_test"), url: trustedStripeRedirect(session.url) };
 }
 
@@ -441,7 +449,7 @@ export async function resumeCheckout(
   const order = snapshot(row);
   if (row.stripe_session_id) {
     const session = await api(`/v1/checkout/sessions/${String(row.stripe_session_id)}`);
-    assertCheckoutMatches(session, order);
+    assertCheckoutMatches(session, order, config.mode === "live");
     if (session.id !== row.stripe_session_id)
       throw new Error("Checkout does not match the stored session.");
     if (session.status === "expired") {

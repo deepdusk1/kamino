@@ -3,7 +3,7 @@
 Kamino is a calm community app and a replacement for Amino. It ships as a **website plus
 native iPhone and Android apps**, all from this one folder.
 
-House rules: **the core app stays free**, reputation and moderation cannot be bought, members control notifications, ages 13+, and humans review held content. Billing ships as a disabled-by-default Stripe sandbox; live charging and creator payouts activate only behind an explicit operator switch.
+House rules: **the core app stays free**, reputation and moderation cannot be bought, members control notifications, adults only (18+), and humans review held content. Billing ships as a disabled-by-default Stripe sandbox; live charging and creator payouts activate only behind an explicit operator switch.
 
 ## What this build adds (October 2026)
 
