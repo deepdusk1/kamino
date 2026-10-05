@@ -55,7 +55,7 @@ async function signup(name, email, birth = { year: 1990, month: 1, day: 1 }) {
   await ok(who, "confirmMinimumAge", birth);
   return who;
 }
-const owner = await signup("Platform owner", "v9-owner@example.test"),
+const owner = await signup("Platform owner", process.env.TEST_ADMIN_EMAIL ?? "v9-owner@example.test"),
   member = await signup("Platform member"),
   other = await signup("Platform other");
 await no(owner, "getAdminDashboard");

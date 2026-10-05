@@ -47,6 +47,7 @@ export const saveMediaLibraryItem = createServerFn({method:"POST"})
     let ref:string|null=null;
     try{return await withStoryOwnerLock(sql,userId,async tx=>{
       await internals.requireMinAge(tx,userId);
+      if(data.licensed&&!await isSiteAdmin(tx,userId))throw new Error("Only the site team can publish licensed music.");
       const total=Number((await tx`select count(*)::int as total from media_library where owner_id=${userId}`)[0]!.total);
       if(total>=100)throw new Error("Your library holds up to 100 files. Remove an old file first.");
       ref=await storeMedia("content",data.dataUrl);

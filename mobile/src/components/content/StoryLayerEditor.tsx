@@ -11,8 +11,10 @@ function Layer({layer,onChange,onSelect,selected=false,width,height}:{layer:Stor
   const start=useRef({x:0,y:0}),[size,setSize]=useState({width:0,height:0});
   const grant=useCallback(()=>{start.current={x:current.current.layer.x,y:current.current.layer.y};current.current.onSelect?.();},[]);
   const move=useCallback((_:GestureResponderEvent,gesture:PanResponderGestureState)=>current.current.onChange?.({...current.current.layer,x:clamp(start.current.x+gesture.dx/width*100),y:clamp(start.current.y+gesture.dy/height*100)}),[width,height]);
+  // PanResponder stores these callbacks; refs are read only by later gesture events.
+  // eslint-disable-next-line react-hooks/refs
   const responder=useMemo(()=>PanResponder.create({onStartShouldSetPanResponder:()=>true,onMoveShouldSetPanResponder:()=>true,onPanResponderGrant:grant,onPanResponderMove:move}),[grant,move]);
-  return <View {...(onChange?responder.panHandlers:{})} onLayout={event=>setSize(event.nativeEvent.layout)} style={{position:"absolute",left:`${layer.x}%`,top:`${layer.y}%`,maxWidth:"80%",padding:8,borderRadius:10,backgroundColor:layer.backdrop?"rgba(0,0,0,.65)":"transparent",borderWidth:selected?2:0,borderColor:"#fff",transform:[{translateX:-size.width/2},{translateY:-size.height/2},{rotate:`${layer.rotation}deg`},{scale:layer.scale}]}}>
+  return <View pointerEvents={!onChange&&layer.kind!=="mention"?"none":"auto"} {...(onChange?responder.panHandlers:{})} onLayout={event=>setSize(event.nativeEvent.layout)} style={{position:"absolute",left:`${layer.x}%`,top:`${layer.y}%`,maxWidth:"80%",padding:8,borderRadius:10,backgroundColor:layer.backdrop?"rgba(0,0,0,.65)":"transparent",borderWidth:selected?2:0,borderColor:"#fff",transform:[{translateX:-size.width/2},{translateY:-size.height/2},{rotate:`${layer.rotation}deg`},{scale:layer.scale}]}}>
     <Pressable onPress={()=>onSelect?onSelect():layer.kind==="mention"?router.push(`/u/${layer.text}`):undefined} disabled={!onSelect&&layer.kind!=="mention"} accessibilityRole={onSelect||layer.kind==="mention"?"button":undefined} accessibilityLabel={`${layer.kind}: ${layer.text}`}><Txt style={{color:layer.color,fontSize:layer.kind==="sticker"?36:20,textAlign:"center",fontWeight:"700"}}>{layer.kind==="mention"?`@${layer.text}`:layer.text}</Txt></Pressable>
   </View>;
 }

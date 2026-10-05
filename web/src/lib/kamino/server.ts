@@ -570,15 +570,16 @@ async function notify(
   const targetId = extra.targetId === undefined || extra.targetId === null ? "" : String(extra.targetId);
   // A picture sent as a data: URL is far too big to copy into every notification; those are worked out when read.
   const thumb = extra.thumb && !extra.thumb.startsWith("data:") ? extra.thumb.slice(0, 500) : "";
-  await sql`
+  const notificationRows=await sql`
     insert into notifications (user_id, kind, title, body, href, actor_id, target_type, target_id, thumb)
     values (${userId}, ${kind}, ${title}, ${body}, ${href}, ${actorId}, ${extra.targetType ?? ""}, ${targetId}, ${thumb})
+    returning id
   `;
   if (!push) return;
   // Phones get a push as well. Failures are swallowed inside: a broken push
   // service must never make a like, comment or message fail.
   const { sendPush } = await loadPush();
-  void sendPush(sql, userId, { title, body, href });
+  await sendPush(sql, userId, { title, body, href, notificationId:Number(notificationRows[0].id) });
 }
 
 /** Loads the push sender on the server only (the website's browser bundle never includes it). */
@@ -4851,20 +4852,23 @@ export const rsvpEvent = createServerFn({ method: "POST" })
     const sql = await db();
     const { userId } = context as Authed;
     await requireActiveMember(sql, userId, data.slug);
-    const ev = (
-      await sql`select id from events where id = ${data.eventId} and community_id = ${data.slug}`
-    )[0];
-    if (!ev) throw new Error("Event not found.");
-    await (await import('./billing.server')).assertPaidResourceAccess(sql,userId,'event',data.eventId);
-    const exists =
-      await sql`select 1 from event_rsvps where event_id = ${data.eventId} and user_id = ${userId}`;
-    if (exists.length) {
-      await sql`delete from event_rsvps where event_id = ${data.eventId} and user_id = ${userId}`;
-      return { going: false };
-    }
-    await sql`insert into event_rsvps (event_id, user_id) values (${data.eventId}, ${userId})`;
-    lastReminderSweep.delete(userId); // a reminder for this event may be due straight away
-    return { going: true };
+    if(!sql.transaction)throw new Error('Event responses require a transaction-capable database.');
+    const result=await sql.transaction(async tx=>{
+      const ev=(await tx`select id,status from events where id=${data.eventId} and community_id=${data.slug} for update`)[0];
+      if(!ev)throw new Error('Event not found.');
+      const exists=await tx`select 1 from event_rsvps where event_id=${data.eventId} and user_id=${userId}`;
+      if(exists.length){
+        await tx`delete from event_rsvps where event_id=${data.eventId} and user_id=${userId}`;
+        await tx`update event_passes set state='cancelled',checked_in_at=null,checked_in_by=null where event_id=${data.eventId} and user_id=${userId}`;
+        return {going:false};
+      }
+      if(ev.status==='cancelled')throw new Error('This event is cancelled.');
+      await (await import('./billing.server')).assertPaidResourceAccess(tx,userId,'event',data.eventId);
+      await tx`insert into event_rsvps(event_id,user_id)values(${data.eventId},${userId})`;
+      return {going:true};
+    });
+    lastReminderSweep.delete(userId);
+    return result;
   });
 
 export const ringCall = createServerFn({ method: "POST" })

@@ -1,9 +1,19 @@
 import { internals } from "./server";
 import { paidResourceAccessSql } from "./billing-policy";
-import { parseNotifyPrefs, shouldPush, localHour, inQuietHours } from "./social-rules";
+import {
+  parseNotifyPrefs,
+  shouldPush,
+  localHour,
+  inQuietHours,
+  muteSilences,
+} from "./social-rules";
 import { sendPush } from "./push.server";
 import { processMediaDeletionQueue } from "./media-deletion.server";
-import { processPushDeliveries, processEmailDigests } from "./delivery-v10.server";
+import {
+  processPushDeliveries,
+  processEmailDigests,
+  enqueueWeeklyDigest,
+} from "./delivery-v10.server";
 type Row = Record<string, unknown>;
 type Sql = Awaited<ReturnType<typeof internals.db>>;
 
@@ -39,7 +49,13 @@ async function deliver(
           quietEnd: p.quiet_end == null ? null : Number(p.quiet_end),
           timezone: String(p.timezone ?? ""),
         });
-  if (pushAllowed) await sendPush(sql, String(p.user_id), { title, body, href });
+  if (pushAllowed)
+    await sendPush(sql, String(p.user_id), {
+      title,
+      body,
+      href,
+      notificationId: Number(rows[0].id),
+    });
   return 1;
 }
 
@@ -51,7 +67,9 @@ export async function runNotificationJobs() {
   try {
     const { indexSemanticBatch } = await import("./search-v10.server");
     semanticIndex = await indexSemanticBatch(sql, { limit: 4 });
-  } catch { semanticIndex = { indexed: 0, unavailable: true }; }
+  } catch {
+    semanticIndex = { indexed: 0, unavailable: true };
+  }
   let delivered = 0;
   const eventRows =
     await sql.query<Row>(`select p.*,e.id as event_id,e.title as event_title,e.community_id,c.name as community_name
@@ -59,7 +77,7 @@ export async function runNotificationJobs() {
     where e.status<>'cancelled' and r.response='going' and e.starts_at>now() and e.starts_at<=now()+interval '24 hours' and p.user_id not like 'seed:%'
     and not exists(select 1 from identity_account_status s where s.user_id=p.user_id and s.status<>'active' and (s.until is null or s.until>now()))
     and ${internals.communityAccessSql("p.user_id", "c")}
-    and ${paidResourceAccessSql('p.user_id','event','e.id')}
+    and ${paidResourceAccessSql("p.user_id", "event", "e.id")}
     and not exists(select 1 from notifications n where n.user_id=p.user_id and n.kind='event' and n.target_type='event' and n.target_id=cast(e.id as text)) limit 500`);
   for (const p of eventRows)
     if (parseNotifyPrefs(p.notify_prefs).events)
@@ -110,19 +128,7 @@ export async function runNotificationJobs() {
       );
     }
     if (p.email_digest === true && hour >= 9) {
-      await sql.query(`insert into email_digest_queue(user_id,week_start,post_count,reply_count)
-        select $1,$2,(select count(*)::int from posts p join memberships m on m.community_id=p.community_id
-          and m.user_id=$1 and m.status='active' where p.created_at>=$2::date-interval '7 days' and p.created_at<$2::date
-          and coalesce(p.hidden,false)=false and ${internals.visiblePosts('$1')}
-          and not exists(select 1 from blocks b where (b.blocker_id=$1 and b.blocked_id=p.author_user_id) or (b.blocked_id=$1 and b.blocker_id=p.author_user_id))
-          and not exists(select 1 from muted_people mp where mp.user_id=$1 and mp.muted_user_id=p.author_user_id)),
-          (select count(*)::int from comments reply join posts p on p.id=reply.post_id join memberships m on m.community_id=p.community_id
-          and m.user_id=$1 and m.status='active' where reply.created_at>=$2::date-interval '7 days' and reply.created_at<$2::date
-          and coalesce(p.hidden,false)=false and ${internals.visiblePosts('$1')}
-          and not exists(select 1 from blocks b where (b.blocker_id=$1 and b.blocked_id=reply.author_user_id) or (b.blocked_id=$1 and b.blocker_id=reply.author_user_id))
-          and not exists(select 1 from muted_people mp where mp.user_id=$1 and mp.muted_user_id=reply.author_user_id))
-        where exists(select 1 from "user" u where u.id=$1 and u."emailVerified"=true)
-        on conflict(user_id,week_start) do nothing`,[String(p.user_id),weekStart]);
+      await enqueueWeeklyDigest(sql, String(p.user_id), weekStart, internals.visiblePosts("$1"));
     }
     if (
       prefs.community &&
@@ -175,24 +181,96 @@ export async function runNotificationJobs() {
           String(campaign.body),
           String(campaign.href),
         );
-  const push = await processPushDeliveries(sql, { allowed: async notification => {
-    const userId=String(notification.user_id),prefs=parseNotifyPrefs(notification.notify_prefs);
-    try { await internals.assertAccountAllowed(sql,userId); } catch { return 'cancel'; }
-    const visible=await sql.query(`select 1 from notifications n where n.id=$1 and n.user_id=$2 and (${internals.notificationAccessSql('$2','n')})`,[notification.id,userId]);
-    if(!visible.length)return 'cancel';
-    if(!shouldPush({kind:String(notification.kind),prefs,quietStart:null,quietEnd:null,timezone:String(notification.timezone??'')}))return 'cancel';
-    if(!shouldPush({kind:String(notification.kind),prefs,quietStart:notification.quiet_start==null?null:Number(notification.quiet_start),quietEnd:notification.quiet_end==null?null:Number(notification.quiet_end),timezone:String(notification.timezone??'')}))return 'quiet';
-    return 'allow';
-  } });
-  const email = await processEmailDigests(sql, { compose:async(userId,week)=>{
-    const row=(await sql.query<Row>(`select u.email,p.email_digest,q.post_count,q.reply_count from "user" u join profiles p on p.user_id=u.id
-      join email_digest_queue q on q.user_id=u.id and q.week_start=$2::date where u.id=$1 and u."emailVerified"=true`,[userId,week]))[0];
-    if(!row || row.email_digest!==true)return null;
-    try{await internals.assertAccountAllowed(sql,userId);}catch{return null;}
-    const origin=process.env.BETTER_AUTH_URL?.replace(/\/+$/,'');
-    if(!origin || !/^https?:\/\//.test(origin))throw new Error('Email origin is not configured.');
-    return {to:String(row.email),subject:'Your weekly Kamino digest',text:`Your communities shared ${row.post_count} posts and ${row.reply_count} replies during the week before ${week}.\n\nCatch up: ${origin}/\n\nManage or disable email digests: ${origin}/operations\n\nThis email contains activity totals only. Content access is checked when you open Kamino.`};
-  } });
+  const push = await processPushDeliveries(sql, {
+    allowed: async (notification) => {
+      const userId = String(notification.user_id),
+        prefs = parseNotifyPrefs(notification.notify_prefs),
+        kind = String(notification.kind);
+      try {
+        await internals.assertAccountAllowed(sql, userId);
+      } catch {
+        return "cancel";
+      }
+      const visible = await sql.query(
+        `select 1 from notifications n where n.id=$1 and n.user_id=$2 and (${internals.notificationAccessSql("$2", "n")})`,
+        [notification.id, userId],
+      );
+      if (!visible.length) return "cancel";
+      const switches: Record<string, unknown> = {
+        like: notification.notify_likes,
+        comment: notification.notify_comments,
+        follow: notification.notify_follows,
+        follow_request: notification.notify_follows,
+        chat: notification.notify_chat,
+        wall: notification.notify_wall,
+      };
+      if (kind in switches && switches[kind] !== true) return "cancel";
+      if (
+        notification.actor_id &&
+        muteSilences(kind) &&
+        (
+          await sql`select 1 from muted_people where user_id=${userId} and muted_user_id=${String(notification.actor_id)}`
+        ).length
+      )
+        return "cancel";
+      if (kind === "digest") {
+        if (!prefs.digest) return "cancel";
+        return inQuietHours(
+          localHour(new Date(), String(notification.timezone ?? "")),
+          notification.quiet_start == null ? null : Number(notification.quiet_start),
+          notification.quiet_end == null ? null : Number(notification.quiet_end),
+        )
+          ? "quiet"
+          : "allow";
+      }
+      if (
+        !shouldPush({
+          kind: String(notification.kind),
+          prefs,
+          quietStart: null,
+          quietEnd: null,
+          timezone: String(notification.timezone ?? ""),
+        })
+      )
+        return "cancel";
+      if (
+        !shouldPush({
+          kind: String(notification.kind),
+          prefs,
+          quietStart: notification.quiet_start == null ? null : Number(notification.quiet_start),
+          quietEnd: notification.quiet_end == null ? null : Number(notification.quiet_end),
+          timezone: String(notification.timezone ?? ""),
+        })
+      )
+        return "quiet";
+      return "allow";
+    },
+  });
+  const email = await processEmailDigests(sql, {
+    compose: async (userId, week) => {
+      const row = (
+        await sql.query<Row>(
+          `select u.email,p.email_digest,q.post_count,q.reply_count from "user" u join profiles p on p.user_id=u.id
+      join email_digest_queue q on q.user_id=u.id and q.week_start=$2::date where u.id=$1 and u."emailVerified"=true`,
+          [userId, week],
+        )
+      )[0];
+      if (!row || row.email_digest !== true) return null;
+      try {
+        await internals.assertAccountAllowed(sql, userId);
+      } catch {
+        return null;
+      }
+      const origin = process.env.BETTER_AUTH_URL?.replace(/\/+$/, "");
+      if (!origin || !/^https?:\/\//.test(origin))
+        throw new Error("Email origin is not configured.");
+      return {
+        to: String(row.email),
+        subject: "Your weekly Kamino digest",
+        text: `Your communities shared ${row.post_count} posts and ${row.reply_count} replies during the week before ${week}.\n\nCatch up: ${origin}/\n\nManage or disable email digests: ${origin}/operations\n\nThis email contains activity totals only. Content access is checked when you open Kamino.`,
+      };
+    },
+  });
   await sql`update progression_seasons set status='active' where status='scheduled' and starts_at<=now() and ends_at>now()`;
   await sql`update progression_seasons set status='ended' where status in ('scheduled','active') and ends_at<=now()`;
   return { delivered, mediaDeletion, push, email, semanticIndex, checkedAt: now.toISOString() };

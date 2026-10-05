@@ -14,5 +14,6 @@ files.push('src/lib/kamino/platform-analytics.server.test.ts');
 files.push('src/lib/kamino/privacy-v9.server.test.ts','src/lib/kamino/profile-stories.server.test.ts');
 files.push('src/lib/kamino/media-deletion.server.test.ts');
 files.push('src/lib/kamino/media-v10-rules.test.ts','src/lib/kamino/media-v10.server.test.ts','src/lib/kamino/event-time-v10.test.ts','src/lib/kamino/social-events-v10.server.test.ts','src/lib/kamino/search-v10.server.test.ts');
+files.push('src/lib/kamino/operations-v10.server.test.ts');
 const result=spawnSync(process.execPath,['--experimental-strip-types','--test','--test-concurrency=2',...new Set(files)],{stdio:'inherit'});
 process.exit(result.status??1);

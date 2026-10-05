@@ -12,5 +12,5 @@ export async function platformFlagActive(
   const enabled = row
     ? evaluatePlatformFlag(userId, key, row.enabled === true, Number(row.rollout_percent))
     : defaultEnabled;
-  return consumeExperiment(sql,userId,key,enabled);
+  return consumeExperiment(sql, userId, key, enabled);
 }

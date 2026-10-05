@@ -10,17 +10,23 @@ export type Mail = { to: string; subject: string; text: string };
 
 /** Delivery workers must never mark an unconfigured or rejected message as sent. */
 export async function sendMailStrict(mail: Mail, idempotencyKey: string): Promise<string> {
-  const apiKey = process.env.RESEND_API_KEY?.trim(), from = process.env.MAIL_FROM?.trim();
+  const apiKey = process.env.RESEND_API_KEY?.trim(),
+    from = process.env.MAIL_FROM?.trim();
   if (!apiKey || !from) throw new Error("Email delivery is not configured.");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify({ from, to: mail.to, subject: mail.subject, text: mail.text }),
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Email provider rejected delivery (${response.status}).`);
-  const result = await response.json() as { id?: unknown };
-  if (typeof result.id !== "string" || !result.id) throw new Error("Email provider returned no delivery identifier.");
+  const result = (await response.json()) as { id?: unknown };
+  if (typeof result.id !== "string" || !result.id)
+    throw new Error("Email provider returned no delivery identifier.");
   return result.id;
 }
 

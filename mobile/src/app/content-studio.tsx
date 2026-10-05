@@ -19,6 +19,7 @@ import { showError } from "@/lib/errors";
 import { useTheme } from "@/theme";
 import { notify } from "@/components/community/platform";
 import { MediaLibraryPicker } from "@/components/content/MediaLibraryPicker";
+import {DuplicateCheck} from '@/components/DuplicateCheckV10';
 
 const KINDS = [
   { kind: "video", title: "🎬 Video" },
@@ -447,6 +448,7 @@ export default function ContentStudio() {
               onChangeText={setWhen}
               autoCapitalize="none"
             />
+            <DuplicateCheck communityId={chosen} text={title+'\n'+body}/>
             <Button
               busy={busy}
               disabled={!chosen || title.trim().length < 3}

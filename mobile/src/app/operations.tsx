@@ -1,1 +1,1 @@
-export { OperationsScreen as default } from '@/components/OperationsV10';
+export { OperationsScreen as default } from "@/components/OperationsV10";

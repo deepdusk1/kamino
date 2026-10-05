@@ -1,16 +1,22 @@
-# Completion work checkpoint
+# Current feature-work checkpoint
 
-The validated release is v9, under `releases/local-v9/` in the GitHub checkpoint. Its feature status and verification remain the baseline. Source changes after that release are work in progress and have not yet passed the integrated build gates. This checkpoint preserves current work; it does not declare all 490 features complete.
+This upload preserves all current application source, tests, migrations, documentation and deliverable files. It is a development checkpoint, not a declaration that all 490 checklist features or production launch requirements are complete.
 
-## Active implementation
+## Integrated since v9
 
-- Media: `media-v10*` modules, migration `0039_media_v10.sql`, persistent story layers, a real uploaded GIF/media library, short-video feed, and article image blocks. Native screen integration is ongoing.
-- Social/events: `social-events-v10*` modules and migration `0040_social_events_v10.sql`, friend-request consent, group invites/roles, timezone-aware event series, event discussion and attendance passes. Native UI fixes and existing group permission integration remain ongoing.
-- Operations: `operations-v10*` modules and migration `0041_operations_v10.sql`, durable notification delivery, email digests, moderation cases/appeals, experiments and seasons. Registry, navigation and privacy integration remain ongoing.
-- Search: `search-v10*` modules and migration `0042_semantic_search.sql`, real configured embedding index, semantic results, opt-in personalized recommendations and duplicate detection. Screens, registry, privacy integration and tests remain ongoing.
+- Web/native media libraries and pickers, short-video feeds, article images, story layers, separate soundtracks and native timed captions.
+- Reciprocal friend requests, consented group invitations and roles, timezone/DST recurrence editing, event timelines and attendance passes.
+- Durable push receipt/retry queues, opt-in email digests, moderation cases and proof-based appeals, real experiment assignment/outcomes and capped season collectibles.
+- Configurable semantic indexing/search, consented interest and behavior ranking, recommendations and duplicate detection.
+- API registry, native guards/navigation, phone contract and personal export/deletion integration.
+- Forward-only database repair for the missing legacy community capacity column, preserving existing data.
 
-## Required integration and verification
+## Observed verification
 
-Register new server functions in `web/src/lib/kamino/mobile-api.ts` and the contract checker. Register native screens inside the signed-in route guard. Update data export, account deletion and durable media cleanup for every new personal-data table. Preserve current server age/block/private/paid access enforcement. Apply every migration filename. Run web/native type checks, lint, meaningful unit and HTTP integration checks, production compilation, native exports and rendered-screen verification before changing the validation claims.
+The web production build and iOS/Android JavaScript exports passed. An earlier integrated v10 unit run passed 300 web checks and 87 native checks; the phone contract matched 211 typed responses and 320 RPC calls across 12 mobile modules. Production social/event checks passed 13 groups and content checks passed 22 groups. Focused semantic/privacy, media, moderation/delivery and timezone checks passed. Later soundtrack, delivery and database upgrade changes need the final combined rerun.
 
-Payments remain disabled. External provider accounts, licensed catalogs, signing/store accounts, production deployment and physical-device tests remain external requirements. Never insert fake provider results, credentials or a completion percentage to close these requirements.
+The final media/rendered-screen pass is in progress and has exposed an integer overflow in the short-video pagination fixture; that remains open at this upload. The v9 release and its gallery remain the fully verified packaged baseline.
+
+## Remaining implementation and operational work
+
+Desktop packaging, production live-room recording/transcription and media permission enforcement, remaining commerce delivery/native-store integration, full interface translations and dedicated tablet navigation remain work in progress. External provider accounts, licensed catalogs, signing/store configuration, physical-device testing and production deployment are still required. Payments stay disabled until configured. No provider credentials, private test databases, signing keys or dependency caches are uploaded.

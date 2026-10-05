@@ -7,7 +7,7 @@ async function handle({ request, params }: { request: Request; params: { storyId
   if (!Number.isSafeInteger(storyId) || storyId < 1)
     return new Response("Invalid attachment", { status: 400 });
   try {
-    const media = await getProfileStoryMedia({ data: { storyId } });
+    const media = await getProfileStoryMedia({ data: { storyId,track:new URL(request.url).searchParams.has("music")?"music":undefined } });
     // Caption requests share the exact same access check as the underlying attachment.
     if (new URL(request.url).searchParams.has("captions"))
       return new Response(captionsToVtt(media.captions), {

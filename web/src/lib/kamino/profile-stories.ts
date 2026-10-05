@@ -35,6 +35,7 @@ const createSchema = z.object({
   question: z.string().trim().max(200).default(""),
   pollOptions: z.array(z.string().trim().min(1).max(80)).max(4).default([]),
   media: mediaSchema.optional(),
+  music: mediaSchema.extend({kind:z.literal("audio")}).optional(),
   layers: storyLayersSchema.default([]),
 });
 
@@ -101,6 +102,7 @@ export const getProfileStories = createServerFn({ method: "GET" })
               url: `/api/v1/profile-story-media/${s.id}`,
             }
           : null,
+        music: s.music_ref?{id:Number(s.id),kind:"audio",filename:String(s.music_filename),altText:String(s.music_alt_text),captions:String(s.music_captions),url:`/api/v1/profile-story-media/${s.id}?music=1`}:null,
       })),
     };
   });
@@ -113,10 +115,12 @@ export const publishProfileStory = createServerFn({ method: "POST" })
       userId = context.userId;
     await storyAgeAllowed(sql, userId, data.minimumAge);
     await guard(userId, "post");
-    if (!data.caption && !data.media && !data.layers.length) throw new Error("Add text or a media file.");
+    if (!data.caption && !data.media && !data.music && !data.layers.length) throw new Error("Add text or a media file.");
+    if(data.music&&data.media?.kind==="audio")throw new Error("Use one audio track per story.");
     if (data.pollOptions.length === 1 || new Set(data.pollOptions).size !== data.pollOptions.length)
       throw new Error("Add two to four different poll choices.");
     const checked = data.media ? checkedContentMedia(data.media.kind, data.media.dataUrl) : null;
+    const musicChecked = data.music?checkedContentMedia("audio",data.music.dataUrl):null;
     const verdict = await checkContent({
       text: [
         data.caption,
@@ -125,6 +129,8 @@ export const publishProfileStory = createServerFn({ method: "POST" })
         ...data.layers.map(layer => layer.text),
         data.media?.altText ?? "",
         data.media?.captions ?? "",
+        data.music?.altText??"",
+        data.music?.captions??"",
       ].join("\n"),
       images: data.media ? [data.media.dataUrl] : [],
       ageGate: data.minimumAge,
@@ -133,7 +139,10 @@ export const publishProfileStory = createServerFn({ method: "POST" })
       throw new Error(
         "Please edit this story before publishing; it did not pass the safety checks.",
       );
-    return withStoryOwnerLock(sql, userId, async (tx) => {
+    let reference:string|null=null,musicReference:string|null=null;
+    try{return await withStoryOwnerLock(sql, userId, async (tx) => {
+      await internals.requireMinAge(tx,userId);
+      await storyAgeAllowed(tx,userId,data.minimumAge);
       const n = (
         await tx`select count(*)::int as total,count(*) filter(where created_at>now()-interval '24 hours')::int as today from profile_stories where owner_id=${userId}`
       )[0]!;
@@ -141,38 +150,34 @@ export const publishProfileStory = createServerFn({ method: "POST" })
         throw new Error(
           "Keep up to 100 stories and publish up to 10 each day. Remove an old story to make room.",
         );
-      let reference: string | null = null;
-      try {
+        if (data.media||data.music) await guard(userId, "upload");
         if (data.media) {
-          await guard(userId, "upload");
           reference = await storeMedia("content", data.media.dataUrl);
         }
+        if(data.music)musicReference=await storeMedia("content",data.music.dataUrl);
         const r = (
-          await tx`insert into profile_stories(owner_id,caption,background,audience,minimum_age,content_warning,question,poll_options,media_ref,kind,filename,mime,byte_size,alt_text,captions,layers)
-   values(${userId},${data.caption},${data.background},${data.audience},${data.minimumAge},${data.contentWarning},${data.question},${JSON.stringify(data.pollOptions)},${reference},${data.media?.kind ?? ""},${safeFilename(data.media?.filename ?? "")},${checked?.mime ?? ""},${checked?.bytes ?? 0},${data.media?.altText ?? ""},${data.media?.captions ?? ""},${JSON.stringify(data.layers)}) returning id`
+          await tx`insert into profile_stories(owner_id,caption,background,audience,minimum_age,content_warning,question,poll_options,media_ref,kind,filename,mime,byte_size,alt_text,captions,layers,music_ref,music_mime,music_filename,music_byte_size,music_alt_text,music_captions)
+   values(${userId},${data.caption},${data.background},${data.audience},${data.minimumAge},${data.contentWarning},${data.question},${JSON.stringify(data.pollOptions)},${reference},${data.media?.kind ?? ""},${safeFilename(data.media?.filename ?? "")},${checked?.mime ?? ""},${checked?.bytes ?? 0},${data.media?.altText ?? ""},${data.media?.captions ?? ""},${JSON.stringify(data.layers)},${musicReference},${musicChecked?.mime??""},${safeFilename(data.music?.filename??"")},${musicChecked?.bytes??0},${data.music?.altText??""},${data.music?.captions??""}) returning id`
         )[0]!;
         if (verdict.action === "flag")
           await tx`insert into reports(reporter_id,target_type,target_id,reason,details) values('system:safety','profile_story',${String(r.id)},'Automatic story safety review',${verdict.reasons.join("; ").slice(0, 1000)}) on conflict do nothing`;
         return { id: Number(r.id) };
-      } catch (error) {
-        if (reference) await deleteMedia([reference]);
-        throw error;
-      }
-    });
+    });}catch(error){await deleteMedia([reference,musicReference]);throw error;}
   });
 export const getProfileStoryMedia = createServerFn({ method: "GET" })
   .middleware([optionalAuth])
-  .validator((d: unknown) => storyInput.parse(d))
+  .validator((d: unknown) => storyInput.extend({track:z.literal("music").optional()}).parse(d))
   .handler(async ({ context, data }) => {
     const sql = await internals.db(),
       row = await readableProfileStory(sql, (context as Viewer).userId ?? null, data.storyId);
-    if (!row.media_ref) throw new Error("Story has no media.");
+    const music=data.track==="music";
+    if (!(music?row.music_ref:row.media_ref)) throw new Error("Story has no media.");
     return {
-      dataUrl: await loadMedia(String(row.media_ref)),
-      mime: String(row.mime),
-      kind: String(row.kind),
-      filename: String(row.filename),
-      captions: String(row.captions),
+      dataUrl: await loadMedia(String(music?row.music_ref:row.media_ref)),
+      mime: String(music?row.music_mime:row.mime),
+      kind: music?"audio":String(row.kind),
+      filename: String(music?row.music_filename:row.filename),
+      captions: String(music?row.music_captions:row.captions),
     };
   });
 export const setProfileStoryHighlight = createServerFn({ method: "POST" })
@@ -196,8 +201,8 @@ export const deleteProfileStory = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await internals.db(),
       rows = await withStoryOwnerLock(sql, context.userId, async (tx) => {
-        const removed = await tx`delete from profile_stories where id=${data.storyId} and owner_id=${context.userId} returning media_ref`;
-        await stageMediaDeletion(tx, removed.map(r=>r.media_ref?String(r.media_ref):null));
+        const removed = await tx`delete from profile_stories where id=${data.storyId} and owner_id=${context.userId} returning media_ref,music_ref`;
+        await stageMediaDeletion(tx, removed.flatMap(r=>[r.media_ref?String(r.media_ref):null,r.music_ref?String(r.music_ref):null]));
         return removed;
       });
     if (!rows.length) throw new Error("Story unavailable.");
