@@ -44,6 +44,7 @@ const config: ExpoConfig = {
   },
   web: { bundler: "metro", output: "single", favicon: "./assets/favicon.png" },
   plugins: [
+    "@livekit/react-native-expo-plugin",
     ['expo-contacts', { contactsPermission: 'Kamino reads contact email addresses only when you choose to preview them. You select which addresses to match; contact names stay on your device.' }],
     'expo-sharing',
     "expo-router",

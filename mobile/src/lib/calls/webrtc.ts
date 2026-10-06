@@ -1,8 +1,12 @@
 import { NativeModules, Platform } from "react-native";
 import type { PeerConnectionLike, RtcApi } from "./session";
 
-/** The native calling library. It only exists in a real build of the app, not in Expo Go or on the web. */
-export type NativeWebRTC = typeof import("react-native-webrtc");
+/**
+ * The native WebRTC library (LiveKit's fork — API-compatible with the
+ * standard package, and the one @livekit/react-native requires). It only
+ * exists in a real build of the app, not in Expo Go or on the web.
+ */
+export type NativeWebRTC = typeof import("@livekit/react-native-webrtc");
 
 let cached: NativeWebRTC | null | undefined;
 
@@ -17,7 +21,7 @@ export function loadWebRTC(): NativeWebRTC | null {
   if (Platform.OS === "web" || !NativeModules.WebRTCModule) return cached;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    cached = require("react-native-webrtc") as NativeWebRTC;
+    cached = require("@livekit/react-native-webrtc") as NativeWebRTC;
   } catch {
     cached = null;
   }
