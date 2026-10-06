@@ -597,7 +597,7 @@ function Room({ roomId, userId, userName }: { roomId: number; userId: string; us
           text={`Message request sent. ${title} will see it once they accept.`}
         />
       ) : null}
-      {data.voices.length && info.kind !== "dm" ? (
+      {data.voices.length && info.kind !== "dm" && !data.voices.some((v) => v.user_id === userId) ? (
         <ChatBanner
           icon={<Phone />}
           tone="green"
