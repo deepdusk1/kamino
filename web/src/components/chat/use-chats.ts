@@ -5,7 +5,7 @@ import { isLiveKind } from "./rooms";
 export type Filter = "all" | "dm" | "groups" | "live" | "requests";
 
 /** The chat list data, shared by the Chats screen and the list beside an open chat on computers. */
-export function useChatsData(enabled: boolean) {
+export function useChatsData(enabled: boolean, userId?: string | null) {
   const overview = useQuery({
     queryKey: ["chatsOverview"],
     queryFn: () => chatsOverview(),
@@ -31,6 +31,10 @@ export function useChatsData(enabled: boolean) {
           ? sorted.filter((r) => isLiveKind(r.kind))
           : filter === "requests"
             ? requests
-            : sorted.filter((r) => !(isLiveKind(r.kind) && !r.lastAt));
+            : sorted.filter(
+                // Live rooms are auto-joined by every community member when started, so message-less
+                // ones stay out of everyone else's list — but a room you started yourself must not vanish.
+                (r) => !(isLiveKind(r.kind) && !r.lastAt && r.createdBy !== userId),
+              );
   return { overview, requestCount, pick };
 }
