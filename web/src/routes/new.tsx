@@ -180,7 +180,8 @@ function CommunityForm() {
             description: String(fd.get("description")),
             category: String(fd.get("category")),
             visibility: String(fd.get("visibility")) as "public" | "private" | "unlisted",
-            ageGate: Number(fd.get("ageGate")),
+            // Kamino is 18+ only, so every community is 18+. No age choice is offered.
+            ageGate: 18,
             rules: String(fd.get("rules")),
           },
         })
@@ -246,10 +247,10 @@ function CommunityForm() {
           </select>
         </SheetField>
         <SheetField label="Age">
-          <select name="ageGate" className={select} defaultValue="13">
-            <option value="13">13+</option>
-            <option value="16">16+</option>
-          </select>
+          <p className="flex h-12 items-center gap-2 text-[15px] font-bold text-ink">
+            18+
+            <span className="text-[12.5px] font-medium text-muted">Kamino is 18+ only, so every community is too.</span>
+          </p>
         </SheetField>
       </div>
       <SheetField label="House rules">

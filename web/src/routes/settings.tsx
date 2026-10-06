@@ -42,6 +42,7 @@ import { BUBBLE_STYLE_LABELS } from "@/lib/kamino/cosmetics";
 import { deleteMyAccount } from "@/lib/kamino/extras";
 import { importMyData } from "@/lib/kamino/library";
 import { blockUser, exportMyData, getMe, updateSettings } from "@/lib/kamino/server";
+import { applyThemeChoice, getThemeChoice, setThemeChoice, type ThemeChoice } from "@/lib/theme";
 import { PROFILE_COVERS } from "@/lib/kamino/titles";
 import {
   BUBBLE_STYLES,
@@ -297,6 +298,8 @@ function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Pr
           })}
         </fieldset>
       </Card>
+
+      <AppearanceCard />
 
       <Card
         id="notifications"
@@ -749,6 +752,32 @@ function Field({ label, hint, error, children }: { label: string; hint?: string;
 }
 
 /** A label with an on/off switch (saved by the caller). */
+/** Light / dark / system theme switch. Applies instantly via data-theme on <html> (see styles.css). */
+function AppearanceCard() {
+  const [choice, setChoice] = useState<ThemeChoice>(() => getThemeChoice());
+  useEffect(() => {
+    applyThemeChoice(getThemeChoice());
+  }, []);
+  const pick = (next: ThemeChoice) => {
+    setChoice(next);
+    setThemeChoice(next);
+  };
+  return (
+    <Card title="Appearance" icon={<Palette />} tone="violet" hint="System follows your phone or computer's light/dark setting.">
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Colour theme">
+        {(["system", "light", "dark"] as ThemeChoice[]).map((c) => (
+          <ChoiceChip
+            key={c}
+            label={c === "system" ? "System" : c === "light" ? "Light" : "Dark"}
+            selected={choice === c}
+            onClick={() => pick(c)}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function SwitchRow({
   label,
   hint,

@@ -3305,17 +3305,14 @@ export const createCommunity = createServerFn({ method: "POST" })
       id = `${slugify(name).slice(0, 24)}-${n}`;
     }
     const profile = mapProfile((await sql`select * from profiles where user_id = ${userId}`)[0]!);
-    if(data.ageGate>=16) {
-      const eligible=await sql`select 1 from profiles where user_id=${userId} and restricted_mode=false and
-        case when ${data.ageGate}>=18 then age_eligible_at_18 else age_eligible_at_16 end<=current_date`;
-      if(!eligible.length) throw new Error('You must meet the checked age requirement to create this community.');
-    }
+    // Kamino is 18+ only (requireMinAge above enforces it), so every community is 18+.
+    // The gate is forced server-side; the client value is ignored.
     await sql`
       insert into communities (id, name, tagline, description, category, cover, hue, visibility, age_gate, rules, created_by, member_count)
       values (
         ${id}, ${name}, ${data.tagline.slice(0, 80)}, ${data.description.slice(0, 800)},
         ${data.category}, '/covers/hero.jpg', ${profile.avatarHue}, ${data.visibility},
-        ${data.ageGate === 18 ? 18 : data.ageGate === 16 ? 16 : 13}, ${data.rules.slice(0, 2000)}, ${userId}, 1
+        18, ${data.rules.slice(0, 2000)}, ${userId}, 1
       )
     `;
     await sql`

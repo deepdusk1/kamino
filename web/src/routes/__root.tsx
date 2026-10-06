@@ -56,6 +56,12 @@ function Root() {
     <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className="antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Apply the saved light/dark choice before first paint (no flash). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('kamino-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}`,
+          }}
+        />
       </head>
       <body className="bg-bg text-body">
         {/* Lets the Grok preview chrome drive navigation; does nothing anywhere else. Keep it. */}
