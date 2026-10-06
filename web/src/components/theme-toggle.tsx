@@ -1,6 +1,6 @@
 import { Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { applyTheme, readStoredTheme, storeTheme, type ThemeChoice } from "@/lib/theme";
+import { applyThemeChoice, getThemeChoice, setThemeChoice, type ThemeChoice } from "@/lib/theme";
 
 /**
  * Light/dark switch for the header: flips between light and dark and remembers the choice.
@@ -11,7 +11,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    setChoice(readStoredTheme());
+    setChoice(getThemeChoice());
     setDark(
       document.documentElement.dataset.theme === "dark" ||
         (document.documentElement.dataset.theme !== "light" &&
@@ -25,8 +25,8 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   function toggle() {
     const next: ThemeChoice = dark ? "light" : "dark";
-    storeTheme(next);
-    applyTheme(next);
+    setThemeChoice(next);
+    applyThemeChoice(next);
     setChoice(next);
     setDark(next === "dark");
   }

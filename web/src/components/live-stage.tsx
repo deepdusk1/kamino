@@ -27,6 +27,7 @@ import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-r
 import { cn } from "@/lib/utils";
 import { getLiveStage } from '@/lib/kamino/community-v9';
 import { getLiveKitJoin, getRoomRecordingState } from '@/lib/kamino/livekit';
+import { useServerEventsLive } from '@/lib/server-events';
 
 type WatchWire = {
   t: "watch";
@@ -245,10 +246,14 @@ export function LiveStage({
   const [err, setErr] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  /** DM call rang unanswered: nobody joined within the ring window. */
+  const [noAnswer, setNoAnswer] = useState(false);
   const localRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const startedAt = useRef<number>(0);
-  const stage=useQuery({queryKey:['live-stage',roomId],queryFn:()=>getLiveStage({data:{roomId}}),enabled:kind!=='dm'&&canCall,refetchInterval:2500});
+  // Voice-room roster/joins arrive over SSE when connected; the 2.5s poll is the fallback.
+  const pushLive = useServerEventsLive();
+  const stage=useQuery({queryKey:['live-stage',roomId],queryFn:()=>getLiveStage({data:{roomId}}),enabled:kind!=='dm'&&canCall,refetchInterval:pushLive?false:2500});
   const recording=useQuery({queryKey:['room-recording',roomId],queryFn:()=>getRoomRecordingState({ data: roomId }),enabled:kind==='screening'||kind==='voice',refetchInterval:10000});
   const mine=stage.data?.participants.find(p=>p.userId===userId);
   const maySpeak=kind==='dm'||!!stage.data&&!!mine&&!mine.muted&&(!stage.data.enabled||mine.role==='host'||mine.role==='speaker');
@@ -285,13 +290,14 @@ export function LiveStage({
 
   async function joinCall(withCam = false) {
     setErr(null);
+    setNoAnswer(false);
     try {
       const current=kind==='dm'?null:await getLiveStage({data:{roomId}});
       const self=current?.participants.find(p=>p.userId===userId);
       if(current?.scheduledAt&&new Date(current.scheduledAt)>new Date())throw new Error('This live room has not started yet.');
       if(current?.locked&&!current.host)throw new Error('This room is locked.');
       const allowed=kind==='dm'||!!current&&!!self&&!self.muted&&(!current.enabled||self.role==='host'||self.role==='speaker');
-      const joinInfo = kind==='dm' ? null : await getLiveKitJoin({ data: roomId }).catch(() => null);
+      const joinInfo = await getLiveKitJoin({ data: roomId }).catch(() => null);
       if (joinInfo?.enabled) {
         const { Room } = await import("livekit-client");
         const room = new Room({ adaptiveStream: true });
@@ -345,6 +351,7 @@ export function LiveStage({
     setOnCall(false);
     setCam(false);
     setMinimized(false);
+    setNoAnswer(false);
     onVoice?.(false);
     // Let the header's call button (or an answered call) start a new call later.
     autoStarted.current = false;
@@ -437,9 +444,25 @@ export function LiveStage({
     return () => window.clearInterval(id);
   }, [onCall]);
 
+  const connectedNow = live.peers.filter((p) => p.connectionState === "connected").length;
+
+  // DM calls ring for 30s: if nobody joins, show "No answer" instead of "Calling…" forever.
+  // (The callee's incoming-call overlay only appears while their app is open, so unanswered
+  // calls are common. 30s sits inside the server's 45s incoming-call window.)
+  // In LiveKit mode the P2P mesh may never link (strict NAT) while SFU media flows fine,
+  // so "answered" comes from subscribed remote SFU tracks instead of P2P connection state.
+  useEffect(() => {
+    if (kind !== "dm" || !onCall || noAnswer) return;
+    if (liveKit ? Object.keys(liveKitStreams).length > 0 : connectedNow > 0) return;
+    const t = window.setTimeout(() => setNoAnswer(true), 30_000);
+    return () => window.clearTimeout(t);
+  }, [kind, onCall, liveKit, liveKitStreams, connectedNow, noAnswer]);
+
   if (!canCall && !screening) return null;
 
-  const connected = live.peers.filter((p) => p.connectionState === "connected").length;
+  // In LiveKit mode the P2P mesh may never link (strict NAT) while SFU media flows fine,
+  // so connectedness comes from subscribed remote SFU tracks instead of P2P connection state.
+  const connected = liveKit ? Object.keys(liveKitStreams).length : connectedNow;
   const failed = live.peers.filter((p) => p.connectionState === "failed");
   const otherName = live.peers[0]?.name ?? peerName ?? "Member";
   const otherHue = peerHue ?? 265;
@@ -474,7 +497,7 @@ export function LiveStage({
       >
         {muted ? <MicOff className="size-6" /> : <Mic className="size-6" />}
       </button>
-      {(kind === "dm" || screening) && (
+      {(kind === "dm" || screening || kind === "voice") && (
         <button
           type="button"
           onClick={() => void toggleCam()}
@@ -552,7 +575,7 @@ export function LiveStage({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-extrabold">{otherName}</span>
             <span className="text-xs text-muted tabular-nums">
-              {connected ? formatElapsed(elapsed) : "Calling…"}
+              {connected ? formatElapsed(elapsed) : noAnswer ? "No answer" : "Calling…"}
             </span>
           </span>
           <span className="rounded-full bg-green-strong px-3 py-1 text-xs font-bold text-white">
@@ -588,7 +611,7 @@ export function LiveStage({
                 <div className="rounded-full bg-surface/70 px-4 py-1.5 text-center shadow-card">
                   <p className="text-sm font-extrabold text-ink">{otherName}</p>
                   <p className="text-xs font-bold text-green-ink tabular-nums">
-                    {connected ? formatElapsed(elapsed) : "Calling…"}
+                    {connected ? formatElapsed(elapsed) : noAnswer ? "No answer" : "Calling…"}
                   </p>
                 </div>
                 <span className="size-11" />
@@ -603,7 +626,7 @@ export function LiveStage({
                       {otherName}
                     </p>
                     <p className="text-sm font-bold text-muted">
-                      {connected ? "Connected" : "Calling…"}
+                      {connected ? "Connected" : noAnswer ? "No answer" : "Calling…"}
                     </p>
                   </div>
                 </div>
@@ -643,7 +666,7 @@ export function LiveStage({
                 )}
                 {muted ? "Unmute" : "Mute"}
               </button>
-              {screening && (
+              {(screening || kind === "voice") && (
                 <button type="button" onClick={() => void toggleCam()} className={pill}>
                   {cam ? (
                     <VideoOff className="size-4" aria-hidden />

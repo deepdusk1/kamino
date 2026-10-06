@@ -18,6 +18,7 @@ import {
   type AchievementMetrics,
 } from "./achievements";
 import { parseWatchInput } from "./shelf";
+import { publishEvent } from "./events.server";
 import { extractHashtags } from "./hashtags";
 import { saveDraftSchema, type CreatorDraft } from "./writing";
 import { QUIZ_IMAGE_BASE, checkAlbum, checkQuestionImages, checkTimeLimit, isQuizLate, normalizeFolder } from "./albums";
@@ -180,8 +181,12 @@ async function canReadForViewer(sql: Sql, userId: string | null, community: Comm
   if (!asBool(paid?.allowed)) return false;
   if (community.ageGate < 16) return true;
   if (!userId) return false;
-  const row = (await sql`select age_eligible_at_16, age_eligible_at_18, restricted_mode from profiles where user_id = ${userId}`)[0];
+  const row = (await sql`select age_eligible_at_16, age_eligible_at_18, min_age_confirmed_at, restricted_mode from profiles where user_id = ${userId}`)[0];
   if (!row || asBool(row.restricted_mode)) return false;
+  // min_age_confirmed_at is the canonical 18+ proof: every write path enforces it via requireMinAge,
+  // while the granular eligibility dates can still be null on older accounts (migration 0017 backfilled
+  // the timestamp before those columns existed). Without this, someone can create a community but not view it.
+  if (community.ageGate >= 18 && row.min_age_confirmed_at) return true;
   const eligible = community.ageGate >= 18 ? row.age_eligible_at_18 : row.age_eligible_at_16;
   return Boolean(eligible && new Date(String(eligible)).getTime() <= Date.now());
 }
@@ -2676,6 +2681,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     } catch {
       /* */
     }
+    publishEvent({ type: "message", roomId: data.roomId, messageId: Number(rows[0]!.id) });
     return { id: Number(rows[0]!.id), held };
   });
 
@@ -2702,6 +2708,7 @@ export const toggleVoice = createServerFn({ method: "POST" })
       }
     }
     await sql`update chat_members set in_voice = ${next} where room_id = ${data.roomId} and user_id = ${userId}`;
+    publishEvent({ type: "voice", roomId: data.roomId });
     return { inVoice: next };
   });
 
@@ -3306,17 +3313,14 @@ export const createCommunity = createServerFn({ method: "POST" })
       id = `${slugify(name).slice(0, 24)}-${n}`;
     }
     const profile = mapProfile((await sql`select * from profiles where user_id = ${userId}`)[0]!);
-    if(data.ageGate>=16) {
-      const eligible=await sql`select 1 from profiles where user_id=${userId} and restricted_mode=false and
-        case when ${data.ageGate}>=18 then age_eligible_at_18 else age_eligible_at_16 end<=current_date`;
-      if(!eligible.length) throw new Error('You must meet the checked age requirement to create this community.');
-    }
+    // Kamino is 18+ only (requireMinAge above enforces it), so every community is 18+.
+    // The gate is forced server-side; the client value is ignored.
     await sql`
       insert into communities (id, name, tagline, description, category, cover, hue, visibility, age_gate, rules, created_by, member_count)
       values (
         ${id}, ${name}, ${data.tagline.slice(0, 80)}, ${data.description.slice(0, 800)},
         ${data.category}, '/covers/hero.jpg', ${profile.avatarHue}, ${data.visibility},
-        ${data.ageGate === 18 ? 18 : data.ageGate === 16 ? 16 : 13}, ${data.rules.slice(0, 2000)}, ${userId}, 1
+        18, ${data.rules.slice(0, 2000)}, ${userId}, 1
       )
     `;
     await sql`
@@ -4590,6 +4594,7 @@ export const editMessage = createServerFn({ method: "POST" })
       notify,
     );
     if(!held)await sql`update messages set held=false where id=${data.messageId}`;
+    publishEvent({ type: "message", roomId: data.roomId, messageId: data.messageId });
     return { ok: true, held };
   });
 
@@ -4615,6 +4620,7 @@ export const deleteMessage = createServerFn({ method: "POST" })
     const gone = await sql<{ data_url: string }>`delete from message_media where message_id = ${data.messageId} returning data_url`;
     await deleteMedia(gone.map((r) => r.data_url));
     await sql`delete from message_reactions where message_id = ${data.messageId}`;
+    publishEvent({ type: "message", roomId: data.roomId, messageId: data.messageId });
     return { ok: true };
   });
 
@@ -4900,6 +4906,7 @@ export const ringCall = createServerFn({ method: "POST" })
     }>`select user_id from chat_members where room_id = ${roomId} and user_id <> ${userId}`;
     const label = String(room.name || "call");
     for (const o of others) {
+      publishEvent({ type: "call", toUserId: o.user_id, roomId });
       await notify(
         sql,
         o.user_id,

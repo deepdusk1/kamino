@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useCurrentUserState } from '@/lib/auth/use-current-user';
 import { getIdentityDashboard } from '@/lib/kamino/identity-v9';
 import { PwaProvider } from "@/components/pwa";
+import { ServerEventsProvider } from "@/lib/server-events";
 
 const APP_NAME = "Kamino";
 const makeQueryClient = () =>
@@ -58,6 +59,7 @@ function Root() {
     <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className="antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Apply the saved light/dark choice before first paint (no flash). */}
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
       <body className="bg-bg text-body">
@@ -68,7 +70,9 @@ function Root() {
             <I18nProvider locale={locale}>
               <PwaProvider>
                 <IdentityAppearance />
-                <Outlet />
+                <ServerEventsProvider>
+                  <Outlet />
+                </ServerEventsProvider>
               <Toaster theme="system" richColors position="top-center" />
               </PwaProvider>
             </I18nProvider>

@@ -320,7 +320,7 @@ export function ChatsOverview() {
   const [filter, setFilter] = useState<Filter>("all");
   const [sheet, setSheet] = useState<null | "room" | "new">(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const { overview, requestCount, pick } = useChatsData(!!user);
+  const { overview, requestCount, pick } = useChatsData(!!user, user?.id);
   const live = useQuery({
     queryKey: ["liveRooms", "all"],
     queryFn: () => liveRooms({ data: { scope: "all" } }),
@@ -509,7 +509,7 @@ export function ChatSidebar({ activeId }: { activeId: number }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [sheet, setSheet] = useState<null | "room" | "new">(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const { overview, requestCount, pick } = useChatsData(!!user);
+  const { overview, requestCount, pick } = useChatsData(!!user, user?.id);
   return (
     <div className="flex h-full min-h-0 flex-col rounded-card border border-border bg-surface shadow-card">
       <div className="space-y-1 px-4 pt-3">

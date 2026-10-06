@@ -37,13 +37,13 @@ import { Avatar, GradientButton, ScreenTitle, TONE_STYLE, type Tone } from "@/co
 import { hourLabel, normalizeWebsite, toggleLimited } from "@/components/profile/helpers";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { getMyReferral } from "@/lib/kamino/referrals";
-import { readStoredTheme, storeTheme, type ThemeChoice } from "@/lib/theme";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BUBBLE_STYLE_LABELS } from "@/lib/kamino/cosmetics";
 import { deleteMyAccount } from "@/lib/kamino/extras";
 import { importMyData } from "@/lib/kamino/library";
 import { blockUser, exportMyData, getMe, updateSettings } from "@/lib/kamino/server";
+import { applyThemeChoice, getThemeChoice, setThemeChoice, type ThemeChoice } from "@/lib/theme";
 import { PROFILE_COVERS } from "@/lib/kamino/titles";
 import {
   BUBBLE_STYLES,
@@ -300,6 +300,8 @@ function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Pr
         </fieldset>
       </Card>
 
+      <AppearanceCard />
+
       <Card
         id="notifications"
         title="Notifications"
@@ -402,8 +404,6 @@ function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Pr
           twice is safe.
         </p>
       </Card>
-
-      <ThemeCard />
 
       <ReferralCard />
 
@@ -711,39 +711,6 @@ function ReferralCard() {
   );
 }
 
-function ThemeCard() {
-  const [choice, setChoice] = useState<ThemeChoice>("system");
-  useEffect(() => setChoice(readStoredTheme()), []);
-  const options: { key: ThemeChoice; label: string; hint: string }[] = [
-    { key: "system", label: "System", hint: "Follow this device's light or dark setting" },
-    { key: "light", label: "Light", hint: "Always the bright look" },
-    { key: "dark", label: "Dark", hint: "Always the calm dark look" },
-  ];
-  return (
-    <Card title="Theme" icon={<Sun />} tone="blue">
-      <div className="grid gap-2 sm:grid-cols-3">
-        {options.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => {
-              setChoice(option.key);
-              storeTheme(option.key);
-            }}
-            aria-pressed={choice === option.key}
-            className={`k-focus rounded-tile border p-3 text-left ${
-              choice === option.key ? "border-violet bg-tint-violet" : "border-border bg-surface"
-            }`}
-          >
-            <span className="block text-sm font-extrabold text-ink">{option.label}</span>
-            <span className="block text-xs text-muted">{option.hint}</span>
-          </button>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
 function Card({
   id,
   title,
@@ -786,6 +753,32 @@ function Field({ label, hint, error, children }: { label: string; hint?: string;
 }
 
 /** A label with an on/off switch (saved by the caller). */
+/** Light / dark / system theme switch. Applies instantly via data-theme on <html> (see styles.css). */
+function AppearanceCard() {
+  const [choice, setChoice] = useState<ThemeChoice>(() => getThemeChoice());
+  useEffect(() => {
+    applyThemeChoice(getThemeChoice());
+  }, []);
+  const pick = (next: ThemeChoice) => {
+    setChoice(next);
+    setThemeChoice(next);
+  };
+  return (
+    <Card title="Appearance" icon={<Palette />} tone="violet" hint="System follows your phone or computer's light/dark setting.">
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Colour theme">
+        {(["system", "light", "dark"] as ThemeChoice[]).map((c) => (
+          <ChoiceChip
+            key={c}
+            label={c === "system" ? "System" : c === "light" ? "Light" : "Dark"}
+            selected={choice === c}
+            onClick={() => pick(c)}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function SwitchRow({
   label,
   hint,

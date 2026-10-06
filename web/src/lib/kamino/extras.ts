@@ -509,8 +509,10 @@ export const confirmMinimumAge = createServerFn({ method: "POST" })
     // The first call after sign-up creates the member profile, so use the name they signed up with.
     const account = (await sql<{ name: string | null; email: string | null }>`select name, email from "user" where id = ${userId}`)[0];
     await ensureProfile(sql, { userId, email: account?.email ?? null, name: account?.name ?? null });
-    const already = (await sql`select age_checked_at from profiles where user_id = ${userId}`)[0]?.age_checked_at;
-    if (already) return { ok: true as const }; // one check per account; never lets an existing member erase themselves by accident
+    const row = (await sql`select age_checked_at, min_age_confirmed_at from profiles where user_id = ${userId}`)[0];
+    // One check per account: never lets an existing verified member erase themselves by accident.
+    // But when a migration cleared min_age_confirmed_at to force re-verification, the check must run again.
+    if (row?.age_checked_at && row?.min_age_confirmed_at) return { ok: true as const };
     const result = checkBirthDate(Number(data.year), Number(data.month), Number(data.day));
     if (!result.ok) throw new Error("That is not a real date. Check the day, month and year.");
     if (result.age < MINIMUM_AGE) {

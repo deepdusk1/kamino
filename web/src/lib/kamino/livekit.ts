@@ -29,14 +29,17 @@ export const getLiveKitJoin = createServerFn({ method: "GET" })
     const sql = await internals.db();
     const { userId } = context as Authed;
     const room = await internals.requireRoomAccess(sql, userId, roomId);
-    if (!["voice", "screening", "public", "private"].includes(String(room.kind)))
+    const isDm = String(room.kind) === "dm";
+    if (!isDm && !["voice", "screening", "public", "private"].includes(String(room.kind)))
       throw new Error("This conversation does not have a live stage.");
     const stage = (await sql<Row>`
       select cm.stage_role, cm.host_muted,
         exists(select 1 from room_cohosts rc where rc.room_id = cm.room_id and rc.user_id = cm.user_id) as cohost
       from chat_members cm where cm.room_id = ${roomId} and cm.user_id = ${userId} and cm.room_removed = false`)[0];
-    const role: "host" | "speaker" | "listener" =
-      room.created_by === userId || (stage && Number(stage.cohost) === 1)
+    // DM calls are 1:1 — both sides must be able to publish audio/video through the SFU.
+    const role: "host" | "speaker" | "listener" = isDm
+      ? "speaker"
+      : room.created_by === userId || (stage && Number(stage.cohost) === 1)
         ? "host"
         : String(stage?.stage_role ?? "") === "speaker"
           ? "speaker"

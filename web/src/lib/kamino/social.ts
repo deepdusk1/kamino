@@ -16,6 +16,7 @@ import { paidResourceAccessSql } from "./billing-policy";
 import { guard } from "./guard";
 import { canLead, scanText } from "./safety";
 import { isSiteAdmin, takeDown } from "./safety.server";
+import { publishEvent } from "./events.server";
 import { asBool, iso, mapCommunity, mapHallEvent, mapPost, mapProfile, mapRoom, parseJson } from "./map";
 import {
   EXPLORE_BANNERS,
@@ -1271,6 +1272,7 @@ export const markRoomRead = createServerFn({ method: "POST" })
     const lastId = Math.min(data.lastId, max);
     await sql`update chat_members set last_read_id = greatest(last_read_id, ${lastId}), last_read_at = now()
       where room_id = ${data.roomId} and user_id = ${userId}`;
+    publishEvent({ type: "receipt", roomId: data.roomId, userId });
     return { ok: true, lastReadId: lastId };
   });
 
@@ -1317,6 +1319,7 @@ export const setTyping = createServerFn({ method: "POST" })
     await requireRoomAccess(sql, userId, data.roomId);
     await sql`insert into typing (room_id, user_id, at) values (${data.roomId}, ${userId}, now())
       on conflict (room_id, user_id) do update set at = now()`;
+    publishEvent({ type: "typing", roomId: data.roomId, userId });
     return { ok: true };
   });
 
