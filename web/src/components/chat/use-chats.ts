@@ -1,16 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { chatsOverview } from "@/lib/kamino/social";
+import { useServerEventsLive } from "@/lib/server-events";
 import { isLiveKind } from "./rooms";
 
 export type Filter = "all" | "dm" | "groups" | "live" | "requests";
 
 /** The chat list data, shared by the Chats screen and the list beside an open chat on computers. */
 export function useChatsData(enabled: boolean, userId?: string | null) {
+  // Push invalidation keeps this fresh; the 15s poll is only the SSE fallback.
+  const pushLive = useServerEventsLive();
   const overview = useQuery({
     queryKey: ["chatsOverview"],
     queryFn: () => chatsOverview(),
     enabled,
-    refetchInterval: 15_000,
+    refetchInterval: pushLive ? false : 15_000,
   });
   const rooms = overview.data?.rooms ?? [];
   const requests = rooms.filter((r) => r.isRequest);

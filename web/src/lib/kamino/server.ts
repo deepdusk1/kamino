@@ -18,6 +18,7 @@ import {
   type AchievementMetrics,
 } from "./achievements";
 import { parseWatchInput } from "./shelf";
+import { publishEvent } from "./events.server";
 import { extractHashtags } from "./hashtags";
 import { saveDraftSchema, type CreatorDraft } from "./writing";
 import { QUIZ_IMAGE_BASE, checkAlbum, checkQuestionImages, checkTimeLimit, isQuizLate, normalizeFolder } from "./albums";
@@ -2679,6 +2680,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     } catch {
       /* */
     }
+    publishEvent({ type: "message", roomId: data.roomId, messageId: Number(rows[0]!.id) });
     return { id: Number(rows[0]!.id), held };
   });
 
@@ -2705,6 +2707,7 @@ export const toggleVoice = createServerFn({ method: "POST" })
       }
     }
     await sql`update chat_members set in_voice = ${next} where room_id = ${data.roomId} and user_id = ${userId}`;
+    publishEvent({ type: "voice", roomId: data.roomId });
     return { inVoice: next };
   });
 
@@ -4590,6 +4593,7 @@ export const editMessage = createServerFn({ method: "POST" })
       notify,
     );
     if(!held)await sql`update messages set held=false where id=${data.messageId}`;
+    publishEvent({ type: "message", roomId: data.roomId, messageId: data.messageId });
     return { ok: true, held };
   });
 
@@ -4615,6 +4619,7 @@ export const deleteMessage = createServerFn({ method: "POST" })
     const gone = await sql<{ data_url: string }>`delete from message_media where message_id = ${data.messageId} returning data_url`;
     await deleteMedia(gone.map((r) => r.data_url));
     await sql`delete from message_reactions where message_id = ${data.messageId}`;
+    publishEvent({ type: "message", roomId: data.roomId, messageId: data.messageId });
     return { ok: true };
   });
 
@@ -4897,6 +4902,7 @@ export const ringCall = createServerFn({ method: "POST" })
     }>`select user_id from chat_members where room_id = ${roomId} and user_id <> ${userId}`;
     const label = String(room.name || "call");
     for (const o of others) {
+      publishEvent({ type: "call", toUserId: o.user_id, roomId });
       await notify(
         sql,
         o.user_id,

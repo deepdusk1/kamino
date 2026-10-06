@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Face } from "@/components/face";
 import { dismissNotification, listIncomingCalls } from "@/lib/kamino/server";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useServerEventsLive } from "@/lib/server-events";
 import { hashHue } from "@/lib/utils";
 
 export const KAMINO_CALL_EVENT = "kamino-call";
@@ -28,11 +29,13 @@ export function IncomingCall() {
   const { user } = useCurrentUserState();
   const navigate = useNavigate();
   const [hidden, setHidden] = useState<number | null>(null);
+  // Incoming calls arrive instantly over SSE when connected; the 2s poll is the fallback.
+  const pushLive = useServerEventsLive();
   const q = useQuery({
     queryKey: ["incoming-calls"],
     queryFn: () => listIncomingCalls(),
     enabled: !!user,
-    refetchInterval: 2000,
+    refetchInterval: pushLive ? false : 2000,
   });
   const incoming = useMemo(() => {
     const rows = q.data ?? [];

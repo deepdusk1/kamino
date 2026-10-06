@@ -32,6 +32,7 @@ import { LiveStage } from "@/components/live-stage";
 import { StickerMark } from "@/components/sticker";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useServerEventsLive } from "@/lib/server-events";
 import { timeAgo } from "@/lib/format-ui";
 import { HELD_MESSAGE, HELD_TITLE } from "@/lib/kamino/held";
 import {
@@ -104,11 +105,13 @@ function Room({ roomId, userId, userName }: { roomId: number; userId: string; us
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const searchStr = useRouterState({ select: (s) => s.location.searchStr ?? "" });
-  // New messages arrive by asking the server again every few seconds while this screen is open.
+  // New messages arrive instantly over the SSE push stream while it is connected;
+  // the few-second polls below are only the fallback for a dropped stream.
+  const pushLive = useServerEventsLive();
   const q = useQuery({
     queryKey: ["room", roomId],
     queryFn: () => getRoom({ data: { roomId } }),
-    refetchInterval: 2500,
+    refetchInterval: pushLive ? false : 2500,
   });
   // The chat list knows extra things about the room: online, verified, message request…
   const overview = useQuery({
@@ -122,13 +125,13 @@ function Room({ roomId, userId, userName }: { roomId: number; userId: string; us
   const typing = useQuery({
     queryKey: ["typing", roomId],
     queryFn: () => typingIn({ data: { roomId } }),
-    refetchInterval: 3000,
+    refetchInterval: pushLive ? false : 3000,
   });
   const receipts = useQuery({
     queryKey: ["receipts", roomId],
     queryFn: () => roomReceipts({ data: { roomId } }),
     enabled: isDm,
-    refetchInterval: 5000,
+    refetchInterval: pushLive ? false : 5000,
   });
 
   const [text, setText] = useState("");

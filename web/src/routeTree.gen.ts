@@ -52,6 +52,7 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
+import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiRtcRouteImport } from './routes/api/rtc'
 import { Route as CSlugRouteImport } from './routes/c/$slug'
 import { Route as ChatsIndexRouteImport } from './routes/chats/index'
@@ -301,6 +302,11 @@ const AdminSafetyRoute = AdminSafetyRouteImport.update({
   path: '/safety',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiEventsRoute = ApiEventsRouteImport.update({
+  id: '/api/events',
+  path: '/api/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRtcRoute = ApiRtcRouteImport.update({
   id: '/api/rtc',
   path: '/api/rtc',
@@ -518,6 +524,7 @@ export interface FileRoutesByFullPath {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
+  '/api/events': typeof ApiEventsRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
@@ -595,6 +602,7 @@ export interface FileRoutesByTo {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
+  '/api/events': typeof ApiEventsRoute
   '/api/rtc': typeof ApiRtcRoute
   '/chats/$roomId': typeof ChatsRoomIdRoute
   '/groups/$roomId': typeof GroupsRoomIdRoute
@@ -673,6 +681,7 @@ export interface FileRoutesById {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/safety': typeof AdminSafetyRoute
+  '/api/events': typeof ApiEventsRoute
   '/api/rtc': typeof ApiRtcRoute
   '/c/$slug': typeof CSlugRouteWithChildren
   '/chats/$roomId': typeof ChatsRoomIdRoute
@@ -753,6 +762,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/reports'
     | '/admin/safety'
+    | '/api/events'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
@@ -830,6 +840,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/reports'
     | '/admin/safety'
+    | '/api/events'
     | '/api/rtc'
     | '/chats/$roomId'
     | '/groups/$roomId'
@@ -907,6 +918,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/reports'
     | '/admin/safety'
+    | '/api/events'
     | '/api/rtc'
     | '/c/$slug'
     | '/chats/$roomId'
@@ -983,6 +995,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   TutorialRoute: typeof TutorialRoute
   WelcomeRoute: typeof WelcomeRoute
+  ApiEventsRoute: typeof ApiEventsRoute
   ApiRtcRoute: typeof ApiRtcRoute
   CSlugRoute: typeof CSlugRouteWithChildren
   GroupsRoomIdRoute: typeof GroupsRoomIdRoute
@@ -1306,6 +1319,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/safety'
       preLoaderRoute: typeof AdminSafetyRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/api/events': {
+      id: '/api/events'
+      path: '/api/events'
+      fullPath: '/api/events'
+      preLoaderRoute: typeof ApiEventsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/rtc': {
       id: '/api/rtc'
@@ -1640,6 +1660,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   TutorialRoute: TutorialRoute,
   WelcomeRoute: WelcomeRoute,
+  ApiEventsRoute: ApiEventsRoute,
   ApiRtcRoute: ApiRtcRoute,
   CSlugRoute: CSlugRouteWithChildren,
   GroupsRoomIdRoute: GroupsRoomIdRoute,

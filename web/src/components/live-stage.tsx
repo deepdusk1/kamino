@@ -27,6 +27,7 @@ import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-r
 import { cn } from "@/lib/utils";
 import { getLiveStage } from '@/lib/kamino/community-v9';
 import { getLiveKitJoin, getRoomRecordingState } from '@/lib/kamino/livekit';
+import { useServerEventsLive } from '@/lib/server-events';
 
 type WatchWire = {
   t: "watch";
@@ -250,7 +251,9 @@ export function LiveStage({
   const localRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const startedAt = useRef<number>(0);
-  const stage=useQuery({queryKey:['live-stage',roomId],queryFn:()=>getLiveStage({data:{roomId}}),enabled:kind!=='dm'&&canCall,refetchInterval:2500});
+  // Voice-room roster/joins arrive over SSE when connected; the 2.5s poll is the fallback.
+  const pushLive = useServerEventsLive();
+  const stage=useQuery({queryKey:['live-stage',roomId],queryFn:()=>getLiveStage({data:{roomId}}),enabled:kind!=='dm'&&canCall,refetchInterval:pushLive?false:2500});
   const recording=useQuery({queryKey:['room-recording',roomId],queryFn:()=>getRoomRecordingState({ data: roomId }),enabled:kind==='screening'||kind==='voice',refetchInterval:10000});
   const mine=stage.data?.participants.find(p=>p.userId===userId);
   const maySpeak=kind==='dm'||!!stage.data&&!!mine&&!mine.muted&&(!stage.data.enabled||mine.role==='host'||mine.role==='speaker');
