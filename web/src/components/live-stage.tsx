@@ -474,7 +474,7 @@ export function LiveStage({
       >
         {muted ? <MicOff className="size-6" /> : <Mic className="size-6" />}
       </button>
-      {(kind === "dm" || screening) && (
+      {(kind === "dm" || screening || kind === "voice") && (
         <button
           type="button"
           onClick={() => void toggleCam()}
@@ -643,7 +643,7 @@ export function LiveStage({
                 )}
                 {muted ? "Unmute" : "Mute"}
               </button>
-              {screening && (
+              {(screening || kind === "voice") && (
                 <button type="button" onClick={() => void toggleCam()} className={pill}>
                   {cam ? (
                     <VideoOff className="size-4" aria-hidden />
