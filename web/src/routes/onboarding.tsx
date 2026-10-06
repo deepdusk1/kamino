@@ -58,7 +58,7 @@ function Onboarding() {
   const [step, setStep] = useState<Step>(2);
   const [picked, setPicked] = useState<string[] | null>(null);
   const [joined, setJoined] = useState<Record<string, "joined" | "pending" | undefined>>({});
-  const [followed, setFollowed] = useState<Record<string, boolean>>({});
+  const [followed, setFollowed] = useState<Record<string, "following" | "requested" | "none">>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pronouns, setPronouns] = useState("");
@@ -125,7 +125,10 @@ function Onboarding() {
     setBusyKey(p.userId);
     try {
       const result = await toggleFollowProfile({ data: p.userId });
-      setFollowed((cur) => ({ ...cur, [p.userId]: result.following || result.requested }));
+      setFollowed((cur) => ({
+        ...cur,
+        [p.userId]: result.following ? "following" : result.requested ? "requested" : "none",
+      }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Please try again.");
     } finally {
@@ -245,16 +248,22 @@ function Onboarding() {
                 emptyBody="Follow people from their profiles whenever you like."
               >
                 <div className="grid gap-2.5 px-4 lg:grid-cols-2 lg:gap-4 lg:px-0">
-                  {(suggestions.data?.creators ?? []).map((p, i) => (
-                    <CreatorRow
-                      key={p.userId}
-                      person={p}
-                      index={i}
-                      following={followed[p.userId] ?? (p.following || p.requested)}
-                      busy={busyKey === p.userId}
-                      onFollow={() => void toggleFollow(p)}
-                    />
-                  ))}
+                  {(suggestions.data?.creators ?? []).map((p, i) => {
+                    const st = followed[p.userId];
+                    const isFollowing = st ? st === "following" : p.following;
+                    const isRequested = st ? st === "requested" : p.requested;
+                    return (
+                      <CreatorRow
+                        key={p.userId}
+                        person={p}
+                        index={i}
+                        following={isFollowing}
+                        requested={isRequested}
+                        busy={busyKey === p.userId}
+                        onFollow={() => void toggleFollow(p)}
+                      />
+                    );
+                  })}
                 </div>
               </SuggestionState>
             ) : (
@@ -390,12 +399,14 @@ function CreatorRow({
   person,
   index,
   following,
+  requested,
   busy,
   onFollow,
 }: {
   person: CreatorCard;
   index: number;
   following: boolean;
+  requested: boolean;
   busy: boolean;
   onFollow: () => void;
 }) {
@@ -414,11 +425,11 @@ function CreatorRow({
       </div>
       <JoinButton
         tone={toneAt(index)}
-        joined={following}
+        joined={following || requested}
         busy={busy}
         onClick={onFollow}
         label="Follow"
-        joinedLabel="Following"
+        joinedLabel={requested && !following ? "Requested" : "Following"}
         name={person.displayName}
         size="sm"
       />
