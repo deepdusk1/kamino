@@ -9,11 +9,11 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://YOUR-KAMINO-SERVER.example.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://web-production-597bf.up.railway.app" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://YOUR-KAMINO-SERVER.example.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://web-production-597bf.up.railway.app" }
     }
   },
   "submit": { "production": {} }
