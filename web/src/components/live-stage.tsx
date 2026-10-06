@@ -245,6 +245,8 @@ export function LiveStage({
   const [err, setErr] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  /** DM call rang unanswered: nobody joined within the ring window. */
+  const [noAnswer, setNoAnswer] = useState(false);
   const localRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const startedAt = useRef<number>(0);
@@ -285,6 +287,7 @@ export function LiveStage({
 
   async function joinCall(withCam = false) {
     setErr(null);
+    setNoAnswer(false);
     try {
       const current=kind==='dm'?null:await getLiveStage({data:{roomId}});
       const self=current?.participants.find(p=>p.userId===userId);
@@ -345,6 +348,7 @@ export function LiveStage({
     setOnCall(false);
     setCam(false);
     setMinimized(false);
+    setNoAnswer(false);
     onVoice?.(false);
     // Let the header's call button (or an answered call) start a new call later.
     autoStarted.current = false;
@@ -437,9 +441,20 @@ export function LiveStage({
     return () => window.clearInterval(id);
   }, [onCall]);
 
+  const connectedNow = live.peers.filter((p) => p.connectionState === "connected").length;
+
+  // DM calls ring for 30s: if nobody joins, show "No answer" instead of "Calling…" forever.
+  // (The callee's incoming-call overlay only appears while their app is open, so unanswered
+  // calls are common. 30s sits inside the server's 45s incoming-call window.)
+  useEffect(() => {
+    if (kind !== "dm" || !onCall || connectedNow || noAnswer) return;
+    const t = window.setTimeout(() => setNoAnswer(true), 30_000);
+    return () => window.clearTimeout(t);
+  }, [kind, onCall, connectedNow, noAnswer]);
+
   if (!canCall && !screening) return null;
 
-  const connected = live.peers.filter((p) => p.connectionState === "connected").length;
+  const connected = connectedNow;
   const failed = live.peers.filter((p) => p.connectionState === "failed");
   const otherName = live.peers[0]?.name ?? peerName ?? "Member";
   const otherHue = peerHue ?? 265;
@@ -552,7 +567,7 @@ export function LiveStage({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-extrabold">{otherName}</span>
             <span className="text-xs text-muted tabular-nums">
-              {connected ? formatElapsed(elapsed) : "Calling…"}
+              {connected ? formatElapsed(elapsed) : noAnswer ? "No answer" : "Calling…"}
             </span>
           </span>
           <span className="rounded-full bg-green-strong px-3 py-1 text-xs font-bold text-white">
@@ -588,7 +603,7 @@ export function LiveStage({
                 <div className="rounded-full bg-surface/70 px-4 py-1.5 text-center shadow-card">
                   <p className="text-sm font-extrabold text-ink">{otherName}</p>
                   <p className="text-xs font-bold text-green-ink tabular-nums">
-                    {connected ? formatElapsed(elapsed) : "Calling…"}
+                    {connected ? formatElapsed(elapsed) : noAnswer ? "No answer" : "Calling…"}
                   </p>
                 </div>
                 <span className="size-11" />
@@ -603,7 +618,7 @@ export function LiveStage({
                       {otherName}
                     </p>
                     <p className="text-sm font-bold text-muted">
-                      {connected ? "Connected" : "Calling…"}
+                      {connected ? "Connected" : noAnswer ? "No answer" : "Calling…"}
                     </p>
                   </div>
                 </div>
