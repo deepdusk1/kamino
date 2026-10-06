@@ -185,6 +185,16 @@ export const api = {
 
   // ── Calls ────────────────────────────────────────────────────────────────
   iceServers: () => rpc<M.IceServer[]>("getIceServers"),
+  /**
+   * LiveKit SFU join info for a room's call. When the server has LiveKit
+   * configured this returns `{ enabled: true, url, token, room, role }`;
+   * otherwise `{ enabled: false }` and the app falls back to peer-to-peer.
+   */
+  getLiveKitJoin: (roomId: number) =>
+    rpc<
+      | { enabled: false }
+      | { enabled: true; url: string; token: string; room: string; role: "host" | "speaker" | "listener" }
+    >("getLiveKitJoin", roomId),
   /** Marks you as present in the room's call (the website shows this in the room). */
   setVoice: (roomId: number, on: boolean) => rpc<{ inVoice: boolean }>("toggleVoice", { roomId, on }),
   /** Notifies everyone else in the room that you are calling. */

@@ -6,8 +6,10 @@ import { communityV9,type LiveStageState } from '@/api/community-v9';
 import { rtcPeerId, rtcRoomKey } from "./ids";
 import { CallSession, DEFAULT_ICE, type PeerState, type StreamLike } from "./session";
 import { loadWebRTC, rtcApiFrom, type NativeWebRTC } from "./webrtc";
+import { loadLiveKit, type LiveKitModule } from "./livekit";
 
 type MediaStreamT = InstanceType<NativeWebRTC["MediaStream"]>;
+type LKRoom = InstanceType<LiveKitModule["Room"]>;
 
 export type CallStatus = "unavailable" | "joining" | "active" | "ended";
 
@@ -47,6 +49,7 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const sessionRef = useRef<CallSession | null>(null);
+  const lkRoomRef = useRef<LKRoom | null>(null);
   const streamRef = useRef<MediaStreamT | null>(null);
   const hangUpRef = useRef<() => void>(() => undefined);
   const canSpeakRef=useRef(true);
@@ -78,6 +81,11 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
     const cleanup = () => {
       ended = true;
       if(stageTimer){clearInterval(stageTimer);stageTimer=null;}
+      const lkRoom = lkRoomRef.current;
+      lkRoomRef.current = null;
+      if (lkRoom) {
+        try { void lkRoom.disconnect(); } catch { /* already gone */ }
+      }
       session?.close();
       session = null;
       sessionRef.current = null;
@@ -101,6 +109,90 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
       setMessage((current) => current ?? "You left the call.");
     };
 
+    /**
+     * Joins the call through the LiveKit SFU. Returns true when LiveKit took
+     * over; false when it is unavailable so the caller falls back to P2P.
+     */
+    const joinViaLiveKit = async (): Promise<boolean> => {
+      const lk = loadLiveKit();
+      const webrtc = loadWebRTC();
+      if (!lk || !webrtc) return false;
+      const join = await api.getLiveKitJoin(roomId).catch(() => ({ enabled: false as const }));
+      if (!join.enabled || cancelled || ended) return false;
+
+      const room = new lk.Room({ adaptiveStream: true, dynacast: true });
+      lkRoomRef.current = room;
+      const streams = new Map<string, MediaStreamT>();
+
+      const syncPeers = () => {
+        const list: PeerState[] = [];
+        room.remoteParticipants.forEach((p) => {
+          list.push({ id: p.identity, name: p.name || p.identity, state: "connected" });
+        });
+        if (!cancelled) setPeers(list);
+      };
+      const publishStreams = () => {
+        if (!cancelled) setRemoteStreams(Object.fromEntries(streams));
+      };
+      const rawTrack = (track: unknown): unknown =>
+        (track as { mediaStreamTrack?: unknown } | null)?.mediaStreamTrack ?? track;
+
+      room
+        .on(lk.RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+          if (cancelled || ended) return;
+          const msTrack = rawTrack(track);
+          let stream = streams.get(participant.identity);
+          if (!stream) {
+            stream = new webrtc.MediaStream() as MediaStreamT;
+            streams.set(participant.identity, stream);
+          }
+          const media = stream as unknown as { getTracks(): unknown[]; addTrack(t: unknown): void };
+          if (!media.getTracks().includes(msTrack)) media.addTrack(msTrack);
+          publishStreams();
+          syncPeers();
+        })
+        .on(lk.RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+          const stream = streams.get(participant.identity);
+          if (!stream) return;
+          const media = stream as unknown as { getTracks(): unknown[]; removeTrack(t: unknown): void };
+          media.removeTrack(rawTrack(track));
+          if (media.getTracks().length === 0) streams.delete(participant.identity);
+          publishStreams();
+        })
+        .on(lk.RoomEvent.ParticipantConnected, syncPeers)
+        .on(lk.RoomEvent.ParticipantDisconnected, (participant) => {
+          streams.delete(participant.identity);
+          publishStreams();
+          syncPeers();
+        })
+        .on(lk.RoomEvent.Disconnected, () => {
+          if (!ended && !cancelled) {
+            cleanup();
+            setStatus("ended");
+            setMessage("You were disconnected from the call.");
+          }
+        });
+
+      await room.connect(join.url, join.token);
+      if (cancelled || ended) {
+        try { room.disconnect(); } catch { /* noop */ }
+        lkRoomRef.current = null;
+        return true;
+      }
+      if (canSpeakRef.current) {
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMuted(false);
+      } else {
+        setMuted(true);
+      }
+      await api.setVoice(roomId, true);
+      inVoice = true;
+      if (cancelled || ended) return true;
+      setStatus("active");
+      syncPeers();
+      return true;
+    };
+
     void (async () => {
       try {
         const room=await api.room(roomId);
@@ -112,6 +204,10 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
           if(stage.locked&&!stage.host)throw new Error('This room is locked.');
           canSpeakRef.current=!!me&&!me.muted&&(!stage.enabled||me.role==='speaker'||me.role==='host');
         }
+        // LiveKit SFU first (works on strict NAT where P2P cannot link);
+        // fall through to peer-to-peer when it is unavailable.
+        if (await joinViaLiveKit()) return;
+        if(cancelled||ended)return cleanup();
         stream = canSpeakRef.current?await webrtc.mediaDevices.getUserMedia({ audio: true, video: false }):new webrtc.MediaStream();
         setMuted(!canSpeakRef.current);
         if (cancelled||ended) return cleanup();
@@ -169,6 +265,15 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
 
   const toggleMute = useCallback(() => {
     if(!canSpeakRef.current){setMessage('You are listening. Raise your hand to ask the host to speak.');return;}
+    const lkRoom = lkRoomRef.current;
+    if (lkRoom) {
+      setMuted((current) => {
+        const next = !current;
+        void lkRoom.localParticipant.setMicrophoneEnabled(!next).catch(() => undefined);
+        return next;
+      });
+      return;
+    }
     setMuted((current) => {
       const next = !current;
       // Muting switches the microphone track off; the connection stays up.
@@ -179,6 +284,25 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
 
   const toggleCamera = useCallback(async () => {
     if(!canSpeakRef.current){setMessage('Only speakers can use a camera in this room.');return;}
+    const lkRoom = lkRoomRef.current;
+    if (lkRoom) {
+      try {
+        const next = !cameraOn;
+        await lkRoom.localParticipant.setCameraEnabled(next);
+        setCameraOn(next);
+        // Local preview: wrap the published camera track for RTCView.
+        const webrtc = loadWebRTC();
+        if (webrtc) {
+          const pubs = [...lkRoom.localParticipant.videoTrackPublications.values()];
+          const videoTrack = pubs.map((p) => p.track).find((t) => !!t);
+          const msTrack = (videoTrack as { mediaStreamTrack?: unknown } | null)?.mediaStreamTrack;
+          setLocalStream(next && msTrack ? (new webrtc.MediaStream([msTrack as never]) as MediaStreamT) : null);
+        }
+      } catch (error) {
+        setMessage(error instanceof Error && /denied|permission|allowed/i.test(error.message) ? "Allow camera access in Settings to turn on video." : "The camera could not start.");
+      }
+      return;
+    }
     const webrtc = loadWebRTC();
     const session = sessionRef.current;
     const current = streamRef.current;
