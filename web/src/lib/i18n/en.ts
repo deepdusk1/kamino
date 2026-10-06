@@ -45,7 +45,7 @@ export const en = {
   "landing.banner.body":
     "Pick your interests and Kamino suggests communities and people who share them — in under a minute, free, on iPhone, Android and the web.",
   "landing.banner.button": "Join Kamino free",
-  "landing.footer.rights": "© {year} Kamino · The core app is free, forever.",
+  "landing.footer.rights": "© {year} Kamino · Built by Kelnova Labs in Kelowna, Canada. The core app is free, forever.",
   "landing.footer.houseRules": "House rules",
   "landing.footer.privacy": "Privacy",
   "landing.footer.terms": "Terms",

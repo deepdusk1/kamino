@@ -23,4 +23,4 @@ export function apiBaseUrl(): string {
 
 export const SUPPORT_EMAIL =
   (Constants.expoConfig?.extra as { supportEmail?: string } | undefined)?.supportEmail?.trim() ||
-  "support@your-domain.example";
+  "info.kelnova@gmail.com";

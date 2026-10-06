@@ -5,7 +5,7 @@ export const Route = createFileRoute("/copyright")({ component: Copyright });
 
 function Copyright() {
   return (
-    <LegalPage title="Copyright & Takedown Policy" updated="October 4, 2026">
+    <LegalPage title="Copyright & Takedown Policy" updated="October 5, 2026">
       <p>
         Kamino respects the intellectual property rights of others and expects members to do the
         same. This policy explains how copyright complaints about material shared on Kamino —
@@ -29,7 +29,7 @@ function Copyright() {
       <p>
         If you believe material on Kamino infringes your copyright, report it in the app (Report →
         "Copyright infringement") and also send a notice to the copyright agent at{" "}
-        <strong>copyright@your-domain.example</strong> that includes:
+        <strong>info.kelnova@gmail.com</strong> (the copyright agent for Kelnova Labs) that includes:
       </p>
       <ul>
         <li>Identification of the copyrighted work you claim has been infringed;</li>
@@ -63,8 +63,7 @@ function Copyright() {
       </p>
 
       <p>
-        Before relying on this policy for legal purposes, replace the placeholder agent address with the operator's
-        real contact details and have counsel review it for the jurisdictions you operate in.
+        Kamino is operated by Kelnova Labs, Kelowna, British Columbia, Canada.
       </p>
     </LegalPage>
   );

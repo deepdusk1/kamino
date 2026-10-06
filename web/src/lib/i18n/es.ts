@@ -46,7 +46,7 @@ export const es: Catalog = {
   "landing.banner.body":
     "Elige tus intereses y Kamino te sugiere comunidades y personas que los comparten: en menos de un minuto, gratis, en iPhone, Android y la web.",
   "landing.banner.button": "Únete a Kamino gratis",
-  "landing.footer.rights": "© {year} Kamino · La app básica es gratis, siempre.",
+  "landing.footer.rights": "© {year} Kamino · Creada por Kelnova Labs en Kelowna, Canadá. La app básica es gratis, siempre.",
   "landing.footer.houseRules": "Normas de la casa",
   "landing.footer.privacy": "Privacidad",
   "landing.footer.terms": "Términos",

@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
-/** Set VITE_SUPPORT_EMAIL when you build; the placeholder is obvious on purpose. */
+/** Override with VITE_SUPPORT_EMAIL when building; defaults to the operator inbox. */
 export const SUPPORT_EMAIL: string =
-  (import.meta.env.VITE_SUPPORT_EMAIL as string | undefined)?.trim() || "support@your-domain.example";
+  (import.meta.env.VITE_SUPPORT_EMAIL as string | undefined)?.trim() || "info.kelnova@gmail.com";
 
 /** Shared frame for the privacy policy, terms and account-deletion pages. */
 export function LegalPage({ title, updated, children }: { title: string; updated?: string; children: ReactNode }) {
