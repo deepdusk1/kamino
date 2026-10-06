@@ -180,8 +180,12 @@ async function canReadForViewer(sql: Sql, userId: string | null, community: Comm
   if (!asBool(paid?.allowed)) return false;
   if (community.ageGate < 16) return true;
   if (!userId) return false;
-  const row = (await sql`select age_eligible_at_16, age_eligible_at_18, restricted_mode from profiles where user_id = ${userId}`)[0];
+  const row = (await sql`select age_eligible_at_16, age_eligible_at_18, min_age_confirmed_at, restricted_mode from profiles where user_id = ${userId}`)[0];
   if (!row || asBool(row.restricted_mode)) return false;
+  // min_age_confirmed_at is the canonical 18+ proof: every write path enforces it via requireMinAge,
+  // while the granular eligibility dates can still be null on older accounts (migration 0017 backfilled
+  // the timestamp before those columns existed). Without this, someone can create a community but not view it.
+  if (community.ageGate >= 18 && row.min_age_confirmed_at) return true;
   const eligible = community.ageGate >= 18 ? row.age_eligible_at_18 : row.age_eligible_at_16;
   return Boolean(eligible && new Date(String(eligible)).getTime() <= Date.now());
 }
