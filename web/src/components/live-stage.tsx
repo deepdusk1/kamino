@@ -294,7 +294,7 @@ export function LiveStage({
       if(current?.scheduledAt&&new Date(current.scheduledAt)>new Date())throw new Error('This live room has not started yet.');
       if(current?.locked&&!current.host)throw new Error('This room is locked.');
       const allowed=kind==='dm'||!!current&&!!self&&!self.muted&&(!current.enabled||self.role==='host'||self.role==='speaker');
-      const joinInfo = kind==='dm' ? null : await getLiveKitJoin({ data: roomId }).catch(() => null);
+      const joinInfo = await getLiveKitJoin({ data: roomId }).catch(() => null);
       if (joinInfo?.enabled) {
         const { Room } = await import("livekit-client");
         const room = new Room({ adaptiveStream: true });
@@ -446,15 +446,20 @@ export function LiveStage({
   // DM calls ring for 30s: if nobody joins, show "No answer" instead of "Calling…" forever.
   // (The callee's incoming-call overlay only appears while their app is open, so unanswered
   // calls are common. 30s sits inside the server's 45s incoming-call window.)
+  // In LiveKit mode the P2P mesh may never link (strict NAT) while SFU media flows fine,
+  // so "answered" comes from subscribed remote SFU tracks instead of P2P connection state.
   useEffect(() => {
-    if (kind !== "dm" || !onCall || connectedNow || noAnswer) return;
+    if (kind !== "dm" || !onCall || noAnswer) return;
+    if (liveKit ? Object.keys(liveKitStreams).length > 0 : connectedNow > 0) return;
     const t = window.setTimeout(() => setNoAnswer(true), 30_000);
     return () => window.clearTimeout(t);
-  }, [kind, onCall, connectedNow, noAnswer]);
+  }, [kind, onCall, liveKit, liveKitStreams, connectedNow, noAnswer]);
 
   if (!canCall && !screening) return null;
 
-  const connected = connectedNow;
+  // In LiveKit mode the P2P mesh may never link (strict NAT) while SFU media flows fine,
+  // so connectedness comes from subscribed remote SFU tracks instead of P2P connection state.
+  const connected = liveKit ? Object.keys(liveKitStreams).length : connectedNow;
   const failed = live.peers.filter((p) => p.connectionState === "failed");
   const otherName = live.peers[0]?.name ?? peerName ?? "Member";
   const otherHue = peerHue ?? 265;
