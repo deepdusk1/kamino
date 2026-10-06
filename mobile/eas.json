@@ -13,7 +13,10 @@
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://web-production-597bf.up.railway.app" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://web-production-597bf.up.railway.app" },
+      "ios": {
+        "credentialsSource": "local"
+      }
     }
   },
   "submit": { "production": {} }
