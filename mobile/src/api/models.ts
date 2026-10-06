@@ -27,6 +27,7 @@ export type CommunityPage = {
   rooms: ChatRoom[];
   members: Membership[];
   followingIds: string[];
+  requestedIds?: string[];
   titleDefs: TitleDef[];
   grantedTitles: { userId: string; titles: MemberTitle[] }[];
   announcements: Post[];

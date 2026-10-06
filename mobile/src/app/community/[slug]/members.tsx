@@ -37,6 +37,7 @@ function Members() {
   if (page.isPending) return <Loading />;
   if (page.isError || !page.data) return <ErrorState error={page.error} onRetry={() => void page.refetch()} />;
   const following = new Set(page.data.followingIds);
+  const requested = new Set(page.data.requestedIds ?? []);
   const myId = me.data?.profile.userId;
 
   return (
@@ -63,7 +64,7 @@ function Members() {
             {item.personaBio ? <Txt variant="small" tone="muted" numberOfLines={1}>{item.personaBio}</Txt> : null}
           </View>
           {item.userId !== myId ? (
-            <Button label={following.has(item.userId) ? "Following" : "Follow"} small variant={following.has(item.userId) ? "secondary" : "primary"} onPress={() => void toggleFollow(item)} />
+            <Button label={following.has(item.userId) ? "Following" : requested.has(item.userId) ? "Requested" : "Follow"} small disabled={requested.has(item.userId)} variant={following.has(item.userId) ? "secondary" : "primary"} onPress={() => void toggleFollow(item)} />
           ) : null}
         </Card>
       )}

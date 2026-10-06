@@ -919,10 +919,16 @@ export const getCommunityPage = createServerFn({ method: "GET" })
     }
     const blocked = await blockedSet(sql, v.userId);
     const muted = await mutedSet(sql, v.userId);
+    // One global follow graph: who the viewer follows anywhere is who they follow here.
     const followingRows = v.userId
       ? await sql<{ followee_id: string }>`
-          select followee_id from follows where follower_id = ${v.userId} and community_id = ${community.id}
+          select followee_id from profile_follows where follower_id = ${v.userId}
         `
+      : [];
+    const requestedIds = v.userId
+      ? (await sql<{ followee_id: string }>`
+          select followee_id from follow_requests where follower_id = ${v.userId}
+        `).map((r) => r.followee_id)
       : [];
     const followIds = followingRows.map((r) => r.followee_id);
     const isMod = canModerate(member?.role);
@@ -1082,6 +1088,7 @@ export const getCommunityPage = createServerFn({ method: "GET" })
       rooms,
       members,
       followingIds: followIds,
+      requestedIds,
       titleDefs,
       grantedTitles,
       announcements,
@@ -2083,19 +2090,10 @@ export const followMember = createServerFn({ method: "POST" })
     const sql = await db();
     const { userId } = context as Authed;
     await guard(userId, "follow");
-    if (userId === data.userId) throw new Error("That’s you.");
-    const exists = await sql`
-      select 1 from follows where follower_id = ${userId} and followee_id = ${data.userId} and community_id = ${data.slug}
-    `;
-    if (exists.length) {
-      await sql`delete from follows where follower_id = ${userId} and followee_id = ${data.userId} and community_id = ${data.slug}`;
-      return { following: false };
-    }
-    await sql`
-      insert into follows (follower_id, followee_id, community_id)
-      values (${userId}, ${data.userId}, ${data.slug})
-    `;
-    return { following: true };
+    // One global follow graph: following a member here follows their profile everywhere,
+    // exactly like following them from their profile page (private accounts get requests).
+    await requireActiveMember(sql, userId, data.slug);
+    return toggleProfileFollow(sql, userId, data.userId);
   });
 
 export const blockUser = createServerFn({ method: "POST" })
@@ -4057,58 +4055,57 @@ export const deleteShared = createServerFn({ method: "POST" })
  * `followRequests` / `answerFollowRequest`); calling this again while it waits cancels the request.
  * Returns `{ following, requested }`.
  */
+async function toggleProfileFollow(sql: Sql, userId: string, targetId: string): Promise<{ following: boolean; requested: boolean }> {
+  if (userId === targetId) throw new Error("That's you.");
+  const blocked = await sql`
+    select 1 from blocks
+    where (blocker_id = ${userId} and blocked_id = ${targetId})
+       or (blocker_id = ${targetId} and blocked_id = ${userId})
+  `;
+  if (blocked.length) throw new Error("You can't follow someone you've blocked.");
+  const exists =
+    await sql`select 1 from profile_follows where follower_id = ${userId} and followee_id = ${targetId}`;
+  if (exists.length) {
+    await sql`delete from profile_follows where follower_id = ${userId} and followee_id = ${targetId}`;
+    return { following: false, requested: false };
+  }
+  const cancelled = await sql`delete from follow_requests where follower_id = ${userId} and followee_id = ${targetId} returning follower_id`;
+  if (cancelled.length) return { following: false, requested: false };
+  const target = (
+    await sql<{ handle: string; private_account: unknown }>`select handle, private_account from profiles where user_id = ${targetId}`
+  )[0];
+  if (!target) throw new Error("Profile not found");
+  const me = (
+    await sql<{
+      display_name: string;
+      handle: string;
+    }>`select display_name, handle from profiles where user_id = ${userId}`
+  )[0];
+  if (asBool(target.private_account)) {
+    await sql`insert into follow_requests (follower_id, followee_id) values (${userId}, ${targetId}) on conflict do nothing`;
+    await notify(sql, targetId, "follow_request", "Follow request", `${me?.display_name ?? "Someone"} asked to follow you`, `/u/${target.handle}`, {
+      actorId: userId,
+      targetType: "profile",
+      targetId,
+    });
+    return { following: false, requested: true };
+  }
+  await sql`insert into profile_follows (follower_id, followee_id) values (${userId}, ${targetId}) on conflict do nothing`;
+  await notify(sql, targetId, "follow", me?.display_name ?? "Someone", `${me?.display_name ?? "Someone"} started following you`, `/u/${target.handle}`, {
+    actorId: userId,
+    targetType: "profile",
+    targetId,
+  });
+  return { following: true, requested: false };
+}
+
 export const toggleFollowProfile = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((targetId: string) => targetId)
   .handler(async ({ context, data: targetId }) => {
     const sql = await db();
     const { userId } = context as Authed;
-    await guard(userId, "follow");
-    if (userId === targetId) throw new Error("That’s you.");
-    const blocked = await sql`
-      select 1 from blocks
-      where (blocker_id = ${userId} and blocked_id = ${targetId})
-         or (blocker_id = ${targetId} and blocked_id = ${userId})
-    `;
-    if (blocked.length) throw new Error("You can’t follow someone you’ve blocked.");
-    const exists =
-      await sql`select 1 from profile_follows where follower_id = ${userId} and followee_id = ${targetId}`;
-    if (exists.length) {
-      await sql`delete from profile_follows where follower_id = ${userId} and followee_id = ${targetId}`;
-      return { following: false, requested: false };
-    }
-    const cancelled = await sql`delete from follow_requests where follower_id = ${userId} and followee_id = ${targetId} returning follower_id`;
-    if (cancelled.length) return { following: false, requested: false };
-    const target = (
-      await sql<{ handle: string; private_account: unknown }>`select handle, private_account from profiles where user_id = ${targetId}`
-    )[0];
-    if (!target) throw new Error("Profile not found");
-    const me = (
-      await sql<{
-        display_name: string;
-        handle: string;
-      }>`select display_name, handle from profiles where user_id = ${userId}`
-    )[0];
-    if (asBool(target.private_account)) {
-      await sql`insert into follow_requests (follower_id, followee_id) values (${userId}, ${targetId}) on conflict do nothing`;
-      await notify(sql, targetId, "follow_request", "Follow request", `${me?.display_name ?? "Someone"} asked to follow you`, `/u/${target.handle}`, {
-        actorId: userId,
-        targetType: "profile",
-        targetId: userId,
-      });
-      return { following: false, requested: true };
-    }
-    await sql`insert into profile_follows (follower_id, followee_id) values (${userId}, ${targetId}) on conflict do nothing`;
-    await notify(
-      sql,
-      targetId,
-      "follow",
-      "New follower",
-      `${me?.display_name ?? "Someone"} followed you`,
-      `/u/${me?.handle ?? target.handle}`,
-      { actorId: userId, targetType: "profile", targetId: userId },
-    );
-    return { following: true, requested: false };
+    return toggleProfileFollow(sql, userId, targetId);
   });
 
 export const listFollows = createServerFn({ method: "GET" })

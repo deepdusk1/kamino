@@ -26,6 +26,7 @@ function Members() {
   });
   const members = q.data?.members ?? [];
   const following = new Set(q.data?.followingIds ?? []);
+  const requested = new Set((q.data as { requestedIds?: string[] })?.requestedIds ?? []);
   const me = q.data?.member;
   const lead = canLead(me?.role);
   const titleDefs = q.data?.titleDefs ?? [];
@@ -86,9 +87,10 @@ function Members() {
                   <Button
                     size="sm"
                     variant="secondary"
+                    disabled={requested.has(m.userId)}
                     onClick={() => void followMember({ data: { slug, userId: m.userId } }).then(() => q.refetch())}
                   >
-                    {following.has(m.userId) ? "Following" : "Follow"}
+                    {following.has(m.userId) ? "Following" : requested.has(m.userId) ? "Requested" : "Follow"}
                   </Button>
                 )}
               </div>
