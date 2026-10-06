@@ -36,6 +36,8 @@ export const POLICIES = {
   upload: { limit: 20, windowMs: 60_000 },
   /** Asking the AI storyteller for something (it has a small free daily allowance shared by everyone). */
   ai: { limit: 30, windowMs: 3_600_000 },
+  /** WebRTC signaling (roster polls plus offer/answer/ICE relay). Normal calls stay well under this. */
+  rtc: { limit: 240, windowMs: 60_000 },
 } as const;
 
 export type PolicyName = keyof typeof POLICIES;

@@ -116,6 +116,7 @@ async function authorize(sql: Sql, userId: string, room: string, peer: string) {
     join chat_members cm on cm.room_id = r.id and cm.user_id = $1
     where r.id = $2
       and (r.community_id is null or exists (select 1 from memberships m where m.user_id = $1 and m.community_id = r.community_id and m.status = 'active'))
+      and not exists (select 1 from identity_account_status s where s.user_id = $1 and s.status <> 'active' and (s.until is null or s.until > now()))
       and not exists (select 1 from chat_members other join blocks b on
         (b.blocker_id = $1 and b.blocked_id = other.user_id) or
         (b.blocked_id = $1 and b.blocker_id = other.user_id)
@@ -142,6 +143,12 @@ async function handleGet(url: URL, userId: string, displayName: string): Promise
   if (!parsed.success) return json({ error: "invalid query" }, 400);
   const { room, peer, since } = parsed.data;
 
+  const { spamGuard } = await import("@/lib/kamino/rate-limit.server");
+  try {
+    await spamGuard(userId, "rtc");
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Too fast" }, 429);
+  }
   const sql = await getSql();
   if (!(await authorize(sql, userId, room, peer)))
     return json({ error: "Room access denied" }, 403);
@@ -181,6 +188,12 @@ async function handlePost(request: Request, userId: string): Promise<Response> {
   const parsed = postSchema.safeParse(body);
   if (!parsed.success) return json({ error: "invalid request" }, 400);
   const msg = parsed.data;
+  const { spamGuard } = await import("@/lib/kamino/rate-limit.server");
+  try {
+    await spamGuard(userId, "rtc");
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Too fast" }, 429);
+  }
   const sql = await getSql();
   if (!(await authorize(sql, userId, msg.room, msg.op === "signal" ? msg.from : msg.peer)))
     return json({ error: "Room access denied" }, 403);
