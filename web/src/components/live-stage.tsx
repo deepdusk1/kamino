@@ -26,6 +26,7 @@ import {
 import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-room";
 import { cn } from "@/lib/utils";
 import { getLiveStage } from '@/lib/kamino/community-v9';
+import { missedCall } from '@/lib/kamino/server';
 import { getLiveKitJoin, getRoomRecordingState } from '@/lib/kamino/livekit';
 import { useServerEventsLive } from '@/lib/server-events';
 
@@ -457,6 +458,28 @@ export function LiveStage({
     const t = window.setTimeout(() => setNoAnswer(true), 30_000);
     return () => window.clearTimeout(t);
   }, [kind, onCall, liveKit, liveKitStreams, connectedNow, noAnswer]);
+
+  // WhatsApp-style record keeping: an unanswered DM call leaves "Missed call" in the
+  // conversation (server de-duplicates), and a decline by the other side ends the call.
+  const missedPosted = useRef(false);
+  useEffect(() => {
+    if (kind !== "dm" || !noAnswer || missedPosted.current) return;
+    missedPosted.current = true;
+    void missedCall({ data: roomId }).catch(() => undefined);
+  }, [kind, noAnswer, roomId]);
+  useEffect(() => {
+    if (kind !== "dm") return;
+    function onDeclined(e: Event) {
+      const declinedRoom = Number((e as CustomEvent).detail);
+      if (declinedRoom !== roomId || !onCall) return;
+      setNoAnswer(true);
+      setErr("Call declined.");
+      hangUp();
+    }
+    window.addEventListener("kamino-call-declined", onDeclined);
+    return () => window.removeEventListener("kamino-call-declined", onDeclined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, roomId, onCall]);
 
   if (!canCall && !screening) return null;
 

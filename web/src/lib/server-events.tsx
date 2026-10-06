@@ -90,6 +90,12 @@ export function ServerEventsProvider({ children }: { children: ReactNode }) {
         case "call":
           void queryClient.invalidateQueries({ queryKey: ["incoming-calls"] });
           break;
+        case "call-declined":
+          void queryClient.invalidateQueries({ queryKey: ["incoming-calls"] });
+          window.dispatchEvent(
+            new CustomEvent("kamino-call-declined", { detail: event.roomId }),
+          );
+          break;
       }
     };
     return () => {

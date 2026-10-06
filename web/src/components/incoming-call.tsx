@@ -4,7 +4,7 @@ import { Phone, PhoneOff } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Face } from "@/components/face";
-import { dismissNotification, listIncomingCalls } from "@/lib/kamino/server";
+import { declineCall, dismissNotification, listIncomingCalls } from "@/lib/kamino/server";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useServerEventsLive } from "@/lib/server-events";
 import { hashHue } from "@/lib/utils";
@@ -59,7 +59,7 @@ export function IncomingCall() {
 
   function decline() {
     setHidden(incoming!.id);
-    void dismissNotification({ data: incoming!.id }).catch(() => undefined);
+    void declineCall({ data: incoming!.id }).catch(() => undefined);
   }
 
   function answer() {

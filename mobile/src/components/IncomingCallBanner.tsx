@@ -31,6 +31,10 @@ export function IncomingCallBanner() {
     await api.dismissNotification(id);
     await queryClient.invalidateQueries({ queryKey: ["incomingCalls"] });
   });
+  const [decline] = useAction(async (id: number) => {
+    await api.declineCall(id);
+    await queryClient.invalidateQueries({ queryKey: ["incomingCalls"] });
+  });
 
   const call = calls.data?.find((c) => callRoomFrom(c.href) !== null);
   const roomId = call ? callRoomFrom(call.href) : null;
@@ -63,7 +67,7 @@ export function IncomingCallBanner() {
             router.push(`/call/${roomId}`);
           }}
         />
-        <Button label="Not now" small variant="secondary" style={{ flex: 1 }} onPress={() => void dismiss(call.id)} />
+        <Button label="Decline" small variant="danger" style={{ flex: 1 }} onPress={() => void decline(call.id)} />
       </View>
     </View>
   );

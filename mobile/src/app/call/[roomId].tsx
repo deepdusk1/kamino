@@ -8,6 +8,7 @@ import { Button, Card, Screen, Txt } from "@/components/ui";
 import { useAction } from "@/lib/errors";
 import { loadWebRTC } from "@/lib/calls/webrtc";
 import { useCall } from "@/lib/calls/useCall";
+import { useEffect, useRef, useState } from "react";
 import { font, radius, shadow, space, useTheme } from "@/theme";
 
 /** Words for the state of one connection. */
@@ -32,6 +33,25 @@ export default function CallScreen() {
     await api.ringCall(roomId);
   });
   const RTCView = loadWebRTC()?.RTCView;
+
+  // WhatsApp behaviour: a DM call nobody answers for 30 seconds is recorded as a missed call
+  // in the conversation, and the screen says so instead of ringing forever.
+  const isDm = room.data?.room.kind === "dm";
+  const [noAnswer, setNoAnswer] = useState(false);
+  const missedPosted = useRef(false);
+  const connectedCount = call.peers.filter((p) => p.state === "connected").length;
+  useEffect(() => {
+    if (!isDm || call.status !== "active" || noAnswer) return;
+    if (connectedCount > 0) return;
+    const timer = setTimeout(() => {
+      setNoAnswer(true);
+      if (!missedPosted.current) {
+        missedPosted.current = true;
+        void api.missedCall(roomId).catch(() => undefined);
+      }
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [isDm, call.status, connectedCount, noAnswer, roomId]);
 
   const leave = () => {
     call.hangUp();

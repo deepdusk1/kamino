@@ -4920,6 +4920,63 @@ export const ringCall = createServerFn({ method: "POST" })
     return { ok: true, name: label };
   });
 
+/**
+ * The callee declines a ring: dismisses their notification, tells the caller over SSE, and
+ * leaves the WhatsApp-style "📞 Call declined" line in the conversation for both sides.
+ */
+export const declineCall = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((id: number) => id)
+  .handler(async ({ context, data: id }) => {
+    const sql = await db();
+    const { userId } = context as Authed;
+    const row = (
+      await sql`select id, actor_id, href from notifications where id = ${id} and user_id = ${userId} and kind = 'call'`
+    )[0];
+    if (!row) return { ok: true };
+    const roomId = Number((() => { const m = /\/chats\/(\d+)/.exec(String(row.href ?? "")); return m ? m[1] : null; })());
+    await sql`update notifications set read = true where id = ${id} and user_id = ${userId}`;
+    if (row.actor_id && roomId)
+      publishEvent({ type: "call-declined", toUserId: String(row.actor_id), roomId });
+    if (roomId && row.actor_id) {
+      const duplicate = await sql`
+        select 1 from messages
+        where room_id = ${roomId} and author_user_id = ${userId} and body = '📞 Call declined'
+        and created_at > now() - interval '60 seconds' limit 1`;
+      if (!duplicate.length) {
+        const inserted = await sql<{ id: number }>`
+          insert into messages (room_id, author_user_id, body, held)
+          values (${roomId}, ${userId}, '📞 Call declined', false) returning id`;
+        publishEvent({ type: "message", roomId, messageId: Number(inserted[0]!.id) });
+      }
+    }
+    return { ok: true };
+  });
+
+/**
+ * The caller gives up on an unanswered DM call: leaves the WhatsApp-style "📞 Missed call"
+ * line in the conversation (de-duplicated within a minute) so both sides see the attempt.
+ */
+export const missedCall = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((roomId: number) => roomId)
+  .handler(async ({ context, data: roomId }) => {
+    const sql = await db();
+    const { userId } = context as Authed;
+    const room = await requireRoomAccess(sql, userId, roomId);
+    if (String(room.kind) !== "dm") return { ok: false };
+    const duplicate = await sql`
+      select 1 from messages
+      where room_id = ${roomId} and author_user_id = ${userId} and body = '📞 Missed call'
+      and created_at > now() - interval '60 seconds' limit 1`;
+    if (duplicate.length) return { ok: true };
+    const inserted = await sql<{ id: number }>`
+      insert into messages (room_id, author_user_id, body, held)
+      values (${roomId}, ${userId}, '📞 Missed call', false) returning id`;
+    publishEvent({ type: "message", roomId, messageId: Number(inserted[0]!.id) });
+    return { ok: true };
+  });
+
 export const listIncomingCalls = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

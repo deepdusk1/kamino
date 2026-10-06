@@ -16,7 +16,8 @@ export type ServerEvent =
   | { type: "typing"; roomId: number; userId: string }
   | { type: "receipt"; roomId: number; userId: string }
   | { type: "voice"; roomId: number }
-  | { type: "call"; toUserId: string; roomId: number };
+  | { type: "call"; toUserId: string; roomId: number }
+  | { type: "call-declined"; toUserId: string; roomId: number };
 
 type Listener = (event: ServerEvent) => void;
 
