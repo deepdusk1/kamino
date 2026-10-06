@@ -41,6 +41,33 @@ test('pending invitations reserve a group slot and reciprocal friend requests ca
   await assert.rejects(sql`insert into friend_requests(sender_id,recipient_id) values(${b},${a})`,/unique/i);
   await sql`update friend_requests set state='declined' where sender_id=${a} and recipient_id=${b}`;await sql`insert into friend_requests(sender_id,recipient_id) values(${b},${a})`;
 });
+test('the applied community capacity migration accepts an owner and enforces the configured limit through the real trigger',async()=>{
+  const owner=await person(),community=`capacity-social-v10-${++n}`;
+  await sql`insert into communities(id,name,category,created_by) values(${community},'Capacity migration check','Art',${owner})`;
+  await sql`insert into memberships(user_id,community_id,nickname,role) values(${owner},${community},'Owner','agent')`;
+  await sql`update communities set member_limit=10 where id=${community}`;
+  for(let index=0;index<9;index++){const member=await person();await sql`insert into memberships(user_id,community_id,nickname) values(${member},${community},'Member')`;}
+  const overflow=await person();await assert.rejects(sql`insert into memberships(user_id,community_id,nickname) values(${overflow},${community},'Overflow')`,/member limit/);
+  assert.equal(Number((await sql`select count(*) as n from memberships where community_id=${community}`)[0].n),10);
+});
+test('a forward compatibility migration repairs recorded early schemas without overwriting configured limits',async()=>{
+  const early=new PGlite();await early.waitReady;
+  try{
+    for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')&&f!=='0044_member_capacity_compat.sql').sort()){
+      await early.exec(readFileSync(new URL(file,migrations),'utf8'));
+      if(file==='0027_community_events.sql')await early.exec('alter table communities drop column member_limit');
+    }
+    await early.query("insert into communities(id,name,category,created_by) values('early-capacity','Early database','Art','early-owner')");
+    await assert.rejects(early.query("insert into memberships(user_id,community_id,nickname) values('early-owner','early-capacity','Owner')"),/member_limit.*does not exist/);
+    const repair=readFileSync(new URL('0044_member_capacity_compat.sql',migrations),'utf8');
+    await early.exec(repair);
+    await early.query("insert into memberships(user_id,community_id,nickname) values('early-owner','early-capacity','Owner')");
+    await early.query("update communities set member_limit=20 where id='early-capacity'");
+    await early.exec(repair);
+    assert.equal((await early.query<{member_limit:number}>("select member_limit from communities where id='early-capacity'")).rows[0].member_limit,20);
+    assert.equal(Number((await early.query<{n:string}>("select count(*) as n from memberships where community_id='early-capacity'")).rows[0].n),1);
+  }finally{await early.close();}
+});
 test('new personal data cascades on deletion and retained attendance history clears the deleted checker',async()=>{
   const owner=await person(),peer=await person(),room=await group(owner);await sql`insert into friend_requests(sender_id,recipient_id) values(${owner},${peer})`;await stageGroupInvitation(sql,room,owner,peer);
   const community=`social-v10-${++n}`;await sql`insert into communities(id,name,category,created_by) values(${community},'Events','Art',${owner})`;

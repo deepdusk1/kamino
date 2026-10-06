@@ -11,6 +11,7 @@ import {
   Grid3x3,
   Heart,
   Info,
+  Sun,
   UserPlus,
   Lock,
   Mail,
@@ -36,6 +37,7 @@ import { Avatar, GradientButton, ScreenTitle, TONE_STYLE, type Tone } from "@/co
 import { hourLabel, normalizeWebsite, toggleLimited } from "@/components/profile/helpers";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { getMyReferral } from "@/lib/kamino/referrals";
+import { readStoredTheme, storeTheme, type ThemeChoice } from "@/lib/theme";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BUBBLE_STYLE_LABELS } from "@/lib/kamino/cosmetics";
@@ -401,6 +403,8 @@ function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Pr
         </p>
       </Card>
 
+      <ThemeCard />
+
       <ReferralCard />
 
       <Card title="Help & legal" icon={<Info />} tone="green">
@@ -703,6 +707,39 @@ function ReferralCard() {
         {referral.data.invited} {referral.data.invited === 1 ? "friend" : "friends"} joined through your link ·{" "}
         {referral.data.repEarned} reputation earned
       </p>
+    </Card>
+  );
+}
+
+function ThemeCard() {
+  const [choice, setChoice] = useState<ThemeChoice>("system");
+  useEffect(() => setChoice(readStoredTheme()), []);
+  const options: { key: ThemeChoice; label: string; hint: string }[] = [
+    { key: "system", label: "System", hint: "Follow this device's light or dark setting" },
+    { key: "light", label: "Light", hint: "Always the bright look" },
+    { key: "dark", label: "Dark", hint: "Always the calm dark look" },
+  ];
+  return (
+    <Card title="Theme" icon={<Sun />} tone="blue">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {options.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => {
+              setChoice(option.key);
+              storeTheme(option.key);
+            }}
+            aria-pressed={choice === option.key}
+            className={`k-focus rounded-tile border p-3 text-left ${
+              choice === option.key ? "border-violet bg-tint-violet" : "border-border bg-surface"
+            }`}
+          >
+            <span className="block text-sm font-extrabold text-ink">{option.label}</span>
+            <span className="block text-xs text-muted">{option.hint}</span>
+          </button>
+        ))}
+      </div>
     </Card>
   );
 }

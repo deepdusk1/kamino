@@ -360,12 +360,15 @@ export const manageExpandedEvent=createServerFn({method:'POST'}).middleware([aut
 const eventResponseSchema=z.object({slug:slugSchema,id:idSchema,response:z.enum(['going','interested','none'])});
 export const respondExpandedEvent=createServerFn({method:'POST'}).middleware([authMiddleware]).validator((d:z.infer<typeof eventResponseSchema>)=>eventResponseSchema.parse(d)).handler(async({context,data})=>{
   const sql=await db(),uid=(context as Authed).userId;await requireActiveMember(sql,uid,data.slug);
-  const event=(await sql`select status from events where id=${data.id} and community_id=${data.slug}`)[0];if(!event)throw new Error('Event not found.');if(event.status==='cancelled'&&data.response!=='none')throw new Error('This event was cancelled.');
-  if(data.response!=='none')await assertPaidResourceAccess(sql,uid,'event',data.id);
-  if(data.response==='none')await sql`delete from event_rsvps where event_id=${data.id} and user_id=${uid}`;
-  else await sql`insert into event_rsvps(event_id,user_id,response) values(${data.id},${uid},${data.response}) on conflict(event_id,user_id) do update set response=excluded.response`;
-  if(data.response!=='going')await sql`update event_passes set state='cancelled' where event_id=${data.id} and user_id=${uid}`;
-  return {ok:true};
+  if(!sql.transaction)throw new Error('Transactional storage is required.');
+  return sql.transaction(async tx=>{
+    const event=(await tx`select status from events where id=${data.id} and community_id=${data.slug} for update`)[0];if(!event)throw new Error('Event not found.');if(event.status==='cancelled'&&data.response!=='none')throw new Error('This event was cancelled.');
+    if(data.response!=='none')await assertPaidResourceAccess(tx,uid,'event',data.id);
+    if(data.response==='none')await tx`delete from event_rsvps where event_id=${data.id} and user_id=${uid}`;
+    else await tx`insert into event_rsvps(event_id,user_id,response) values(${data.id},${uid},${data.response}) on conflict(event_id,user_id) do update set response=excluded.response`;
+    if(data.response!=='going')await tx`update event_passes set state='cancelled' where event_id=${data.id} and user_id=${uid}`;
+    return {ok:true};
+  });
 });
 export const getEventAttendees=createServerFn({method:'GET'}).middleware([authMiddleware]).validator((d:z.infer<typeof scopedId>)=>scopedId.parse(d)).handler(async({context,data})=>{
   const sql=await db(),uid=(context as Authed).userId;await requireActiveMember(sql,uid,data.slug);

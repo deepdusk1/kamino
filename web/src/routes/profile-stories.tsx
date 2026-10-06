@@ -91,6 +91,7 @@ function Composer() {
     [poll, setPoll] = useState(""),
     [layers, setLayers] = useState<StoryLayer[]>([]),
     [media, setMedia] = useState<Media | null>(null),
+    [music,setMusic]=useState<(Media&{kind:"audio"})|null>(null),
     [busy, setBusy] = useState(false);
   async function pick(file: File) {
     setBusy(true);
@@ -121,7 +122,8 @@ function Composer() {
         reader.readAsDataURL(file);
       });
       checkedContentMedia(kind, dataUrl);
-      setMedia({ kind, dataUrl, filename: file.name, altText: "", captions: "" });
+      if(kind==="audio")setMusic({kind:"audio",dataUrl,filename:file.name,altText:"",captions:""});
+      else setMedia({ kind, dataUrl, filename: file.name, altText: "", captions: "" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not add media.");
     } finally {
@@ -144,11 +146,13 @@ function Composer() {
             .map((p) => p.trim())
             .filter(Boolean),
           media: media ?? undefined,
+          music:music??undefined,
           layers,
         },
       });
       setCaption("");
       setMedia(null);
+      setMusic(null);
       setQuestion("");
       setPoll("");
       setLayers([]);
@@ -275,7 +279,8 @@ function Composer() {
         </div>
       ) : null}
       <StoryLayerEditor layers={layers} onChange={setLayers} background={backgrounds[background]!}/>
-      <details className="rounded-xl border border-border p-3"><summary className="min-h-11 cursor-pointer font-bold">Choose a GIF or music from your library</summary><div className="space-y-3"><MediaLibraryPicker kind="gif" onSelect={setMedia}/><MediaLibraryPicker kind="audio" onSelect={setMedia}/></div></details>
+      <details className="rounded-xl border border-border p-3"><summary className="min-h-11 cursor-pointer font-bold">Choose a GIF or soundtrack from your library</summary><div className="space-y-3"><MediaLibraryPicker kind="gif" onSelect={setMedia}/><MediaLibraryPicker kind="audio" onSelect={file=>setMusic({...file,kind:"audio"})}/></div></details>
+      {music?<div className="space-y-2 rounded-xl border border-border p-3"><p className="text-sm font-bold">Soundtrack: {music.filename}</p><audio controls src={music.dataUrl} className="w-full" aria-label={music.altText||music.filename}/><label className="block text-sm">Audio description<input className={fieldClass} maxLength={600} value={music.altText} onChange={e=>setMusic({...music,altText:e.target.value})}/></label><label className="block text-sm">Lyrics or transcript<textarea className={fieldClass} maxLength={12000} value={music.captions} onChange={e=>setMusic({...music,captions:e.target.value})}/></label><Button variant="secondary" onClick={()=>setMusic(null)}>Remove soundtrack</Button></div>:null}
       <details className="rounded-xl border border-border p-3">
         <summary className="min-h-10 cursor-pointer text-sm font-bold">
           Add a question or poll
@@ -300,7 +305,7 @@ function Composer() {
           />
         </label>
       </details>
-      <Button disabled={busy || (!caption.trim() && !media && !layers.length)} onClick={() => void publish()}>
+      <Button disabled={busy || (!caption.trim() && !media && !music && !layers.length)||!!music&&media?.kind==="audio"} onClick={() => void publish()}>
         {busy ? "Saving…" : "Publish story"}
       </Button>
     </section>
@@ -364,6 +369,7 @@ function StoryCard({ story: s, mine }: { story: Story; mine: boolean }) {
                 ) : s.media.kind === "video" ? (
                   <video
                     src={s.media.url}
+                    muted={!!s.music}
                     controls
                     preload="metadata"
                     className="max-h-[480px] w-full"
@@ -395,6 +401,7 @@ function StoryCard({ story: s, mine }: { story: Story; mine: boolean }) {
         )}
       </div>
       <div className="space-y-3 p-4">
+        {revealed&&s.music?<figure><p className="text-sm font-bold">Soundtrack</p><audio src={s.music.url} controls preload="metadata" className="w-full" aria-label={s.music.altText||s.music.filename}/>{s.music.captions?<p className="whitespace-pre-wrap text-sm">{s.music.captions}</p>:null}</figure>:null}
         {responses.isError ? (
           <p role="alert" className="text-sm text-danger">
             {responses.error.message}

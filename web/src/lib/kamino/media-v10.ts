@@ -47,6 +47,7 @@ export const saveMediaLibraryItem = createServerFn({method:"POST"})
     let ref:string|null=null;
     try{return await withStoryOwnerLock(sql,userId,async tx=>{
       await internals.requireMinAge(tx,userId);
+      if(data.licensed&&!await isSiteAdmin(tx,userId))throw new Error("Only the site team can publish licensed music.");
       const total=Number((await tx`select count(*)::int as total from media_library where owner_id=${userId}`)[0]!.total);
       if(total>=100)throw new Error("Your library holds up to 100 files. Remove an old file first.");
       ref=await storeMedia("content",data.dataUrl);
@@ -92,7 +93,7 @@ export const shortVideoFeed = createServerFn({method:"GET"})
       join profiles pr on pr.user_id=p.author_user_id
       where p.id<$2 and ($3::text is null or p.community_id=$3) and p.hidden=false
       and (p.expires_at is null or p.expires_at>now()) and (${internals.visiblePosts("$1","p")})
-      order by p.id desc limit 100`,[viewer,data.before??Number.MAX_SAFE_INTEGER,data.slug??null]);
+      order by p.id desc limit 100`,[viewer,data.before??2147483647,data.slug??null]);
     const settings=(await sql`select sensitive_content from profiles where user_id=${viewer}`)[0];
     const items:{id:number;title:string;body:string;slug:string;handle:string;displayName:string;warning:string;blur:boolean;media:{id:number;kind:string;filename:string;altText:string;captions:string;url:string}}[]=[];
     let scanned=0;

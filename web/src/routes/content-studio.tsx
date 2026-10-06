@@ -20,6 +20,7 @@ import { checkedContentMedia } from "@/lib/kamino/content-rules";
 import { detectDuplicatePostsV10 } from "@/lib/kamino/search-v10";
 import { MediaLibraryPicker } from "@/components/media-v10-library";
 import { GifPicker } from "@/components/gif-picker";
+import { DuplicateCheck } from "@/components/duplicate-check-v10";
 
 export const Route = createFileRoute("/content-studio")({ component: ContentStudio });
 const KINDS = [
@@ -340,6 +341,7 @@ function ContentStudio() {
               />
             </label>
             {kind==="article"?images.map((image,index)=><div key={`${image.filename}-${index}`} className="space-y-2 rounded-xl border border-border p-3"><img src={image.dataUrl} alt={image.altText||`Article image ${index+1}`} className="max-h-40 w-full object-contain"/><p className="text-sm font-bold">Image {index+1}: [image:{index+1}]</p><label className="block text-sm">Describe this image<input className={fieldClass} value={image.altText} maxLength={600} onChange={e=>setImages(previous=>previous.map((item,i)=>i===index?{...item,altText:e.target.value}:item))}/></label><OutlineButton onClick={()=>{setImages(previous=>previous.filter((_,i)=>i!==index));setBody(previous=>previous.replace(/\[image:(\d+)\]/g,(marker,n)=>Number(n)===index+1?"":Number(n)>index+1?`[image:${Number(n)-1}]`:marker));}}>Remove image {index+1}</OutlineButton></div>):null}
+            <DuplicateCheck communityId={chosen} text={title+'\n'+body}/>
             {kind==="gif"?<MediaLibraryPicker kind="gif" onSelect={setMedia}/>:null}
             {kind==="gif"?<GifPicker onSelect={setMedia}/>:null}
             {kind==="audio"?<MediaLibraryPicker kind="audio" onSelect={setMedia}/>:null}

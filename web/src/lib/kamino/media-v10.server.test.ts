@@ -31,6 +31,8 @@ test("uploaded GIFs stay private while rights-attested music catalog entries are
 test("account removal cascades the library and retains story layers under their story lifecycle",async()=>{
   const story=Number((await sql`insert into profile_stories(owner_id,layers) values('library-owner','[{"id":"safe"}]') returning id`)[0]!.id);
   assert.equal(String((await sql`select layers from profile_stories where id=${story}`)[0]!.layers),'[{"id":"safe"}]');
+  await assert.rejects(sql`update profile_stories set music_ref='data:audio/wav;base64,UklGRg==',music_mime='image/gif',music_byte_size=4 where id=${story}`,/check/);
+  await sql`update profile_stories set music_ref='data:audio/wav;base64,UklGRg==',music_mime='audio/wav',music_byte_size=4 where id=${story}`;
   await sql`delete from "user" where id='library-owner'`;
   assert.equal((await sql`select 1 from media_library where owner_id='library-owner'`).length,0);
   assert.equal((await sql`select 1 from profile_stories where id=${story}`).length,0);

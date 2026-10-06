@@ -149,7 +149,7 @@ export const postContentTools = createServerFn({ method: "GET" })
     const member = await membershipOf(sql, viewer, String(post.community_id));
     return {
       reactions: reactions.map((r) => ({ ...r, mine: asBool(r.mine) })),
-      media: media.map((m) => ({
+      media: media.filter(m=>m.kind!=="image"||parseJson<{format?:string}>(post.payload,{}).format!=="markdown"||!String(post.body).split("\n").some(line=>new RegExp(`^!\\[[^\\]]*\\]\\(/api/v1/content-media/${m.id}\\)$`).test(line))).map((m) => ({
         id: Number(m.id),
         kind: m.kind,
         filename: m.filename,

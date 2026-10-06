@@ -18,6 +18,7 @@ export type ProfileStory = {
   pollOptions: string[];
   layers:StoryLayer[];
   media: ContentMediaItem | null;
+  music: ContentMediaItem | null;
 };
 export type ProfileStories = {
   mine: boolean;
@@ -43,6 +44,7 @@ export const stories = {
     question: string;
     pollOptions: string[];
     media?: MediaInput;
+    music?:MediaInput&{kind:"audio"};
     layers?:StoryLayer[];
   }) => rpc<{ id: number }>("publishProfileStory", d),
   highlight: (storyId: number, highlighted: boolean) =>

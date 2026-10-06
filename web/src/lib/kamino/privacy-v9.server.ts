@@ -62,7 +62,7 @@ export async function exportV9PersonalData(sql: Sql, userId: string, readMedia: 
     mutes: "select * from member_mutes where user_id=$1",
     appeals: "select * from appeals where user_id=$1",
     activityDays: "select active_on from daily_member_activity where user_id=$1 order by active_on",
-    profileStories: "select id,caption,background,audience,minimum_age,content_warning,highlighted,hidden,kind,filename,mime,byte_size,alt_text,captions,question,poll_options,layers,created_at,expires_at from profile_stories where owner_id=$1",
+    profileStories: "select id,caption,background,audience,minimum_age,content_warning,highlighted,hidden,kind,filename,mime,byte_size,alt_text,captions,question,poll_options,layers,music_mime,music_filename,music_byte_size,music_alt_text,music_captions,created_at,expires_at from profile_stories where owner_id=$1",
     profileStoryResponses: "select * from profile_story_responses where user_id=$1",
     friendships: "select * from friend_requests where sender_id=$1 or recipient_id=$1",
     groupInvitations: "select * from group_invitations where user_id=$1 or invited_by=$1",
@@ -101,13 +101,17 @@ export async function exportV9PersonalData(sql: Sql, userId: string, readMedia: 
     try { return { storyId:Number(row.id),data_url:await readMedia(String(row.media_ref)),unavailable:false }; }
     catch { return { storyId:Number(row.id),data_url:'',unavailable:true }; }
   }));
+  const storyMusic=await Promise.all((await sql.query<Row>('select id,music_ref from profile_stories where owner_id=$1 and music_ref is not null',[userId])).map(async row=>{
+    try{return {storyId:Number(row.id),data_url:await readMedia(String(row.music_ref)),unavailable:false};}
+    catch{return {storyId:Number(row.id),data_url:'',unavailable:true};}
+  }));
   for (const table of ["profile_avatars", "profile_covers"] as const) {
     pictures[table] = await Promise.all((await sql.query<Row>(`select * from ${table} where user_id=$1`, [userId])).map(async row => {
       try { return { ...row, data_url: await readMedia(String(row.data_url)) }; }
       catch { return { ...row, data_url: "", unavailable: true }; }
     }));
   }
-  const result = { version: 10, ...Object.fromEntries(entries), contentMedia, storyMedia, mediaLibrary, profilePictures: pictures };
+  const result = { version: 10, ...Object.fromEntries(entries), contentMedia, storyMedia, storyMusic, mediaLibrary, profilePictures: pictures };
   return result as typeof result & Record<string, unknown>;
 }
 
@@ -120,6 +124,7 @@ export async function prepareV9AccountDeletion(sql: Sql, userId: string, options
     left join posts p on p.id=cm.post_id left join messages m on m.id=cm.message_id
     where p.author_user_id=$1 or m.author_user_id=$1
     union all select media_ref as storage_ref from profile_stories where owner_id=$1 and media_ref is not null
+    union all select music_ref as storage_ref from profile_stories where owner_id=$1 and music_ref is not null
     union all select storage_ref from media_library where owner_id=$1`, [userId]);
   await stageMediaDeletion(sql, media.map(row => row.storage_ref));
   await sql.query(`delete from content_media where post_id in(select id from posts where author_user_id=$1)

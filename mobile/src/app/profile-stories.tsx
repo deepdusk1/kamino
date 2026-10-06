@@ -73,6 +73,7 @@ function Composer() {
     [poll, setPoll] = useState(""),
     [layers,setLayers]=useState<StoryLayer[]>([]),
     [media, setMedia] = useState<MediaInput | null>(null),
+    [music,setMusic]=useState<(MediaInput&{kind:"audio"})|null>(null),
     [busy, setBusy] = useState(false);
   async function pick(kind: "image" | "gif" | "video" | "audio") {
     setBusy(true);
@@ -81,7 +82,7 @@ function Composer() {
         kind,
         kind === "gif" ? "image/gif" : `${kind}/*`,
       );
-      if (picked) setMedia(picked);
+      if (picked){if(kind==="audio")setMusic({...picked,kind:"audio"});else setMedia(picked);}
     } catch (e) {
       showError(e);
     } finally {
@@ -103,10 +104,12 @@ function Composer() {
           .map((p) => p.trim())
           .filter(Boolean),
         media: media ?? undefined,
+        music:music??undefined,
         layers,
       });
       setCaption("");
       setMedia(null);
+      setMusic(null);
       setQuestion("");
       setPoll("");
       setLayers([]);
@@ -244,12 +247,13 @@ function Composer() {
       <Button
         label="Publish story"
         busy={busy}
-        disabled={!caption.trim() && !media && !layers.length}
+        disabled={(!caption.trim() && !media && !music && !layers.length)||!!music&&media?.kind==="audio"}
         onPress={() => void publish()}
       />
       <StoryLayerEditor layers={layers} onChange={setLayers} background={backgroundColors[background]!}/>
       <MediaLibraryPicker kind="gif" collapsed onSelect={setMedia}/>
-      <MediaLibraryPicker kind="audio" collapsed onSelect={setMedia}/>
+      <MediaLibraryPicker kind="audio" collapsed onSelect={file=>setMusic({...file,kind:"audio"})}/>
+      {music?<><Txt variant="small">Soundtrack: {music.filename}</Txt><Field label="Audio description" maxLength={600} value={music.altText??""} onChangeText={altText=>setMusic({...music,altText})}/><Field label="Lyrics or transcript" multiline maxLength={12000} value={music.captions??""} onChangeText={captions=>setMusic({...music,captions})}/><Button small variant="ghost" label="Remove soundtrack" onPress={()=>setMusic(null)}/></>:null}
     </Card>
   );
 }
@@ -316,7 +320,7 @@ function StoryCard({ story: s, mine }: { story: ProfileStory; mine: boolean }) {
             <Txt style={{ color: "#fff" }} variant="heading">
               {s.caption}
             </Txt>
-            {s.media ? <ContentMedia media={s.media} /> : null}
+            {s.media ? <ContentMedia media={s.media} muted={!!s.music}/> : null}
             <StoryLayers layers={s.layers}/>
           </View>
         ) : (
@@ -327,6 +331,7 @@ function StoryCard({ story: s, mine }: { story: ProfileStory; mine: boolean }) {
           />
         )}
       </View>
+      {revealed&&s.music?<ContentMedia media={s.music}/>:null}
       {responses.isError ? (
         <Txt tone="danger">{responses.error.message}</Txt>
       ) : responses.isPending && (s.question || s.pollOptions.length) ? (

@@ -38,7 +38,7 @@ export function FormattedBody({ body, formatted, size = 14.5 }: { body: string; 
     <View style={{ gap: 6 }}>
       {body.split("\n").map((line, i) => {
         const image=/^!\[([^\]]*)\]\((\/api\/v1\/content-media\/\d+)\)$/.exec(line);
-        if(image)return <Image key={i} source={imageSource(image[2]!)} accessibilityLabel={image[1]||"Article image"} contentFit="contain" style={{height:280,width:"100%",borderRadius:16}}/>;
+        if(image)return <Image key={i} source={imageSource(image[2]!)} cachePolicy="none" accessible accessibilityLabel={image[1]||"Article image"} contentFit="contain" style={{height:280,width:"100%",borderRadius:16}}/>;
         if (line.startsWith("## ")) return <Txt key={i} accessibilityRole="header" style={{ fontFamily: font.heavy, fontSize: size + 2.5, lineHeight: size + 9, color: theme.ink, paddingTop: 6 }}>{inline(line.slice(3), theme.accent)}</Txt>;
         if (line.startsWith("# ")) return <Txt key={i} accessibilityRole="header" style={{ fontFamily: font.heavy, fontSize: size + 6, lineHeight: size + 12, letterSpacing: -0.3, color: theme.ink, paddingTop: 6 }}>{inline(line.slice(2), theme.accent)}</Txt>;
         if (line.startsWith("> "))

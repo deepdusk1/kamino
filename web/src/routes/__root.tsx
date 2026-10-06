@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import { I18nProvider, isRtl, readLocaleCookie } from "@/lib/i18n";
+import { themeBootstrapScript, watchSystemTheme } from "@/lib/theme";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AuthProvider } from "@/lib/auth/provider";
 import appCss from "../styles.css?url";
@@ -52,10 +53,12 @@ export const Route = createRootRoute({
 function Root() {
   const [queryClient] = useState(getQueryClient);
   const { locale } = Route.useLoaderData();
+  useEffect(() => watchSystemTheme(), []);
   return (
     <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className="antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
       <body className="bg-bg text-body">
         {/* Lets the Grok preview chrome drive navigation; does nothing anywhere else. Keep it. */}

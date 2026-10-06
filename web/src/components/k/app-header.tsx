@@ -12,6 +12,7 @@ import { BellIcon } from "./nav-icons";
 import { NAV_ITEMS, activeNav, navHref } from "./nav-items";
 import { useShellData } from "./use-shell-data";
 import { useT } from "@/lib/i18n";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const noSubscribe = () => () => {};
 const noGateOnServer = () => false;
@@ -113,6 +114,7 @@ export function AppHeader({
         <div className="-mr-1 ml-auto flex items-center lg:mr-0 lg:ml-0 lg:gap-1">
           {actions ?? (
             <>
+              <ThemeToggle />
               <Link
                 to="/explore"
                 hash="search"

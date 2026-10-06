@@ -235,6 +235,10 @@ test('v10 export includes owned library bytes and consent state while excluding 
 test('v10 deletion queues library cleanup, removes vectors and friendships, redacts cases and chooses an active group owner',async()=>{
  const owner=await person('v10-erase'),removed=await person('v10-removed'),active=await person('v10-active');const ref='s3:library/deletion-owner|image/gif';
  await sql`insert into media_library(owner_id,kind,title,storage_ref,mime,byte_size,filename)values(${owner},'gif','Deleted GIF',${ref},'image/gif',6,'own.gif')`;
+ const musicRef='s3:content/deletion-soundtrack|audio/wav';
+ await sql`insert into profile_stories(owner_id,caption,music_ref,music_mime,music_filename,music_byte_size) values(${owner},'Deleted soundtrack',${musicRef},'audio/wav','soundtrack.wav',48)`;
+ const exported=await exportV9PersonalData(sql,owner,async reference=>reference===musicRef?'data:audio/wav;base64,UklGRg==':'data:image/gif;base64,R0lGODlh');
+ assert.equal(exported.storyMusic.length,1);assert.ok(!JSON.stringify(exported).includes(musicRef));
  await sql`insert into friend_requests(sender_id,recipient_id,state)values(${owner},${active},'accepted')`;
  await sql.query('insert into semantic_preferences(user_id,namespace,embedding)values($1,$2,$3::double precision[])',[owner,'fixture',[1,0]]);
  const room=Number((await sql`insert into chat_rooms(name,kind,created_by)values('v10 privacy group','group',${owner})returning id`)[0].id);
@@ -247,6 +251,7 @@ test('v10 deletion queues library cleanup, removes vectors and friendships, reda
  assert.equal((await sql`select 1 from friend_requests where sender_id=${owner}`).length,0);
  assert.equal((await sql`select created_by from chat_rooms where id=${room}`)[0].created_by,active);
  assert.equal((await sql`select 1 from media_deletion_queue where media_ref=${ref}`).length,1);
+ assert.equal((await sql`select 1 from media_deletion_queue where media_ref=${musicRef}`).length,1);
  const preserved=JSON.stringify(await sql`select * from moderation_cases where id=${caseId}`)+JSON.stringify(await sql`select * from moderation_case_events where case_id=${caseId}`)+JSON.stringify(await sql`select * from moderation_case_appeals where case_id=${caseId}`);
  assert.ok(preserved.includes('deleted:v10-fixture'));assert.ok(!preserved.includes(owner));assert.ok(!preserved.includes('OWN_'));
 });
