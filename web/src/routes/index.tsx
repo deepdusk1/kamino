@@ -8,7 +8,7 @@ import { HomeToolsStrip } from '@/components/platform-tools';
 import { TutorialPrompt } from '@/components/tutorial-prompt';
 import { afterCheckIn, eventWhen, patchPages, uniqueById, wasOnboardingShown } from "@/components/home/home-data";
 import { CommunityRow, CreatorRow, HomeSection, HomeSkeleton, StreakAndEvent } from "@/components/home/home-sections";
-import { Landing } from "@/components/home/landing";
+import { WelcomeScreen } from "@/components/home/welcome-screen";
 import { useT } from "@/lib/i18n";
 import { CategoryChips, EmptyHint, GradientButton, HOME_CATEGORIES, HeroCarousel, SectionHeader, TabsUnderline } from "@/components/k";
 import { PostCard } from "@/components/post-card";
@@ -62,8 +62,7 @@ const FEED_EMPTY: Record<FeedTab, { icon: string; title: string; body: string; a
 
 function HomeRoute() {
   const data = Route.useLoaderData();
-  // Signed-out visitors get the marketing page; the guided tour lives at /welcome.
-  if (!data.signedIn) return <Landing />;
+  if (!data.signedIn) return <WelcomeScreen />;
   return <Home userId={data.userId} onboardedAt={data.onboardedAt} initial={data.overview} />;
 }
 
@@ -253,9 +252,7 @@ function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: s
   return (
     <AppShell>
       <h1 className="sr-only">Home</h1>
-      <div className="px-4 pt-2"><HomeToolsStrip /></div>
-      <TutorialPrompt />
-      <div className="flex flex-col gap-2.5 px-4 pt-0.5 lg:gap-6 lg:pt-2">
+      <div className="flex flex-col gap-2.5 px-4 pt-2 lg:gap-6 lg:pt-2">
         {o ? (
           <>
             <HeroCarousel
@@ -380,6 +377,10 @@ function Home({ userId, onboardedAt, initial }: { userId: string; onboardedAt: s
             </>
           )}
         </section>
+      </div>
+          <div className="mt-6 space-y-3 px-4">
+        <HomeToolsStrip />
+        <TutorialPrompt />
       </div>
     </AppShell>
   );
