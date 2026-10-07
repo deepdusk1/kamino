@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Ban,
   Bell,
+  Bot,
   CalendarDays,
   ChevronRight,
   CloudDownload,
@@ -415,6 +416,8 @@ function SettingsCards({ me, save, email }: { me: Me; save: (patch: Patch) => Pr
         <LinkRow icon={<Mail />} label="Contact support" href={`mailto:${SUPPORT_EMAIL}`} />
       </Card>
 
+      <BotApiCard />
+
       <div className="space-y-2 pb-4">
         <button
           type="button"
@@ -707,6 +710,108 @@ function ReferralCard() {
         {referral.data.invited} {referral.data.invited === 1 ? "friend" : "friends"} joined through your link ·{" "}
         {referral.data.repEarned} reputation earned
       </p>
+    </Card>
+  );
+}
+
+/** Bot API tokens: lets automated accounts read and post messages. */
+function BotApiCard() {
+  const [tokens, setTokens] = useState<{ id: number; name: string; createdAt: string; lastUsedAt: string | null; revoked: boolean }[]>([]);
+  const [name, setName] = useState("");
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    const { listBotTokens } = await import("@/lib/kamino/bots.server");
+    setTokens(await listBotTokens({}));
+  };
+  useEffect(() => { void refresh(); }, []);
+
+  const create = async () => {
+    setBusy(true);
+    setNewToken(null);
+    try {
+      const { createBotToken } = await import("@/lib/kamino/bots.server");
+      const t = await createBotToken({ data: { name: name.trim() || "Unnamed bot" } });
+      setNewToken(t.token);
+      setName("");
+      await refresh();
+      toast.success("Bot token created — copy it now, it won't be shown again.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't create token.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (id: number) => {
+    try {
+      const { revokeBotToken } = await import("@/lib/kamino/bots.server");
+      await revokeBotToken({ data: id });
+      await refresh();
+      toast.success("Token revoked.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't revoke token.");
+    }
+  };
+
+  return (
+    <Card
+      title="Bot API"
+      icon={<Bot />}
+      tone="violet"
+      hint="Give an automated account its own token to read and post messages where it's a member."
+    >
+      <div className="flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Bot name, e.g. French teacher"
+          className={fieldClass}
+          maxLength={60}
+        />
+        <button
+          type="button"
+          onClick={create}
+          disabled={busy}
+          className="k-focus h-11 shrink-0 rounded-full bg-tint-violet px-4 text-[14px] font-bold text-violet-ink disabled:opacity-50"
+        >
+          {busy ? "Creating…" : "Create token"}
+        </button>
+      </div>
+      {newToken && (
+        <div className="rounded-xl bg-surface-alt p-3">
+          <p className="text-[12.5px] font-bold text-ink">Copy this token now — it won't be shown again:</p>
+          <code className="mt-1 block break-all rounded-lg bg-ink px-2 py-1.5 font-mono text-[12px] text-white select-all">
+            {newToken}
+          </code>
+        </div>
+      )}
+      {tokens.length > 0 && (
+        <ul className="space-y-2">
+          {tokens.map((t) => (
+            <li key={t.id} className="flex items-center justify-between rounded-xl bg-surface-alt px-3 py-2">
+              <div>
+                <p className="text-[13.5px] font-bold text-ink">{t.name}</p>
+                <p className="text-[12px] text-muted">
+                  Created {new Date(t.createdAt).toLocaleDateString()}
+                  {t.lastUsedAt ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : " · never used"}
+                  {t.revoked ? " · revoked" : ""}
+                </p>
+              </div>
+              {!t.revoked && (
+                <button
+                  type="button"
+                  onClick={() => revoke(t.id)}
+                  className="k-focus rounded-full px-3 py-1.5 text-[13px] font-bold text-danger hover:bg-tint-pink"
+                >
+                  Revoke
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
