@@ -26,7 +26,7 @@ import {
 import { rtcPeerId, rtcRoomKey, useLiveRoom } from "@/lib/multiplayer/use-live-room";
 import { cn } from "@/lib/utils";
 import { getLiveStage } from '@/lib/kamino/community-v9';
-import { missedCall } from '@/lib/kamino/server';
+import { missedCall, ringCall } from '@/lib/kamino/server';
 import { getLiveKitJoin, getRoomRecordingState } from '@/lib/kamino/livekit';
 import { useServerEventsLive } from '@/lib/server-events';
 
@@ -325,6 +325,17 @@ export function LiveStage({
         startedAt.current = Date.now();
         setOnCall(true);
         onVoice?.(true);
+        // Ring the other participants (DM calls only). Skip if we're answering
+        // an incoming call (sessionStorage flag set by IncomingCall).
+        if (kind === "dm") {
+          try {
+            const answering = sessionStorage.getItem("kamino-call") === String(roomId);
+            if (!answering) await ringCall({ data: roomId });
+            sessionStorage.removeItem("kamino-call");
+          } catch {
+            /* */
+          }
+        }
         return;
       }
       const stream = allowed?await openMic(withCam):new MediaStream();
@@ -337,6 +348,16 @@ export function LiveStage({
       setOnCall(true);
       onVoice?.(true);
       if (live.joined) live.setLocalStream(stream);
+      // Ring the other participants (DM calls only, P2P fallback path).
+      if (kind === "dm") {
+        try {
+          const answering = sessionStorage.getItem("kamino-call") === String(roomId);
+          if (!answering) await ringCall({ data: roomId });
+          sessionStorage.removeItem("kamino-call");
+        } catch {
+          /* */
+        }
+      }
     } catch (error) {
       setErr(error instanceof Error?error.message:'Could not join the live room.');
     }
