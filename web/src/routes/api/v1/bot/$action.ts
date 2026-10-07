@@ -11,7 +11,7 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
-import { hashBotToken, isBotTokenFormat, botListRooms, botReadMessages, botPostMessage } from "@/lib/kamino/bots.server";
+import { hashBotToken, isBotTokenFormat, botListRooms, botReadMessages, botPostMessage } from "@/lib/kamino/bots";
 
 type Json = Record<string, unknown>;
 

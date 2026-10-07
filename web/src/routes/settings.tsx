@@ -722,7 +722,7 @@ function BotApiCard() {
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
-    const { listBotTokens } = await import("@/lib/kamino/bots.server");
+    const { listBotTokens } = await import("@/lib/kamino/bots");
     setTokens(await listBotTokens({}));
   };
   useEffect(() => { void refresh(); }, []);
@@ -731,7 +731,7 @@ function BotApiCard() {
     setBusy(true);
     setNewToken(null);
     try {
-      const { createBotToken } = await import("@/lib/kamino/bots.server");
+      const { createBotToken } = await import("@/lib/kamino/bots");
       const t = await createBotToken({ data: { name: name.trim() || "Unnamed bot" } });
       setNewToken(t.token);
       setName("");
@@ -746,7 +746,7 @@ function BotApiCard() {
 
   const revoke = async (id: number) => {
     try {
-      const { revokeBotToken } = await import("@/lib/kamino/bots.server");
+      const { revokeBotToken } = await import("@/lib/kamino/bots");
       await revokeBotToken({ data: id });
       await refresh();
       toast.success("Token revoked.");

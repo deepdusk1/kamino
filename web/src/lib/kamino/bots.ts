@@ -11,12 +11,10 @@
  * Actions: rooms, messages, send.
  */
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
-import { randomBytes, createHash } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { guard } from "./guard";
 import { scanText } from "./safety";
 import { parseSticker } from "./stickers";
-import { publishEvent } from "./events.server";
 import { internals } from "./server";
 
 const { db } = internals;
@@ -24,6 +22,8 @@ type Sql = Awaited<ReturnType<typeof internals.db>>;
 type Authed = { userId: string };
 
 export function hashBotToken(token: string): string {
+  // Server-only: uses node:crypto, called from server functions and the bot route.
+  const { createHash } = require("node:crypto");
   return createHash("sha256").update(token).digest("hex");
 }
 
@@ -49,6 +49,7 @@ export const createBotToken = createServerFn({ method: "POST" })
     const sql = await db();
     const { userId } = context as Authed;
     const name = String(data.name ?? "").trim().slice(0, 60) || "Unnamed bot";
+    const { randomBytes } = require("node:crypto");
     const token = `kamino_bot_${randomBytes(32).toString("hex")}`;
     const rows = await sql<{ id: number }>`
       insert into bot_tokens (user_id, name, token_hash)
@@ -171,6 +172,7 @@ export async function botPostMessage(
   );
   if (held) return { id: messageId, held };
   await sql`update messages set held = false where id = ${messageId}`;
+  const { publishEvent } = await import("./events.server");
   publishEvent({ type: "message", roomId, messageId });
   const others = await sql<{ user_id: string }>`
     select cm.user_id from chat_members cm
