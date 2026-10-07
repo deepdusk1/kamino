@@ -53,6 +53,15 @@ export default function CallScreen() {
     return () => clearTimeout(timer);
   }, [isDm, call.status, connectedCount, noAnswer, roomId]);
 
+  // Auto-ring on call start (DM only): the callee gets notified without the
+  // caller having to tap the manual ring button.
+  const rangRef = useRef(false);
+  useEffect(() => {
+    if (!isDm || call.status !== "active" || rangRef.current) return;
+    rangRef.current = true;
+    void api.ringCall(roomId).catch(() => undefined);
+  }, [isDm, call.status, roomId]);
+
   const leave = () => {
     call.hangUp();
     router.back();
