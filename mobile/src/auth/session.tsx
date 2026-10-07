@@ -16,6 +16,8 @@ export type Birthday = { year: number; month: number; day: number };
 
 type Session = {
   status: Status;
+  /** The signed-in user's ID (null when signed out). Used to scope per-account storage like the offline queue. */
+  userId: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string, birthday: Birthday) => Promise<void>;
   /** Sends the birthday to the server. Resolves false (and signs out) when the person is too young. */
@@ -33,9 +35,13 @@ const SessionContext = createContext<Session | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<Status>("loading");
+  const [userId, setUserId] = useState<string | null>(null);
 
   const clearLocal = useCallback(async () => {
+    const { unwireOfflineFlush } = await import("@/lib/offline-queue");
+    unwireOfflineFlush();
     setAuthToken(null);
+    setUserId(null);
     await deleteSecret(TOKEN_KEY);
     queryClient.clear();
     setStatus("signedOut");
@@ -52,7 +58,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const boot = await api.bootstrap();
         if (cancelled) return;
         if (!boot.profile) await clearLocal();
-        else setStatus(boot.profile.minAgeConfirmed ? "signedIn" : "needsAge");
+        else {
+          setUserId(boot.profile.userId ?? null);
+          setStatus(boot.profile.minAgeConfirmed ? "signedIn" : "needsAge");
+        }
       } catch (error) {
         if (cancelled) return;
         // Offline at launch keeps the session; only a real "not signed in" answer logs out.
@@ -79,6 +88,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       await writeSecret(TOKEN_KEY, token);
       queryClient.clear();
       const boot = await api.bootstrap(); // creates the member profile on first sign-in
+      setUserId(boot.profile?.userId ?? null);
       setStatus(boot.profile?.minAgeConfirmed === false ? "needsAge" : "signedIn");
     },
     [queryClient],
@@ -87,6 +97,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Session>(
     () => ({
       status,
+      userId,
       signIn: async (email, password) => {
         const { token, body } = await authRequest("sign-in/email", { email: email.trim(), password });
         if (body.twoFactorRedirect) throw Object.assign(new Error('Enter your authenticator code to complete sign-in.'), { twoFactorRequired: true });
@@ -139,7 +150,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       sendPhoneCode: async phoneNumber => {await authRequest('phone-number/send-otp',{phoneNumber:phoneNumber.trim()});},
       verifyPhoneCode: async(phoneNumber,code)=>{const response=await authRequest('phone-number/verify',{phoneNumber:phoneNumber.trim(),code:code.trim()});if(response.body.twoFactorRedirect)throw Object.assign(new Error('Enter your authenticator code to complete sign-in.'),{twoFactorRequired:true});await finishSignIn(response.token??(typeof response.body.token==='string'?response.body.token:null));},
     }),
-    [status, finishSignIn, clearLocal, queryClient],
+    [status, userId, finishSignIn, clearLocal, queryClient],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

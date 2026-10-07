@@ -25,7 +25,7 @@ import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 import { font, radius, useTheme } from "@/theme";
 import { ChatContentTools, ChatMessageContent } from "@/components/content/ChatContentTools";
 import { StageControlsV9 } from "@/components/StageControlsV9";
-import { enqueueMessage } from "@/lib/offline-queue";
+import { enqueueMessage, newClientTag } from "@/lib/offline-queue";
 
 const REACTIONS = ["❤️", "😂", "✨", "🔥", "👏", "😮"];
 type Media = { kind: "image" | "audio" | "video"; dataUrl: string };
@@ -106,14 +106,23 @@ export default function ChatRoom() {
     if (sending || (!body && !media)) return;
     setSending(true);
     let queued = false;
+    // Allocate the dedup tag before the first attempt so a retry after a lost
+    // response can never post a second copy (M2).
+    const clientTag = newClientTag();
+    const userId = me.data?.profile?.userId ?? null;
     try {
       try {
-        tellIfHeld(editing ? await api.editMessage(roomId, editing.id, body) : await api.send({ roomId, body, replyTo: replyTo?.id ?? null, media }));
+        tellIfHeld(editing ? await api.editMessage(roomId, editing.id, body) : await api.send({ roomId, body, replyTo: replyTo?.id ?? null, media, clientTag }));
       } catch (error) {
-        // Offline or the network dropped: keep the words and replay them automatically on reconnect.
-        if (!editing && !media) {
-          await enqueueMessage({ roomId, body, replyTo: replyTo?.id ?? null });
+        // Queue ONLY transient network failures. Validation, moderation,
+        // permission and auth errors are permanent — retrying them is wrong (M2).
+        const isNetworkError = error instanceof Error && (error as { status?: number }).status === 0;
+        if (!editing && !media && isNetworkError && userId) {
+          await enqueueMessage(userId, { roomId, body, replyTo: replyTo?.id ?? null, clientTag });
           queued = true;
+          // Clear the composer: the words are safe in the queue now.
+          setText("");
+          setReplyTo(null);
           showError(error, "No connection — it will send when you're back online");
         } else {
           showError(error, "Message not sent");

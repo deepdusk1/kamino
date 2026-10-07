@@ -61,7 +61,7 @@ export default function RootLayout() {
 
 function Navigation() {
   const theme = useTheme();
-  const { status } = useSession();
+  const { status, userId } = useSession();
   const lastResponse = useNotificationTap();
   // New accounts (and anyone who never finished onboarding) are sent to onboarding once.
   useOnboardingRedirect(status === "signedIn");
@@ -76,10 +76,11 @@ function Navigation() {
   }, [status]);
 
   // Replay chat messages that were queued while the phone was offline (de-duplicated server-side).
+  // Scoped to the signed-in account: a different user never replays your queue (C2).
   useEffect(() => {
-    if (status !== "signedIn") return;
-    wireOfflineFlush((input) => rpc("sendMessage", input));
-  }, [status]);
+    if (status !== "signedIn" || !userId) return;
+    wireOfflineFlush(userId, (input) => rpc("sendMessage", input));
+  }, [status, userId]);
 
   // Tapping a push notification opens the matching screen (also when the app was closed).
   useEffect(() => {
