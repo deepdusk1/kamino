@@ -59,7 +59,27 @@ export default function Settings() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [pushStatus, setPushStatus] = useState("unknown");
+  const [pushDetail, setPushDetail] = useState("");
+  const [checkingPush, setCheckingPush] = useState(false);
   const sentZone = useRef(false);
+
+  const checkPush = async () => {
+    setCheckingPush(true);
+    setPushStatus("checking…");
+    setPushDetail("");
+    try {
+      const { registerPushDevice } = await import("@/lib/push");
+      const result = await registerPushDevice();
+      setPushStatus(result);
+      setPushDetail(result === "enabled" ? "Token sent to server" : result === "denied" ? "Allow notifications in system settings" : "Device or config issue");
+    } catch (e) {
+      setPushStatus("error");
+      setPushDetail(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCheckingPush(false);
+    }
+  };
 
   const save = async (patch: Parameters<typeof api.updateSettings>[0]) => {
     // Show the change straight away; the server copy comes back with the refresh.
@@ -172,6 +192,17 @@ export default function Settings() {
         <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 2 }} />
         <Txt style={{ fontFamily: font.bold, fontSize: 14, lineHeight: 19, color: theme.ink }}>Fine-tune</Txt>
         {FINE_TUNE.map((n) => <SwitchRow key={n.key} label={n.label} value={p[n.key]} onChange={(value) => void save({ [n.key]: value })} />)}
+
+        <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 2 }} />
+        <Txt style={{ fontFamily: font.bold, fontSize: 14, lineHeight: 19, color: theme.ink }}>Push diagnostics</Txt>
+        <Txt style={{ fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: theme.subtle }}>
+          Status: {pushStatus}{pushDetail ? ` — ${pushDetail}` : ""}
+        </Txt>
+        <Button
+          label={checkingPush ? "Checking…" : "Re-register this device"}
+          onPress={() => void checkPush()}
+          disabled={checkingPush}
+        />
       </Section>
 
       {me.data.blocked.length ? (

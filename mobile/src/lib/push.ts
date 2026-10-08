@@ -37,16 +37,25 @@ export async function registerPushDevice(): Promise<"enabled" | "denied" | "unsu
 
     const existing = await Notifications.getPermissionsAsync();
     const permission = existing.granted ? existing : await Notifications.requestPermissionsAsync();
-    if (!permission.granted) return "denied";
+    if (!permission.granted) {
+      console.log("[push] Permission denied by user");
+      return "denied";
+    }
 
     const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
-    if (!projectId) return "unsupported"; // set up by `npx eas-cli init`; see README
+    if (!projectId) {
+      console.log("[push] Missing EAS project ID in config");
+      return "unsupported"; // set up by `npx eas-cli init`; see README
+    }
 
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    console.log("[push] Got Expo token, registering with server...");
     await api.registerPush(token, Platform.OS === "ios" ? "ios" : "android");
     await writeSecret(PUSH_TOKEN_KEY, token);
+    console.log("[push] Token registered successfully");
     return "enabled";
-  } catch {
+  } catch (error) {
+    console.log("[push] Registration failed:", error instanceof Error ? error.message : String(error));
     return "unsupported";
   }
 }
