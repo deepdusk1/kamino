@@ -301,7 +301,14 @@ export function LiveStage({
       const joinInfo = await getLiveKitJoin({ data: roomId }).catch(() => null);
       if (joinInfo?.enabled) {
         const { Room } = await import("livekit-client");
-        const room = new Room({ adaptiveStream: true });
+        const room = new Room({
+          adaptiveStream: true,
+          audioCaptureDefaults: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
         room.on("trackSubscribed", (track, publication, participant) => {
           if (track.kind === "video" || track.kind === "audio") {
             const stream = new MediaStream([track.mediaStreamTrack]);

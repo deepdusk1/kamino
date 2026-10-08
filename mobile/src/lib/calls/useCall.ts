@@ -120,7 +120,17 @@ export function useCall(roomId: number, userId: string | undefined, displayName:
       const join = await api.getLiveKitJoin(roomId).catch(() => ({ enabled: false as const }));
       if (!join.enabled || cancelled || ended) return false;
 
-      const room = new lk.Room({ adaptiveStream: true, dynacast: true });
+      const room = new lk.Room({
+        adaptiveStream: true,
+        dynacast: true,
+        // WhatsApp-level audio: hardware echo cancellation, noise suppression,
+        // and auto gain control for clear calls without echo.
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       lkRoomRef.current = room;
       const streams = new Map<string, MediaStreamT>();
 
